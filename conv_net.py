@@ -75,7 +75,6 @@ class ConvNet(nn.Module):
 
         """
 
-
         out = self.conv1(x)
 
         out = self.batchNorm1(out)
@@ -99,7 +98,6 @@ class ConvNet(nn.Module):
         out = self.batchNorm3(out)
 
         out = self.relu3(out)
-
 
         out = out.view(out.shape[0], -1)
 

@@ -51,7 +51,7 @@ class MLP(nn.Module):
             nn.BatchNorm1d(hlaf),
             nn.ReLU(),
 
-            nn.Linear(hlaf, 2),
+            nn.Linear(hlaf, 1),
             nn.Sigmoid()
         )
 

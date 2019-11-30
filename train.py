@@ -17,14 +17,15 @@ from torch.autograd import Variable
 import matplotlib.pyplot as plt
 from conv_net import ConvNet
 from datasets.bmnist import bmnist
+import random
 
 # Default constants
 DNN_HIDDEN_UNITS_DEFAULT = '1000'
 LEARNING_RATE_DEFAULT = 1e-3
 MAX_STEPS_DEFAULT = 6000
-BATCH_SIZE_DEFAULT = 4
+BATCH_SIZE_DEFAULT = 6
 HALF_BATCH = BATCH_SIZE_DEFAULT // 2
-EVAL_FREQ_DEFAULT = 200
+EVAL_FREQ_DEFAULT = 1000
 
 # Directory in which cifar data is saved
 DATA_DIR_DEFAULT = './cifar10/cifar-10-batches-py'
@@ -49,8 +50,12 @@ def accuracy(predictions, targets):
     """
 
     predictions = predictions.detach().numpy()
-    preds = np.argmax(predictions, 1)
+    predictions = predictions.flatten()
+    targets = targets.detach().numpy()
+
+    preds = np.round(predictions)
     result = preds == targets
+
     sum = np.sum(result)
     accuracy = sum / float(targets.shape[0])
 
@@ -66,9 +71,9 @@ def train():
     X_train = _read_raw_image_file('data\\raw\\binarized_mnist_train.amat')
     X_test = _read_raw_image_file('data\\raw\\binarized_mnist_valid.amat')
 
-    print(X_train[0].shape)
+    print(X_test.shape)
 
-    input_dim = 10
+    input_dim = 256
     discriminator = MLP(input_dim)
 
     encoder = ConvNet(1)
@@ -76,16 +81,21 @@ def train():
     discriminator_optimizer = torch.optim.SGD(discriminator.parameters(), lr=LEARNING_RATE_DEFAULT, momentum=0.9)
     encoder_optimizer = torch.optim.Adam(encoder.parameters())
 
-    loss_fn = nn.CrossEntropyLoss()
+    ones = torch.ones(HALF_BATCH)
+    zeros = torch.zeros(HALF_BATCH)
 
-    accuracies = []
-    losses = []
+    y_test_batch = torch.cat([ones, zeros], 0)
+    y_test_batch = Variable(torch.FloatTensor(y_test_batch.float()))
+
+    y_train_batch = torch.cat([ones, zeros], 0)
+    y_train_batch = Variable(torch.FloatTensor(y_train_batch.float()))
 
     for iteration in range(MAX_STEPS_DEFAULT):
         discriminator.train()
         ids = np.random.choice(len(X_train), size=BATCH_SIZE_DEFAULT, replace=False)
 
-        X_train_batch = X_train[ids, :]
+        X_train_clean = X_train[ids, :]
+        X_train_batch = [[[noise_pixel(pixel) for pixel in row] for row in image] for image in X_train_clean]
         X_train_batch = np.expand_dims(X_train_batch, axis=0)
         X_train_batch = X_train_batch.transpose(1, 0, 2, 3)
         X_train_batch = Variable(torch.IntTensor(X_train_batch).float())
@@ -98,30 +108,25 @@ def train():
         permutation = np.random.permutation(false_source)
         new_list_idx = np.concatenate((true_source_ids, permutation), axis=0)
 
-        X_train_batch = np.reshape(X_train_batch, (BATCH_SIZE_DEFAULT, -1))
-
         perm = torch.LongTensor(new_list_idx)
-        X_train_batch = X_train_batch[perm, :]
+        permuted_output = encoder_output[perm, :]
 
-        discriminator_input = torch.cat([X_train_batch, encoder_output], 1)
-
-        ones = torch.ones(HALF_BATCH)
-        zeros = torch.zeros(HALF_BATCH)
-
-        y_train_batch = torch.cat([ones, zeros], 0)
-        y_train_batch = Variable(torch.LongTensor(y_train_batch).long())
-
+        discriminator_input = torch.cat([permuted_output, encoder_output], 1)
+        print(permuted_output)
+        print(encoder_output)
+        print(discriminator_input)
+        input()
         discriminator_output = discriminator.forward(discriminator_input)
 
-        loss_discriminator = loss_fn(discriminator_output, y_train_batch)
+        loss_encoder = nn.functional.binary_cross_entropy(discriminator_output, y_train_batch)
+        encoder_optimizer.zero_grad()
+        loss_encoder.backward(retain_graph=True)
+        encoder_optimizer.step()
+
+        loss_discriminator = nn.functional.binary_cross_entropy(discriminator_output, y_train_batch)
         discriminator_optimizer.zero_grad()
         loss_discriminator.backward()
         discriminator_optimizer.step()
-
-        loss_encoder = loss_fn(discriminator_output, y_train_batch)
-        encoder_optimizer.zero_grad()
-        loss_encoder.backward()
-        encoder_optimizer.step()
 
         if iteration % EVAL_FREQ_DEFAULT == 0:
             discriminator.eval()
@@ -129,15 +134,22 @@ def train():
             total_acc = 0
             total_loss = 0
 
-            for i in range(BATCH_SIZE_DEFAULT, len(X_test) + BATCH_SIZE_DEFAULT, BATCH_SIZE_DEFAULT):
-                ids = np.random.choice(len(X_test), size=BATCH_SIZE_DEFAULT, replace=False)
+            accuracies = []
+            losses = []
 
-                X_test_batch = X_test[ids, :]
+            test_size = 9984
+            for i in range(BATCH_SIZE_DEFAULT, test_size, BATCH_SIZE_DEFAULT):
+                ids = np.array(range(i - BATCH_SIZE_DEFAULT, i))
+
+                X_test_clean = X_test[ids, :]
+                X_test_batch = [[[noise_pixel(pixel) for pixel in row] for row in image] for image in X_test_clean]
                 X_test_batch = np.expand_dims(X_test_batch, axis=0)
                 X_test_batch = X_test_batch.transpose(1, 0, 2, 3)
                 X_test_batch = Variable(torch.IntTensor(X_test_batch).float())
 
                 encoder_output = encoder.forward(X_test_batch)
+
+                ####### Discriminate ############
 
                 false_source = list(range(HALF_BATCH, BATCH_SIZE_DEFAULT))
                 true_source_ids = np.array(list(range(0, HALF_BATCH)))
@@ -145,24 +157,28 @@ def train():
                 permutation = np.random.permutation(false_source)
                 new_list_idx = np.concatenate((true_source_ids, permutation), axis=0)
 
-                X_test_batch = np.reshape(X_test_batch, (BATCH_SIZE_DEFAULT, -1))
-
                 perm = torch.LongTensor(new_list_idx)
-                X_test_batch = X_test_batch[perm, :]
 
-                discriminator_input = torch.cat([X_test_batch, encoder_output], 1)
+                permuted_output = encoder_output[perm, :]
+                discriminator_input = torch.cat([permuted_output, encoder_output], 1)
 
-                ones = torch.ones(HALF_BATCH)
-                zeros = torch.zeros(HALF_BATCH)
-
-                y_test_batch = torch.cat([ones, zeros], 0)
-                y_test_batch = Variable(torch.LongTensor(y_test_batch).long())
+                ########### calc losses ##########
 
                 discriminator_output = discriminator.forward(discriminator_input)
-                print(discriminator_output)
-                input()
 
-            denom = len(X_test) / BATCH_SIZE_DEFAULT
+                #loss_encoder = nn.functional.binary_cross_entropy(discriminator_output, y_test_batch)
+                loss_discriminator = nn.functional.binary_cross_entropy(discriminator_output, y_test_batch)
+                total_loss += loss_discriminator.item()
+
+                discriminator_output = discriminator.forward(discriminator_input)
+                acc = accuracy(discriminator_output, y_test_batch)
+                total_acc += acc
+
+                # print(i)
+                # print("accuracy discriminator: " + str(acc) + " loss discriminator: " + str(loss_discriminator.item()))
+                # print(acc)
+
+            denom = test_size // BATCH_SIZE_DEFAULT # len(X_test) / BATCH_SIZE_DEFAULT
             total_acc = total_acc / denom
             total_loss = total_loss / denom
             accuracies.append(total_acc)
@@ -178,6 +194,15 @@ def train():
     plt.ylabel('losses')
     plt.show()
 
+
+def noise_pixel(pixel_value):
+    if pixel_value == 0:
+        return pixel_value
+
+    if random.uniform(0, 1) < 0.5:
+        return 0
+    else:
+        return 1
 
 def print_flags():
     """
