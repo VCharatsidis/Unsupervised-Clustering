@@ -16,8 +16,10 @@ import torch.nn as nn
 from torch.autograd import Variable
 import matplotlib.pyplot as plt
 from conv_net import ConvNet
-from datasets.bmnist import bmnist
+from sklearn.datasets import fetch_openml
+
 import random
+
 
 # Default constants
 DNN_HIDDEN_UNITS_DEFAULT = '1000'
@@ -25,7 +27,7 @@ LEARNING_RATE_DEFAULT = 1e-3
 MAX_STEPS_DEFAULT = 6000
 BATCH_SIZE_DEFAULT = 128
 HALF_BATCH = BATCH_SIZE_DEFAULT // 2
-EVAL_FREQ_DEFAULT = 100
+EVAL_FREQ_DEFAULT = 500
 
 # Directory in which cifar data is saved
 DATA_DIR_DEFAULT = './cifar10/cifar-10-batches-py'
@@ -61,15 +63,24 @@ def accuracy(predictions, targets):
 
     return accuracy
 
-
 def train():
     """
     Performs training and evaluation of MLP model.
 
     """
+    script_directory = os.path.split(os.path.abspath(__file__))[0]
+    filepath = 'encoder.model'
+    encoder_model = os.path.join(script_directory, filepath)
 
-    X_train = _read_raw_image_file('data\\raw\\binarized_mnist_train.amat')
-    X_test = _read_raw_image_file('data\\raw\\binarized_mnist_valid.amat')
+    script_directory = os.path.split(os.path.abspath(__file__))[0]
+    filepath = 'decoder.model'
+    discriminator_model = os.path.join(script_directory, filepath)
+
+    mnist = fetch_openml('mnist_784', version=1, cache=True)
+    targets = mnist.target
+
+    X_train = mnist.data[:60000]
+    X_test = mnist.data[60000:]
 
     print(X_test.shape)
 
@@ -90,48 +101,55 @@ def train():
     y_train_batch = torch.cat([ones, zeros], 0)
     y_train_batch = Variable(torch.FloatTensor(y_train_batch.float()))
 
+    max_loss = 100
+    threshold = 0.75
+
     for iteration in range(MAX_STEPS_DEFAULT):
         discriminator.train()
         ids = np.random.choice(len(X_train), size=BATCH_SIZE_DEFAULT, replace=False)
 
         X_train_clean = X_train[ids, :]
 
-        X_train_batch = [[[noise_pixel(pixel) for pixel in row] for row in image] for image in X_train_clean]
-        X_train_batch = np.expand_dims(X_train_batch, axis=0)
-        X_train_batch = X_train_batch.transpose(1, 0, 2, 3)
-        X_train_batch = Variable(torch.IntTensor(X_train_batch).float())
+        pixels = X_train_clean[0].reshape((28, 28))
+        plt.imshow(pixels, cmap='gray')
+        plt.show()
 
-        encoder_output = encoder.forward(X_train_batch)
+        for i in range(X_train_clean.shape[0]):
+            nums = np.random.uniform(low=0, high=1, size=(X_train_clean[i].shape[0],))
+            X_train_clean[i] = np.where(nums > threshold, X_train_clean[i], 0)
+
+        X_train_clean = np.reshape(X_train_clean, (128, 1, 28, 28))
+        #X_train_clean = np.expand_dims(X_train_clean, axis=0)
+        #X_train_clean = X_train_clean.transpose(1, 0, 2, 3)
+        print(X_train_clean[0])
+        print(X_train_clean[0].shape)
+
+        pixels = X_train_clean[0][0]
+        plt.imshow(pixels, cmap='gray')
+        plt.show()
+        input()
+        #X_train_clean = X_train_clean.transpose(1, 0, 2, 3)
+        X_train_clean = Variable(torch.IntTensor(X_train_clean).float())
+
+        encoder_output = encoder.forward(X_train_clean)
 
         ####### new ids ############
+
         new_ids = np.random.choice(len(X_train), size=HALF_BATCH, replace=False)
         concat_ids = np.concatenate((ids[:HALF_BATCH], new_ids), axis=0)
         X_train_new = X_train[concat_ids, :]
-        X_train_batch = [[[noise_pixel(pixel) for pixel in row] for row in image] for image in X_train_new]
-        X_train_batch = np.expand_dims(X_train_batch, axis=0)
-        X_train_batch = X_train_batch.transpose(1, 0, 2, 3)
-        X_train_batch = Variable(torch.IntTensor(X_train_batch).float())
 
-        encoder_output_contrast = encoder.forward(X_train_batch)
+        for i in range(X_train_new.shape[0]):
+            nums = np.random.uniform(low=0, high=1, size=(X_train_new[i].shape[0],))
+            X_train_new[i] = np.where(nums > threshold, X_train_new[i], 0)
 
-        # false_source = list(range(HALF_BATCH, BATCH_SIZE_DEFAULT))
-        # true_source_ids = np.array(list(range(0, HALF_BATCH)))
-        #
-        # permutation = np.random.permutation(false_source)
-        # new_list_idx = np.concatenate((true_source_ids, permutation), axis=0)
-        #
-        # perm = torch.LongTensor(new_list_idx)
-        # permuted_output = encoder_output[perm, :]
+        X_train_new = np.expand_dims(X_train_new, axis=0)
+        X_train_new = X_train_new.transpose(1, 0, 2, 3)
+        X_train_new = Variable(torch.IntTensor(X_train_new).float())
+
+        encoder_output_contrast = encoder.forward(X_train_new)
 
         discriminator_input = torch.cat([encoder_output, encoder_output_contrast], 1)
-        # print(encoder_output)
-        # print(encoder_output_contrast)
-        # print(discriminator_input)
-        #
-        # print("shapes")
-        # print(encoder_output.shape)
-        # print(discriminator_input.shape)
-        # input()
         discriminator_output = discriminator.forward(discriminator_input)
 
         loss_encoder = nn.functional.binary_cross_entropy(discriminator_output, y_train_batch)
@@ -158,6 +176,7 @@ def train():
                 ids = np.array(range(i - BATCH_SIZE_DEFAULT, i))
 
                 X_test_clean = X_test[ids, :]
+
                 X_test_batch = [[[noise_pixel(pixel) for pixel in row] for row in image] for image in X_test_clean]
                 X_test_batch = np.expand_dims(X_test_batch, axis=0)
                 X_test_batch = X_test_batch.transpose(1, 0, 2, 3)
@@ -166,6 +185,7 @@ def train():
                 encoder_output = encoder.forward(X_test_batch)
 
                 ####### new ids ############
+
                 new_ids = np.random.choice(len(X_test), size=HALF_BATCH, replace=False)
                 concat_ids = np.concatenate((ids[:HALF_BATCH], new_ids), axis=0)
                 X_test_new = X_test[concat_ids, :]
@@ -174,16 +194,15 @@ def train():
                 X_test_batch = X_test_batch.transpose(1, 0, 2, 3)
                 X_test_batch = Variable(torch.IntTensor(X_test_batch).float())
 
-                ####### Discriminate ############
+                ####### Discriminate #######
 
                 encoder_output_contrast = encoder.forward(X_test_batch)
                 discriminator_input = torch.cat([encoder_output, encoder_output_contrast], 1)
 
-                ########### calc losses ##########
+                ####### calc losses ########
 
                 discriminator_output = discriminator.forward(discriminator_input)
 
-                #loss_encoder = nn.functional.binary_cross_entropy(discriminator_output, y_test_batch)
                 loss_discriminator = nn.functional.binary_cross_entropy(discriminator_output, y_test_batch)
                 total_loss += loss_discriminator.item()
 
@@ -195,11 +214,16 @@ def train():
                 # print("accuracy discriminator: " + str(acc) + " loss discriminator: " + str(loss_discriminator.item()))
                 # print(acc)
 
-            denom = test_size // BATCH_SIZE_DEFAULT # len(X_test) / BATCH_SIZE_DEFAULT
+            denom = test_size // BATCH_SIZE_DEFAULT  # len(X_test) / BATCH_SIZE_DEFAULT
             total_acc = total_acc / denom
             total_loss = total_loss / denom
             accuracies.append(total_acc)
             losses.append(total_loss)
+
+            if max_loss > total_loss:
+                print("models saved iter: " + str(iteration))
+                torch.save(encoder, encoder_model)
+                torch.save(discriminator, discriminator_model)
 
             print("total accuracy " + str(total_acc) + " total loss " + str(total_loss))
 
@@ -216,10 +240,11 @@ def noise_pixel(pixel_value):
     if pixel_value == 0:
         return pixel_value
 
-    if random.uniform(0, 1) < 0.5:
+    if random.uniform(0, 1) < 0.75:
         return 0
     else:
-        return 1
+        return pixel_value
+
 
 def print_flags():
     """
@@ -227,6 +252,7 @@ def print_flags():
     """
     for key, value in vars(FLAGS).items():
         print(key + ' : ' + str(value))
+
 
 def _read_raw_image_file(path):
     raw_file = path
@@ -237,6 +263,7 @@ def _read_raw_image_file(path):
             assert len(im) == 28 ** 2
             all_images.append(im)
     return torch.from_numpy(np.array(all_images)).view(-1, 28, 28)
+
 
 def main():
     """
@@ -250,7 +277,6 @@ def main():
 
     # Run the training operation
     train()
-
 
 
 if __name__ == '__main__':
