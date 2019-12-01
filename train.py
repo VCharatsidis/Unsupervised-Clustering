@@ -23,9 +23,9 @@ import random
 DNN_HIDDEN_UNITS_DEFAULT = '1000'
 LEARNING_RATE_DEFAULT = 1e-3
 MAX_STEPS_DEFAULT = 6000
-BATCH_SIZE_DEFAULT = 6
+BATCH_SIZE_DEFAULT = 128
 HALF_BATCH = BATCH_SIZE_DEFAULT // 2
-EVAL_FREQ_DEFAULT = 1000
+EVAL_FREQ_DEFAULT = 100
 
 # Directory in which cifar data is saved
 DATA_DIR_DEFAULT = './cifar10/cifar-10-batches-py'
@@ -95,6 +95,7 @@ def train():
         ids = np.random.choice(len(X_train), size=BATCH_SIZE_DEFAULT, replace=False)
 
         X_train_clean = X_train[ids, :]
+
         X_train_batch = [[[noise_pixel(pixel) for pixel in row] for row in image] for image in X_train_clean]
         X_train_batch = np.expand_dims(X_train_batch, axis=0)
         X_train_batch = X_train_batch.transpose(1, 0, 2, 3)
@@ -102,20 +103,35 @@ def train():
 
         encoder_output = encoder.forward(X_train_batch)
 
-        false_source = list(range(HALF_BATCH, BATCH_SIZE_DEFAULT))
-        true_source_ids = np.array(list(range(0, HALF_BATCH)))
+        ####### new ids ############
+        new_ids = np.random.choice(len(X_train), size=HALF_BATCH, replace=False)
+        concat_ids = np.concatenate((ids[:HALF_BATCH], new_ids), axis=0)
+        X_train_new = X_train[concat_ids, :]
+        X_train_batch = [[[noise_pixel(pixel) for pixel in row] for row in image] for image in X_train_new]
+        X_train_batch = np.expand_dims(X_train_batch, axis=0)
+        X_train_batch = X_train_batch.transpose(1, 0, 2, 3)
+        X_train_batch = Variable(torch.IntTensor(X_train_batch).float())
 
-        permutation = np.random.permutation(false_source)
-        new_list_idx = np.concatenate((true_source_ids, permutation), axis=0)
+        encoder_output_contrast = encoder.forward(X_train_batch)
 
-        perm = torch.LongTensor(new_list_idx)
-        permuted_output = encoder_output[perm, :]
+        # false_source = list(range(HALF_BATCH, BATCH_SIZE_DEFAULT))
+        # true_source_ids = np.array(list(range(0, HALF_BATCH)))
+        #
+        # permutation = np.random.permutation(false_source)
+        # new_list_idx = np.concatenate((true_source_ids, permutation), axis=0)
+        #
+        # perm = torch.LongTensor(new_list_idx)
+        # permuted_output = encoder_output[perm, :]
 
-        discriminator_input = torch.cat([permuted_output, encoder_output], 1)
-        print(permuted_output)
-        print(encoder_output)
-        print(discriminator_input)
-        input()
+        discriminator_input = torch.cat([encoder_output, encoder_output_contrast], 1)
+        # print(encoder_output)
+        # print(encoder_output_contrast)
+        # print(discriminator_input)
+        #
+        # print("shapes")
+        # print(encoder_output.shape)
+        # print(discriminator_input.shape)
+        # input()
         discriminator_output = discriminator.forward(discriminator_input)
 
         loss_encoder = nn.functional.binary_cross_entropy(discriminator_output, y_train_batch)
@@ -149,18 +165,19 @@ def train():
 
                 encoder_output = encoder.forward(X_test_batch)
 
+                ####### new ids ############
+                new_ids = np.random.choice(len(X_test), size=HALF_BATCH, replace=False)
+                concat_ids = np.concatenate((ids[:HALF_BATCH], new_ids), axis=0)
+                X_test_new = X_test[concat_ids, :]
+                X_test_batch = [[[noise_pixel(pixel) for pixel in row] for row in image] for image in X_test_new]
+                X_test_batch = np.expand_dims(X_test_batch, axis=0)
+                X_test_batch = X_test_batch.transpose(1, 0, 2, 3)
+                X_test_batch = Variable(torch.IntTensor(X_test_batch).float())
+
                 ####### Discriminate ############
 
-                false_source = list(range(HALF_BATCH, BATCH_SIZE_DEFAULT))
-                true_source_ids = np.array(list(range(0, HALF_BATCH)))
-
-                permutation = np.random.permutation(false_source)
-                new_list_idx = np.concatenate((true_source_ids, permutation), axis=0)
-
-                perm = torch.LongTensor(new_list_idx)
-
-                permuted_output = encoder_output[perm, :]
-                discriminator_input = torch.cat([permuted_output, encoder_output], 1)
+                encoder_output_contrast = encoder.forward(X_test_batch)
+                discriminator_input = torch.cat([encoder_output, encoder_output_contrast], 1)
 
                 ########### calc losses ##########
 
