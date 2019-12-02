@@ -27,7 +27,7 @@ LEARNING_RATE_DEFAULT = 1e-3
 MAX_STEPS_DEFAULT = 6000
 BATCH_SIZE_DEFAULT = 128
 HALF_BATCH = BATCH_SIZE_DEFAULT // 2
-EVAL_FREQ_DEFAULT = 500
+EVAL_FREQ_DEFAULT = 1000
 
 # Directory in which cifar data is saved
 DATA_DIR_DEFAULT = './cifar10/cifar-10-batches-py'
@@ -88,9 +88,11 @@ def train():
     discriminator = MLP(input_dim)
 
     encoder = ConvNet(1)
+    encoder2 = ConvNet(1)
 
     discriminator_optimizer = torch.optim.SGD(discriminator.parameters(), lr=LEARNING_RATE_DEFAULT, momentum=0.9)
     encoder_optimizer = torch.optim.Adam(encoder.parameters())
+    encoder2_optimizer = torch.optim.Adam(encoder.parameters())
 
     ones = torch.ones(HALF_BATCH)
     zeros = torch.zeros(HALF_BATCH)
@@ -102,34 +104,20 @@ def train():
     y_train_batch = Variable(torch.FloatTensor(y_train_batch.float()))
 
     max_loss = 100
-    threshold = 0.75
+
 
     for iteration in range(MAX_STEPS_DEFAULT):
         discriminator.train()
         ids = np.random.choice(len(X_train), size=BATCH_SIZE_DEFAULT, replace=False)
 
         X_train_clean = X_train[ids, :]
-
-        pixels = X_train_clean[0].reshape((28, 28))
-        plt.imshow(pixels, cmap='gray')
-        plt.show()
-
+        threshold = random.uniform(0.5, 1)
         for i in range(X_train_clean.shape[0]):
             nums = np.random.uniform(low=0, high=1, size=(X_train_clean[i].shape[0],))
             X_train_clean[i] = np.where(nums > threshold, X_train_clean[i], 0)
 
         X_train_clean = np.reshape(X_train_clean, (128, 1, 28, 28))
-        #X_train_clean = np.expand_dims(X_train_clean, axis=0)
-        #X_train_clean = X_train_clean.transpose(1, 0, 2, 3)
-        print(X_train_clean[0])
-        print(X_train_clean[0].shape)
-
-        pixels = X_train_clean[0][0]
-        plt.imshow(pixels, cmap='gray')
-        plt.show()
-        input()
-        #X_train_clean = X_train_clean.transpose(1, 0, 2, 3)
-        X_train_clean = Variable(torch.IntTensor(X_train_clean).float())
+        X_train_clean = Variable(torch.FloatTensor(X_train_clean))
 
         encoder_output = encoder.forward(X_train_clean)
 
@@ -143,11 +131,10 @@ def train():
             nums = np.random.uniform(low=0, high=1, size=(X_train_new[i].shape[0],))
             X_train_new[i] = np.where(nums > threshold, X_train_new[i], 0)
 
-        X_train_new = np.expand_dims(X_train_new, axis=0)
-        X_train_new = X_train_new.transpose(1, 0, 2, 3)
-        X_train_new = Variable(torch.IntTensor(X_train_new).float())
+        X_train_new = np.reshape(X_train_new, (128, 1, 28, 28))
+        X_train_new = Variable(torch.FloatTensor(X_train_new))
 
-        encoder_output_contrast = encoder.forward(X_train_new)
+        encoder_output_contrast = encoder2.forward(X_train_new)
 
         discriminator_input = torch.cat([encoder_output, encoder_output_contrast], 1)
         discriminator_output = discriminator.forward(discriminator_input)
@@ -156,6 +143,11 @@ def train():
         encoder_optimizer.zero_grad()
         loss_encoder.backward(retain_graph=True)
         encoder_optimizer.step()
+
+        loss_encoder2 = nn.functional.binary_cross_entropy(discriminator_output, y_train_batch)
+        encoder2_optimizer.zero_grad()
+        loss_encoder2.backward(retain_graph=True)
+        encoder2_optimizer.step()
 
         loss_discriminator = nn.functional.binary_cross_entropy(discriminator_output, y_train_batch)
         discriminator_optimizer.zero_grad()
@@ -177,26 +169,31 @@ def train():
 
                 X_test_clean = X_test[ids, :]
 
-                X_test_batch = [[[noise_pixel(pixel) for pixel in row] for row in image] for image in X_test_clean]
-                X_test_batch = np.expand_dims(X_test_batch, axis=0)
-                X_test_batch = X_test_batch.transpose(1, 0, 2, 3)
-                X_test_batch = Variable(torch.IntTensor(X_test_batch).float())
+                for i in range(X_test_clean.shape[0]):
+                    nums = np.random.uniform(low=0, high=1, size=(X_test_clean[i].shape[0],))
+                    X_test_clean[i] = np.where(nums > threshold, X_test_clean[i], 0)
 
-                encoder_output = encoder.forward(X_test_batch)
+                X_test_clean = np.reshape(X_test_clean, (128, 1, 28, 28))
+                X_test_clean = Variable(torch.FloatTensor(X_test_clean))
+
+                encoder_output = encoder.forward(X_test_clean)
 
                 ####### new ids ############
 
                 new_ids = np.random.choice(len(X_test), size=HALF_BATCH, replace=False)
                 concat_ids = np.concatenate((ids[:HALF_BATCH], new_ids), axis=0)
                 X_test_new = X_test[concat_ids, :]
-                X_test_batch = [[[noise_pixel(pixel) for pixel in row] for row in image] for image in X_test_new]
-                X_test_batch = np.expand_dims(X_test_batch, axis=0)
-                X_test_batch = X_test_batch.transpose(1, 0, 2, 3)
-                X_test_batch = Variable(torch.IntTensor(X_test_batch).float())
+
+                for i in range(X_test_new.shape[0]):
+                    nums = np.random.uniform(low=0, high=1, size=(X_test_new[i].shape[0],))
+                    X_test_new[i] = np.where(nums > threshold, X_test_new[i], 0)
+
+                X_test_new = np.reshape(X_test_new, (128, 1, 28, 28))
+                X_test_new = Variable(torch.FloatTensor(X_test_new))
 
                 ####### Discriminate #######
 
-                encoder_output_contrast = encoder.forward(X_test_batch)
+                encoder_output_contrast = encoder2.forward(X_test_new)
                 discriminator_input = torch.cat([encoder_output, encoder_output_contrast], 1)
 
                 ####### calc losses ########

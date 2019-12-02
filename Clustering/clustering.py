@@ -5,61 +5,110 @@ from sklearn.datasets import fetch_openml
 from matplotlib import pyplot as plt
 import os
 import matplotlib
-
 import numpy as np
 
-# X_train = _read_raw_image_file('..\\data\\raw\\binarized_mnist_train.amat')
-# X_test = _read_raw_image_file('..\\data\\raw\\binarized_mnist_valid.amat')
 
-
-def display_centroid(centroid, number):
-    #sample = centroid.view(-1, 1, 28, 28)
-    sample = centroid.reshape(28,28)
-    sample = make_grid(sample, nrow=1).astype(np.float)
-    matplotlib.image.imsave(f"centroid_{number}.png", sample)
-
+# def display_centroid(centroid, number):
+#     #sample = centroid.view(-1, 1, 28, 28)
+#     sample = centroid.reshape(28, 28)
+#     sample = make_grid(sample, nrow=1).astype(np.float)
+#     matplotlib.image.imsave(f"centroid_{number}.png", sample)
+#
+#
+# mnist = fetch_openml('mnist_784', version=1, cache=True)
+# targets = mnist.target
+# print(targets[0])
+# print(mnist.data[0])
+# print(mnist.data[0].shape)
+# first_image = np.array(mnist.data[0], dtype='float')
+#
+# display_centroid(mnist.data[0],11)
+# input()
 
 mnist = fetch_openml('mnist_784', version=1, cache=True)
 targets = mnist.target
-print(targets[0])
-print(mnist.data[0])
-print(mnist.data[0].shape)
-first_image = np.array(mnist.data[0], dtype='float')
-pixels = first_image.reshape((28, 28))
-plt.imshow(pixels, cmap='gray')
-plt.show()
-display_centroid(mnist.data[0],11)
-input()
+
+mnist = fetch_openml('mnist_784', version=1, cache=True)
+targets = mnist.target
+
+X_train = mnist.data[:60000]
+X_test = mnist.data[60000:]
+
+def most_frequent(List):
+    return max(set(List), key=List.count)
+
 
 def get_centroids(write_file, read_file):
     X = string_to_numpy(read_file)
     mnist = fetch_openml('mnist_784')
     labels = mnist.target
-    print(len(labels))
-    print(labels[0])
-    print(labels[1])
-    print(labels[2])
-    print(labels[3])
-    print(labels[4])
-    print(labels[5])
-    print(labels[6])
-    print(labels[7])
-    print(labels[8])
-    print(labels[9])
-    input()
 
-    kmeans = KMeans(n_clusters=10).fit(X[:, :-1])
-    predict = KMeans(n_clusters=10).fit_predict(X[:, :-1])
-    print(predict[0])
-    print(predict[1])
-    print(predict[2])
-    print(predict[3])
-    print(predict[4])
-    print(predict[5])
-    print(predict[6])
-    print(predict[7])
-    print(predict[8])
-    print(predict[9])
+    kmeans = KMeans(n_clusters=10).fit(X)
+    predict = KMeans(n_clusters=10).fit_predict(X)
+
+    # kmeans = KMeans(n_clusters=10).fit(X)
+    # predict = KMeans(n_clusters=10).fit_predict(X)
+
+    clusters_to_ids = {}
+    true_labels_to_ids = {}
+    for i, p in enumerate(predict):
+        if p in clusters_to_ids.keys():
+            clusters_to_ids[p].append(targets[i])
+        else:
+            idxs = []
+            idxs.append(targets[i])
+            clusters_to_ids[p] = idxs
+
+    avg = 0
+    for c in clusters_to_ids.keys():
+        mfe = most_frequent(clusters_to_ids[c])
+        counter = 0
+        for i in clusters_to_ids[c]:
+            if i != mfe:
+                counter += 1
+
+        cluster_size = len(clusters_to_ids[c])
+        print("cluster size " + str(cluster_size))
+        percentage_miss = (counter*100) / cluster_size
+        avg += percentage_miss
+        print("clsuter: "+str(c)+" mfe " +str(mfe)+" miss percentage "+str(percentage_miss))
+
+    print("avg  miss: "+str(avg/10))
+
+    print(clusters_to_ids[0])
+    print(clusters_to_ids[1])
+    print(clusters_to_ids[2])
+    print(clusters_to_ids[3])
+    print(clusters_to_ids[4])
+    print(clusters_to_ids[5])
+    print(clusters_to_ids[6])
+    print(clusters_to_ids[7])
+    print(clusters_to_ids[8])
+    print(clusters_to_ids[9])
+
+    print(" ")
+
+    print(str(labels[1]) + " " + str(predict[1]))
+    print(str(labels[2]) + " " + str(predict[2]))
+    print(str(labels[3]) + " " + str(predict[3]))
+    print(str(labels[4]) + " " + str(predict[4]))
+    print(str(labels[5]) + " " + str(predict[5]))
+    print(str(labels[6]) + " " + str(predict[6]))
+    print(str(labels[7]) + " " + str(predict[7]))
+    print(str(labels[8]) + " " + str(predict[8]))
+    print(str(labels[9]) + " " + str(predict[9]))
+    print(str(labels[10]) + " " + str(predict[10]))
+    print(str(labels[11]) + " " + str(predict[11]))
+    print(str(labels[12]) + " " + str(predict[12]))
+    print(str(labels[13]) + " " + str(predict[13]))
+    print(str(labels[14]) + " " + str(predict[14]))
+    print(str(labels[15]) + " " + str(predict[15]))
+    print(str(labels[16]) + " " + str(predict[16]))
+    print(str(labels[17]) + " " + str(predict[17]))
+    print(str(labels[18]) + " " + str(predict[18]))
+    print(str(labels[19]) + " " + str(predict[19]))
+    print(str(labels[20]) + " " + str(predict[20]))
+
     print()
 
     input()
@@ -78,7 +127,10 @@ def get_centroids(write_file, read_file):
 
 
 
-
+def show_mnist(first_image):
+    pixels = first_image.reshape((28, 28))
+    plt.imshow(pixels, cmap='gray')
+    plt.show()
 
 def string_to_numpy(filepath):
     script_directory = os.path.split(os.path.abspath(__file__))[0]
@@ -93,13 +145,7 @@ def string_to_numpy(filepath):
         X = line.split(' ')
         input_x = []
 
-        if len(X) == 131:
-            print(X)
-            input()
-
-        X[-3] = X[-2]
-
-        Z = map(float, X[:-2])
+        Z = map(float, X[:-1])
 
         for i in Z:
             input_x.append(i)
@@ -110,7 +156,11 @@ def string_to_numpy(filepath):
     return np.array(data)
 
 
-get_centroids("centroids.txt", "encoded_reps.txt")
+
+
+
+#show_mnist()
+get_centroids("centroids.txt", "differences.txt")
 #
 # def read_centroids():
 #     list_centroids = []
