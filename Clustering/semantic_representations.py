@@ -8,10 +8,14 @@ from sklearn.datasets import fetch_openml
 
 filepath = '..\\'
 script_directory = os.path.split(os.path.abspath(__file__))[0]
-encoder_model = os.path.join(script_directory, filepath + 'encoder.model')
-encoder = torch.load(encoder_model)
+encoder1_model = os.path.join(script_directory, filepath + 'encoder_1.model')
+encoder_1 = torch.load(encoder1_model)
 
-discriminator_model = os.path.join(script_directory, filepath + 'decoder.model')
+script_directory = os.path.split(os.path.abspath(__file__))[0]
+encoder2_model = os.path.join(script_directory, filepath + 'encoder_2.model')
+encoder_2 = torch.load(encoder1_model)
+
+discriminator_model = os.path.join(script_directory, filepath + 'discriminator.model')
 discriminator = torch.load(discriminator_model)
 
 mnist = fetch_openml('mnist_784', version=1, cache=True)
@@ -45,9 +49,9 @@ def get_semantic_representations():
                 X_test_batch[i] = np.where(nums > threshold, X_test_batch[i], 0)
 
             X_test_batch = np.reshape(X_test_batch, (1, 1, 28, 28))
-            X_test_batch = Variable(torch.IntTensor(X_test_batch).float())
+            X_test_batch = Variable(torch.FloatTensor(X_test_batch))
 
-            encoder_output = encoder.forward(X_test_batch)
+            encoder_output = encoder_1.forward(X_test_batch)
             encoded = encoder_output.detach().numpy()
             file = open("encoded_reps_30.txt", "a")
             for i in encoded[0]:
@@ -60,24 +64,27 @@ def get_semantic_representations():
 
 def get_distances():
     with torch.no_grad():
-        number_prototypes = 50
-        prototypes_ids = np.random.choice(len(X_train), size=number_prototypes, replace=False)
-        X_proto = X_train[prototypes_ids, :]
+        number_prototypes = 500
+        prototypes_ids = np.random.choice(len(X_test), size=number_prototypes, replace=False)
+        X_proto = X_test[prototypes_ids, :]
 
         size = len(X_train)
 
         X_proto = np.reshape(X_proto, (number_prototypes, 1, 28, 28))
         X_proto = Variable(torch.FloatTensor(X_proto))
 
-        encoded_proto = encoder.forward(X_proto)
+        encoded_proto = encoder_2.forward(X_proto)
 
         for id in range(size):
+            if id % 1000 == 0:
+                print(id)
+
             ids = [id]
             X_image = X_train[ids, :]
             X_image = np.reshape(X_image, (1, 1, 28, 28))
             X_image = Variable(torch.FloatTensor(X_image))
 
-            encoded_image = encoder.forward(X_image)
+            encoded_image = encoder_1.forward(X_image)
             encoded_image = encoded_image.repeat(number_prototypes, 1)
 
             discriminator_input = torch.cat([encoded_image, encoded_proto], 1)
@@ -94,7 +101,7 @@ def get_distances():
 
 
 
-#get_distances()
+get_distances()
 #get_semantic_representations()
 # display_reconstructions(0)
 # display_reconstructions(1)

@@ -2,6 +2,7 @@ from sklearn.cluster import KMeans
 from torchvision.utils import make_grid
 from train import _read_raw_image_file
 from sklearn.datasets import fetch_openml
+from utils import string_to_numpy
 from matplotlib import pyplot as plt
 import os
 import matplotlib
@@ -25,20 +26,18 @@ import numpy as np
 # display_centroid(mnist.data[0],11)
 # input()
 
-mnist = fetch_openml('mnist_784', version=1, cache=True)
-targets = mnist.target
 
-mnist = fetch_openml('mnist_784', version=1, cache=True)
-targets = mnist.target
+# = mnist.data[:60000]
+# = mnist.data[60000:]
 
-X_train = mnist.data[:60000]
-X_test = mnist.data[60000:]
 
 def most_frequent(List):
     return max(set(List), key=List.count)
 
 
 def get_centroids(write_file, read_file):
+    mnist = fetch_openml('mnist_784', version=1, cache=True)
+    targets = mnist.target
     X = string_to_numpy(read_file)
     mnist = fetch_openml('mnist_784')
     labels = mnist.target
@@ -127,40 +126,14 @@ def get_centroids(write_file, read_file):
 
 
 
-def show_mnist(first_image):
-    pixels = first_image.reshape((28, 28))
-    plt.imshow(pixels, cmap='gray')
-    plt.show()
 
-def string_to_numpy(filepath):
-    script_directory = os.path.split(os.path.abspath(__file__))[0]
-    grubb = os.path.join(script_directory, filepath)
-
-    f = open(grubb, "r")
-
-    contents = f.readlines()
-    data = []
-
-    for line in contents:
-        X = line.split(' ')
-        input_x = []
-
-        Z = map(float, X[:-1])
-
-        for i in Z:
-            input_x.append(i)
-
-        data.append(np.array(input_x))
-
-    print("hi")
-    return np.array(data)
 
 
 
 
 
 #show_mnist()
-get_centroids("centroids.txt", "differences.txt")
+#get_centroids("centroids.txt", "differences.txt")
 #
 # def read_centroids():
 #     list_centroids = []
