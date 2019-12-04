@@ -11,7 +11,7 @@ class SimilarityMetric(nn.Module):
         self.encoder = ConvNet(1)
         self.encoder2 = ConvNet(1)
 
-        input_dim = 256
+        input_dim = 512
         self.discriminator = MLP(input_dim)
 
 

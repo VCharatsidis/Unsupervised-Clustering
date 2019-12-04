@@ -41,26 +41,41 @@ class ConvNet(nn.Module):
         self.relu3 = nn.ReLU()
         self.maxpool3 = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
-        self.linear = nn.Linear(6272, 128)
+        self.conv4 = nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1)
+        self.batchNorm4 = nn.BatchNorm2d(256)
+        self.relu4 = nn.ReLU()
+        self.maxpool4 = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
-        self.layers = nn.Sequential(
-            nn.Conv2d(n_channels, 64, kernel_size=(3, 3), stride=1, padding=1),
-            nn.BatchNorm2d(64),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1),
+        self.conv5 = nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1)
+        self.batchNorm5 = nn.BatchNorm2d(512)
+        self.relu5 = nn.ReLU()
+        self.maxpool5 = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
-            nn.Conv2d(64, 128, kernel_size=(3, 3), stride=1, padding=1),
-            nn.BatchNorm2d(128),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1),
+        self.conv6 = nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1)
+        self.batchNorm6 = nn.BatchNorm2d(512)
+        self.relu6 = nn.ReLU()
+        self.maxpool6 = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
-            nn.Conv2d(128, 128, kernel_size=(3, 3), stride=1, padding=1),
-            nn.BatchNorm2d(128),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1),
+        self.linear = nn.Linear(512, 256)
 
-            nn.Linear(6272, 128)
-        )
+        # self.layers = nn.Sequential(
+        #     nn.Conv2d(n_channels, 64, kernel_size=(3, 3), stride=1, padding=1),
+        #     nn.BatchNorm2d(64),
+        #     nn.ReLU(),
+        #     nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1),
+        #
+        #     nn.Conv2d(64, 128, kernel_size=(3, 3), stride=1, padding=1),
+        #     nn.BatchNorm2d(128),
+        #     nn.ReLU(),
+        #     nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1),
+        #
+        #     nn.Conv2d(128, 128, kernel_size=(3, 3), stride=1, padding=1),
+        #     nn.BatchNorm2d(128),
+        #     nn.ReLU(),
+        #     nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1),
+        #
+        #     nn.Linear(25088, 256)
+        # )
 
 
     def forward(self, x):
@@ -76,28 +91,34 @@ class ConvNet(nn.Module):
         """
 
         out = self.conv1(x)
-
         out = self.batchNorm1(out)
-
         out = self.relu1(out)
-
         out = self.maxpool1(out)
 
-
         out = self.conv2(out)
-
         out = self.batchNorm2(out)
-
         out = self.relu2(out)
-
         out = self.maxpool2(out)
 
-
         out = self.conv3(out)
-
         out = self.batchNorm3(out)
-
         out = self.relu3(out)
+        out = self.maxpool3(out)
+
+        out = self.conv4(out)
+        out = self.batchNorm4(out)
+        out = self.relu4(out)
+        out = self.maxpool4(out)
+
+        out = self.conv5(out)
+        out = self.batchNorm5(out)
+        out = self.relu5(out)
+        out = self.maxpool5(out)
+
+        out = self.conv6(out)
+        out = self.batchNorm6(out)
+        out = self.relu6(out)
+        out = self.maxpool6(out)
 
         out = out.view(out.shape[0], -1)
 

@@ -43,8 +43,6 @@ def write_mean_differences():
     # file.close()
 
 
-
-
 #write_mean_differences()
 
 def write_subgraph_differences(member_numbers):
@@ -88,32 +86,49 @@ def write_subgraph_differences(member_numbers):
         return member_idx_to_id
 
 
-#member_idx_to_id = write_subgraph_differences(500)
-
-
 def best_buddies_clustering():
     differences = string_to_numpy("subgraph_member_differences.txt")
     member_number = differences.shape[0]
     all_members = [x for x in range(member_number)]
     all_clusters = []
     used = []
+    idx_to_cluster = {}
+
+    cluster_counter = 0
 
     while len(all_members) > 0:
         cluster = []
         current_member = all_members[0]
+        append_cluster = True
 
         while current_member not in cluster:
-            cluster.append(current_member)
+
+            if current_member in idx_to_cluster.keys():
+                cluster_number = idx_to_cluster[current_member]
+                all_clusters[cluster_number] += cluster
+                append_cluster = False
+
+                for k in idx_to_cluster.keys():
+                    if idx_to_cluster[k] == cluster_counter:
+                        idx_to_cluster[k] = cluster_number
+
+                break;
+            else:
+                idx_to_cluster[current_member] = cluster_counter
+                cluster.append(current_member)
+
             best_buddy_idx = np.argmax(differences[current_member])
             current_member = best_buddy_idx
 
-        print(cluster)
-        print("cluster made")
+        # print(cluster)
+        # print("cluster made")
 
-        all_clusters.append(cluster)
+        if append_cluster:
+            all_clusters.append(cluster)
+            cluster_counter += 1
+
         used += cluster
         all_members = [x for x in range(member_number) if x not in used]
-
 
     print(len(all_clusters))
 
@@ -123,14 +138,38 @@ def best_buddies_clustering():
 
     return all_clusters
 
+def most_frequent(List):
+    return max(set(List), key=List.count)
 
-clusters = best_buddies_clustering()
-X = string_to_numpy("members.txt")
-print("members")
-print(X)
-for c in clusters:
-    print(" ")
-    for m in c:
-        index = X[m][0]
-        print(targets[int(index)+60000])
 
+def display_clusters():
+    clusters = best_buddies_clustering()
+    X = string_to_numpy("members.txt")
+
+    avg = 0
+    total_misses = 0
+    for c in clusters:
+        print(" ")
+        cluster_labels = [targets[int(X[m][0])+60000] for m in c]
+
+        mfe = most_frequent(cluster_labels)
+        counter = 0
+        for i in cluster_labels:
+            if i != mfe:
+                counter += 1
+
+        total_misses += counter
+        cluster_size = len(cluster_labels)
+        print("cluster size " + str(cluster_size))
+        percentage_miss = (counter * 100) / cluster_size
+        avg += percentage_miss
+        print("clsuter: " + str(cluster_labels) + " mfe " + str(mfe) + " miss percentage " + str(percentage_miss))
+
+    print("avg  miss: " + str(avg / len(clusters)))
+    print("total miss: "+str(total_misses))
+    print("total miss clusterings: "+str(total_misses / 3500))
+
+
+member_idx_to_id = write_subgraph_differences(3500)
+best_buddies_clustering()
+display_clusters()
