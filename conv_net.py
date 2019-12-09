@@ -56,7 +56,17 @@ class ConvNet(nn.Module):
         self.relu6 = nn.ReLU()
         self.maxpool6 = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
-        self.linear = nn.Linear(512, 256)
+        self.conv7 = nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1)
+        self.batchNorm7 = nn.BatchNorm2d(512)
+        self.relu7 = nn.ReLU()
+        self.maxpool7 = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+
+        self.conv8 = nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1)
+        self.batchNorm8 = nn.BatchNorm2d(512)
+        self.relu8 = nn.ReLU()
+        self.maxpool8 = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+
+        #self.linear = nn.Linear(512, 256)
 
         # self.layers = nn.Sequential(
         #     nn.Conv2d(n_channels, 64, kernel_size=(3, 3), stride=1, padding=1),
@@ -93,36 +103,52 @@ class ConvNet(nn.Module):
         out = self.conv1(x)
         out = self.batchNorm1(out)
         out = self.relu1(out)
-        out = self.maxpool1(out)
+        out_1 = self.maxpool1(out)
 
-        out = self.conv2(out)
+
+        out = self.conv2(out_1)
         out = self.batchNorm2(out)
         out = self.relu2(out)
-        out = self.maxpool2(out)
+        out_2 = self.maxpool2(out)
 
-        out = self.conv3(out)
+
+        out = self.conv3(out_2)
         out = self.batchNorm3(out)
         out = self.relu3(out)
-        out = self.maxpool3(out)
+        out_3 = self.maxpool3(out)
 
-        out = self.conv4(out)
+
+        out = self.conv4(out_3)
         out = self.batchNorm4(out)
         out = self.relu4(out)
-        out = self.maxpool4(out)
+        out_4 = self.maxpool4(out)
 
-        out = self.conv5(out)
+
+        out = self.conv5(out_4)
         out = self.batchNorm5(out)
         out = self.relu5(out)
-        out = self.maxpool5(out)
+        out_5 = self.maxpool5(out)
 
-        out = self.conv6(out)
+
+        out = self.conv6(out_5)
         out = self.batchNorm6(out)
         out = self.relu6(out)
-        out = self.maxpool6(out)
+        out_6 = self.maxpool6(out)
 
-        out = out.view(out.shape[0], -1)
+        # out = self.conv7(out_6)
+        # out = self.batchNorm7(out)
+        # out = self.relu7(out)
+        # out_7 = self.maxpool7(out)
+        #
+        # out = self.conv8(out_7)
+        # out = self.batchNorm8(out)
+        # out = self.relu8(out)
+        # out_8 = self.maxpool8(out)
 
-        out = self.linear(out)
+
+        #out = out.view(out.shape[0], -1)
+
+        #out = self.linear(out)
         # out = x
         # for layer in self.layers:
         #     if isinstance(layer, nn.Linear):
@@ -131,4 +157,4 @@ class ConvNet(nn.Module):
         #     out = layer.forward(out)
 
 
-        return out
+        return out_6

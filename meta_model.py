@@ -6,10 +6,10 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 import torch.nn as nn
-import torch
 
 
-class MLP(nn.Module):
+
+class MetaMLP(nn.Module):
     """
     This class implements a Multi-layer Perceptron in PyTorch.
     It handles the different layers and parameters of the model.
@@ -32,26 +32,43 @@ class MLP(nn.Module):
 
         """
 
-        super(MLP, self).__init__()
-        n_hidden = n_inputs//4
+        super(MetaMLP, self).__init__()
+        n_hidden = n_inputs
         hlaf = n_hidden // 2
         self.layers = nn.Sequential(
             nn.Linear(n_inputs, n_hidden),
+            nn.BatchNorm1d(n_hidden),
             nn.ReLU(),
+
             nn.Linear(n_hidden, n_hidden),
+            nn.BatchNorm1d(n_hidden),
             nn.ReLU(),
+
             nn.Linear(n_hidden, n_hidden),
+            nn.BatchNorm1d(n_hidden),
             nn.ReLU(),
+
             nn.Linear(n_hidden, hlaf),
-            nn.ReLU(),
-            nn.Linear(hlaf, hlaf),
             nn.BatchNorm1d(hlaf),
             nn.ReLU(),
+
             nn.Linear(hlaf, hlaf),
             nn.BatchNorm1d(hlaf),
             nn.ReLU(),
 
-            nn.Linear(hlaf, 1),
+            nn.Linear(hlaf, hlaf),
+            nn.BatchNorm1d(hlaf),
+            nn.ReLU(),
+
+            nn.Linear(hlaf, hlaf),
+            nn.BatchNorm1d(hlaf),
+            nn.ReLU(),
+
+            nn.Linear(hlaf, hlaf//2),
+            nn.BatchNorm1d(hlaf//2),
+            nn.ReLU(),
+
+            nn.Linear(hlaf//2, 1),
             nn.Sigmoid()
         )
 

@@ -17,17 +17,18 @@ import matplotlib.pyplot as plt
 from conv_net import ConvNet
 from sklearn.datasets import fetch_openml
 import torch.nn as nn
-
+from torchvision import transforms
+import torchvision.transforms.functional as F
 import random
 
 
 # Default constants
 DNN_HIDDEN_UNITS_DEFAULT = '1000'
 LEARNING_RATE_DEFAULT = 1e-3
-MAX_STEPS_DEFAULT = 20000
+MAX_STEPS_DEFAULT = 30000
 BATCH_SIZE_DEFAULT = 128
 HALF_BATCH = BATCH_SIZE_DEFAULT // 2
-EVAL_FREQ_DEFAULT = 400
+EVAL_FREQ_DEFAULT = 300
 
 # Directory in which cifar data is saved
 DATA_DIR_DEFAULT = './cifar10/cifar-10-batches-py'
@@ -86,9 +87,24 @@ def train():
     encoder2_model = os.path.join(script_directory, filepath)
 
     script_directory = os.path.split(os.path.abspath(__file__))[0]
-    filepath = 'discriminator.model'
-    discriminator_model = os.path.join(script_directory, filepath)
-    min_loss = -1000
+    filepath = 'discriminator3.model'
+    discriminator3_model = os.path.join(script_directory, filepath)
+
+    script_directory = os.path.split(os.path.abspath(__file__))[0]
+    filepath = 'discriminator4.model'
+    discriminator4_model = os.path.join(script_directory, filepath)
+
+    script_directory = os.path.split(os.path.abspath(__file__))[0]
+    filepath = 'discriminator5.model'
+    discriminator5_model = os.path.join(script_directory, filepath)
+
+    script_directory = os.path.split(os.path.abspath(__file__))[0]
+    filepath = 'discriminator6.model'
+    discriminator6_model = os.path.join(script_directory, filepath)
+
+    script_directory = os.path.split(os.path.abspath(__file__))[0]
+    filepath = 'meta_discriminator.model'
+    meta_discriminator_model = os.path.join(script_directory, filepath)
 
     ones = torch.ones(HALF_BATCH)
     zeros = torch.zeros(HALF_BATCH)
@@ -106,29 +122,19 @@ def train():
 
         ######## prepare input 1 for encoder 1 ######
         ids = np.random.choice(len(X_train), size=BATCH_SIZE_DEFAULT, replace=False)
-
         X_train_clean = X_train[ids, :]
-        threshold = random.uniform(0.4, 1)
-        for i in range(X_train_clean.shape[0]):
-            nums = np.random.uniform(low=0, high=1, size=(X_train_clean[i].shape[0],))
-            X_train_clean[i] = np.where(nums > threshold, X_train_clean[i], 0)
-
         X_train_clean = np.reshape(X_train_clean, (BATCH_SIZE_DEFAULT, 1, 28, 28))
         X_train_clean = Variable(torch.FloatTensor(X_train_clean))
+
+        #rotate_image(X_train_clean[0])
 
         ######## prepare input 2 for encoder 2 ######
 
         new_ids = np.random.choice(len(X_train), size=HALF_BATCH, replace=False)
         concat_ids = np.concatenate((ids[:HALF_BATCH], new_ids), axis=0)
+
         X_train_new = X_train[concat_ids, :]
-
-        threshold = random.uniform(0.4, 1)
-        for i in range(X_train_new.shape[0]):
-            nums = np.random.uniform(low=0, high=1, size=(X_train_new[i].shape[0],))
-            X_train_new[i] = np.where(nums > threshold, X_train_new[i], 0)
-
-        X_train_new = np.reshape(X_train_new, (BATCH_SIZE_DEFAULT, 1, 28, 28))
-        X_train_new = Variable(torch.FloatTensor(X_train_new))
+        X_train_new = transformations(X_train_new)
 
         output = sm.forward(X_train_clean, X_train_new)
 
@@ -150,29 +156,19 @@ def train():
             for i in range(BATCH_SIZE_DEFAULT, test_size, BATCH_SIZE_DEFAULT):
 
                 ######## prepare input 1 for encoder 1 ######
-                threshold = random.uniform(0.4, 1)
                 ids = np.array(range(i - BATCH_SIZE_DEFAULT, i))
                 X_test_clean = X_test[ids, :]
-
-                for i in range(X_test_clean.shape[0]):
-                    nums = np.random.uniform(low=0, high=1, size=(X_test_clean[i].shape[0],))
-                    X_test_clean[i] = np.where(nums > threshold, X_test_clean[i], 0)
 
                 X_test_clean = np.reshape(X_test_clean, (BATCH_SIZE_DEFAULT, 1, 28, 28))
                 X_test_clean = Variable(torch.FloatTensor(X_test_clean))
 
                 ######## prepare input 2 for encoder 2 ######
-                threshold = random.uniform(0.4, 1)
+
                 new_ids = np.random.choice(len(X_test), size=HALF_BATCH, replace=False)
                 concat_ids = np.concatenate((ids[:HALF_BATCH], new_ids), axis=0)
+
                 X_test_new = X_test[concat_ids, :]
-
-                for i in range(X_test_new.shape[0]):
-                    nums = np.random.uniform(low=0, high=1, size=(X_test_new[i].shape[0],))
-                    X_test_new[i] = np.where(nums > threshold, X_test_new[i], 0)
-
-                X_test_new = np.reshape(X_test_new, (BATCH_SIZE_DEFAULT, 1, 28, 28))
-                X_test_new = Variable(torch.FloatTensor(X_test_new))
+                X_test_new = transformations(X_test_new)
 
                 output = sm.forward(X_test_clean, X_test_new)
 
@@ -199,7 +195,11 @@ def train():
                 print("models saved iter: " + str(iteration))
                 torch.save(sm.encoder, encoder1_model)
                 torch.save(sm.encoder2, encoder2_model)
-                torch.save(sm.discriminator, discriminator_model)
+                #torch.save(sm.discriminator_3, discriminator3_model)
+                # torch.save(sm.discriminator_4, discriminator4_model)
+                # torch.save(sm.discriminator_5, discriminator5_model)
+                # torch.save(sm.discriminator_6, discriminator6_model)
+                torch.save(sm.meta_model, meta_discriminator_model)
 
             print("total accuracy " + str(total_acc) + " total loss " + str(total_loss))
 
@@ -211,6 +211,66 @@ def train():
     plt.ylabel('losses')
     plt.show()
 
+
+def transformations(X):
+    noise = random.uniform(0, 1) > 0.6
+
+    if noise:
+        threshold = random.uniform(0, 0.35)
+        for i in range(X.shape[0]):
+            nums = np.random.uniform(low=0, high=1, size=(X[i].shape[0],))
+            X[i] = np.where(nums > threshold, X[i], 0)
+
+    X = np.reshape(X, (BATCH_SIZE_DEFAULT, 1, 28, 28))
+    X = Variable(torch.FloatTensor(X))
+
+    if not noise:
+        for i in range(X.shape[0]):
+            rotate = random.uniform(0, 1) > 0.5
+            if rotate:
+                transformation = transforms.RandomRotation(10)
+                trans = transforms.Compose(
+                    [transformation, transforms.ToTensor()])
+            else:
+                transformation = transforms.Resize(20, interpolation=2)
+                trans = transforms.Compose(
+                    [transformation, transforms.Pad(4), transforms.ToTensor()])
+
+            a = F.to_pil_image(X[i])
+            trans_image = trans(a)
+            X[i] = trans_image
+
+    return X
+
+
+def show_mnist(first_image):
+    pixels = first_image.reshape((28, 28))
+    plt.imshow(pixels, cmap='gray')
+    plt.show()
+
+
+def rotate_image(image):
+    show_mnist(image)
+
+    #transforms.RandomChoice
+
+    #trans = transforms.Compose([transforms.RandomPerspective(distortion_scale=0.5, p=0.5, interpolation=3)])
+    #trans = transforms.Compose([transforms.RandomAffine(20)])
+    #trans = transforms.Compose([transforms.Scale(20)])
+    #trans = transforms.Compose([transforms.CenterCrop(23)])
+    #trans = transforms.Resize(20, interpolation=2)
+    trans = transforms.RandomRotation(30)
+    #trans = transforms.Resize(20, interpolation=2)
+
+    trans = transforms.Compose([trans, transforms.Pad(4)])
+    a = F.to_pil_image(image)
+
+    trans_image = trans(a)
+
+    pixels = trans_image.resize((28, 28))
+    plt.imshow(pixels, cmap='gray')
+    plt.show()
+    input()
 
 def main():
     """
