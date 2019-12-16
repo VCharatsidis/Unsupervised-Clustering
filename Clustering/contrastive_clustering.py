@@ -8,6 +8,8 @@ import os
 from torchvision import transforms
 import torchvision.transforms.functional as F
 import random
+from Mutual_Information.train_MIM import add_noise, scale, rotate, augment
+import copy
 
 
 filepath = '..\\'
@@ -18,20 +20,36 @@ encoder_1 = torch.load(encoder1_model)
 encoder2_model = os.path.join(script_directory, filepath + 'encoder_2.model')
 encoder_2 = torch.load(encoder2_model)
 
-discriminator3_model = os.path.join(script_directory, filepath + 'discriminator3.model')
-discriminator3 = torch.load(discriminator3_model)
+mi_filepath = '..\\Mutual_Information\\'
+encoder1_model = os.path.join(script_directory, mi_filepath + 'mi_encoder_1.model')
+mi_encoder_1 = torch.load(encoder1_model)
 
-discriminator4_model = os.path.join(script_directory, filepath + 'discriminator4.model')
-discriminator4 = torch.load(discriminator4_model)
+encoder2_model = os.path.join(script_directory, mi_filepath + 'mi_encoder_2.model')
+mi_encoder_2 = torch.load(encoder2_model)
+#
+# encoder3_model = os.path.join(script_directory, mi_filepath + 'mi_encoder_3.model')
+# mi_encoder_3 = torch.load(encoder3_model)
+#
+# encoder4_model = os.path.join(script_directory, mi_filepath + 'mi_encoder_4.model')
+# mi_encoder_4 = torch.load(encoder4_model)
 
-discriminator5_model = os.path.join(script_directory, filepath + 'discriminator5.model')
-discriminator5 = torch.load(discriminator5_model)
+mi_discriminator_model = os.path.join(script_directory, mi_filepath + 'mi_discriminator.model')
+mi_discriminator = torch.load(mi_discriminator_model)
 
-discriminator6_model = os.path.join(script_directory, filepath + 'discriminator6.model')
-discriminator6 = torch.load(discriminator6_model)
-
-meta_discriminator_model = os.path.join(script_directory, filepath + 'meta_discriminator.model')
-meta_discriminator = torch.load(meta_discriminator_model)
+# discriminator3_model = os.path.join(script_directory, filepath + 'discriminator3.model')
+# discriminator3 = torch.load(discriminator3_model)
+#
+# discriminator4_model = os.path.join(script_directory, filepath + 'discriminator4.model')
+# discriminator4 = torch.load(discriminator4_model)
+#
+# discriminator5_model = os.path.join(script_directory, filepath + 'discriminator5.model')
+# discriminator5 = torch.load(discriminator5_model)
+#
+# discriminator6_model = os.path.join(script_directory, filepath + 'discriminator6.model')
+# discriminator6 = torch.load(discriminator6_model)
+#
+# meta_discriminator_model = os.path.join(script_directory, filepath + 'meta_discriminator.model')
+# discriminator = torch.load(meta_discriminator_model)
 
 mnist = fetch_openml('mnist_784', version=1, cache=True)
 targets = mnist.target
@@ -61,58 +79,33 @@ def flatten(out):
      return out.view(out.shape[0], -1)
 
 
-def write_subgraph_differences(member_numbers):
+def write_subgraph_differences(member_numbers, encoder_1, encoder_2, encoder_3, encoder_4, discriminator):
     member_idx_to_id = {}
     with torch.no_grad():
         member_ids = np.random.choice(len(X_test), size=member_numbers, replace=False)
         X_proto_noise = X_test[member_ids, :]
-        X_proto_rotate = X_test[member_ids, :]
-        X_proto_scale = X_test[member_ids, :]
-
-        threshold = random.uniform(0, 0.35)
-        for i in range(X_proto_noise.shape[0]):
-            nums = np.random.uniform(low=0, high=1, size=(X_proto_noise[i].shape[0],))
-            X_proto_noise[i] = np.where(nums > threshold, X_proto_noise[i], 0)
+        # X_proto_rotate = copy.deepcopy(X_test[member_ids, :])
+        #X_proto_scale = copy.deepcopy(X_test[member_ids, :])
+        #
+        # X_proto_noise = add_noise(X_proto_noise, member_numbers)
+        # X_proto_rotate = rotate(X_proto_rotate, member_numbers)
+        #X_proto_scale = scale(X_proto_scale, member_numbers)
 
         X_proto_noise = np.reshape(X_proto_noise, (member_numbers, 1, 28, 28))
         X_proto_noise = Variable(torch.FloatTensor(X_proto_noise))
 
-        X_proto_rotate = np.reshape(X_proto_rotate, (member_numbers, 1, 28, 28))
-        X_proto_rotate = Variable(torch.FloatTensor(X_proto_rotate))
-
-        X_proto_scale = np.reshape(X_proto_scale, (member_numbers, 1, 28, 28))
-        X_proto_scale = Variable(torch.FloatTensor(X_proto_scale))
-
-        for i in range(X_proto_rotate.shape[0]):
-            transformation = transforms.RandomRotation(10)
-            trans = transforms.Compose(
-                [transformation, transforms.ToTensor()])
-
-            a = F.to_pil_image(X_proto_rotate[i])
-            trans_image = trans(a)
-            X_proto_rotate[i] = trans_image
-
-        for i in range(X_proto_scale.shape[0]):
-            transformation = transforms.Resize(20, interpolation=2)
-            trans = transforms.Compose(
-                [transformation, transforms.Pad(4), transforms.ToTensor()])
-
-            a = F.to_pil_image(X_proto_scale[i])
-            trans_image = trans(a)
-            X_proto_scale[i] = trans_image
-
         out_noise_6 = encoder_2.forward(X_proto_noise)
-        out_rotate_6 = encoder_2.forward(X_proto_rotate)
-        out_scale_6 = encoder_2.forward(X_proto_scale)
+        # out_scale_6 = encoder_3.forward(X_proto_scale)
+        # out_rotate_6 = encoder_4.forward(X_proto_rotate)
 
-        print(X_proto_scale[0])
-        print(X_proto_noise[0])
-        print(X_proto_rotate[0])
-        input()
+        # print(X_proto_scale[0])
+        # print(X_proto_noise[0])
+        # print(X_proto_rotate[0])
+        # input()
 
         out_noise_6 = flatten(out_noise_6)
-        out_rotate_6 = flatten(out_rotate_6)
-        out_scale_6 = flatten(out_scale_6)
+        # out_rotate_6 = flatten(out_rotate_6)
+        # out_scale_6 = flatten(out_scale_6)
 
         for idx, id in enumerate(member_ids):
             member_idx_to_id[idx] = id
@@ -128,22 +121,9 @@ def write_subgraph_differences(member_numbers):
 
             out_6 = out_6.repeat(member_numbers, 1)
 
-            #discriminator3_input = torch.cat([out_3, out_2_3], 1)
+            disc_in = torch.cat([out_6, out_noise_6], 1)
 
-            discriminator6_noise = torch.cat([out_6, out_noise_6], 1)
-            discriminator6_rotate = torch.cat([out_6, out_rotate_6], 1)
-            discriminator6_scale = torch.cat([out_6, out_scale_6], 1)
-
-            #discriminator3_output = discriminator3.forward(discriminator3_input)
-            # discriminator4_output = discriminator4.forward(discriminator4_input)
-            # discriminator5_output = discriminator5.forward(discriminator5_input)
-            # discriminator6_output = discriminator6.forward(discriminator6_input)
-
-            disc_noise = meta_discriminator.forward(discriminator6_noise)
-            disc_rotate = meta_discriminator.forward(discriminator6_rotate)
-            disc_scale = meta_discriminator.forward(discriminator6_scale)
-
-            discriminator_output = (disc_noise + disc_rotate + disc_scale)/3
+            discriminator_output = discriminator.forward(disc_in)
 
             disc = discriminator_output.detach().numpy()
             disc[idx] = 0
@@ -165,6 +145,7 @@ def write_subgraph_differences(member_numbers):
 def best_buddies_clustering():
     differences = string_to_numpy("subgraph_member_differences.txt")
     X = string_to_numpy("members.txt")
+
     member_number = differences.shape[0]
     all_members = [x for x in range(member_number)]
     all_clusters = []
@@ -207,10 +188,11 @@ def best_buddies_clustering():
         all_members = [x for x in range(member_number) if x not in used]
 
     print(len(all_clusters))
-
+    miss = 0
     for i in all_clusters:
-        utils.print_cluster_labels(i, X)
+       miss += utils.print_cluster_labels(i, X, targets)
 
+    print("best buddies clustering missclassifications: " +str(miss))
     return all_clusters
 
 
@@ -257,9 +239,42 @@ def pair_clustering():
         print("clsuter: " + str(cluster_labels) + " mfe " + str(mfe) + " miss percentage " + str(percentage_miss))
 
 
-member_idx_to_id = write_subgraph_differences(1000)
-#best_buddies_clustering()
+def log_distance_clustering():
+    print("log distance clustering")
+    differences = string_to_numpy("subgraph_member_differences.txt")
+    X = string_to_numpy("members.txt")
+    pair_clusters = []
+    used = []
+    miss = 0
+    member_number = differences.shape[0]
+    for i in range(member_number):
+        min = 10000
+        for j in range(member_number):
+            if i == j:
+                continue
+
+            log_dist = np.log(1-np.abs(differences[i]-differences[j]))
+
+            sum = np.abs(log_dist.sum())
+
+            if sum < min:
+                min = sum
+                min_idx = j
+
+        # print(min)
+        # print(targets[int(X[i][0])+60000])
+        # print(targets[int(X[min_idx][0])+60000])
+        # utils.show_mnist(X_test[int(X[i][0])])
+        # utils.show_mnist(X_test[int(X[min_idx][0])])
+        if targets[int(X[i][0])+60000] != targets[int(X[min_idx][0])+60000]:
+            miss += 1
+
+    print("missclassifications log distance best friend clustering: "+str(miss) + " percentage miss: "+str(miss/member_number))
+
+member_idx_to_id = write_subgraph_differences(3000, mi_encoder_1, mi_encoder_2, mi_encoder_1, mi_encoder_1, mi_discriminator)
+best_buddies_clustering()
 pair_clustering()
+log_distance_clustering()
 
 def get_best_friends():
     differences = string_to_numpy("subgraph_member_differences.txt")

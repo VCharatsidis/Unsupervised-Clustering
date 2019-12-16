@@ -50,17 +50,16 @@ def miss_classifications(cluster):
     return missclassifications
 
 
-def print_cluster_labels(cluster, members):
-    mnist = fetch_openml('mnist_784', version=1, cache=True)
-    targets = mnist.target
+def print_cluster_labels(cluster, members, targets):
 
-    X_train = mnist.data[:60000]
-    X_test = mnist.data[60000:]
     labels = [targets[int(members[m][0])+60000] for m in cluster]
     print("length: "+str(len(labels)))
     print(labels)
-    print("miss classifications: "+str(miss_classifications(labels)))
+    missclassifications = miss_classifications(labels)
+    print("miss classifications: "+str(missclassifications))
     print("")
+
+    return missclassifications
 
 
 

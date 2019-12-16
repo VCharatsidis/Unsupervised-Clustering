@@ -38,35 +38,35 @@ class MetaMLP(nn.Module):
         self.layers = nn.Sequential(
             nn.Linear(n_inputs, n_hidden),
             nn.BatchNorm1d(n_hidden),
-            nn.ReLU(),
+            nn.Tanh(),
 
             nn.Linear(n_hidden, n_hidden),
             nn.BatchNorm1d(n_hidden),
-            nn.ReLU(),
+            nn.Tanh(),
 
             nn.Linear(n_hidden, n_hidden),
             nn.BatchNorm1d(n_hidden),
-            nn.ReLU(),
+            nn.Tanh(),
 
             nn.Linear(n_hidden, hlaf),
             nn.BatchNorm1d(hlaf),
-            nn.ReLU(),
+            nn.Tanh(),
 
             nn.Linear(hlaf, hlaf),
             nn.BatchNorm1d(hlaf),
-            nn.ReLU(),
+            nn.Tanh(),
 
             nn.Linear(hlaf, hlaf),
             nn.BatchNorm1d(hlaf),
-            nn.ReLU(),
+            nn.Tanh(),
 
             nn.Linear(hlaf, hlaf),
             nn.BatchNorm1d(hlaf),
-            nn.ReLU(),
+            nn.Tanh(),
 
             nn.Linear(hlaf, hlaf//2),
             nn.BatchNorm1d(hlaf//2),
-            nn.ReLU(),
+            nn.Tanh(),
 
             nn.Linear(hlaf//2, 1),
             nn.Sigmoid()

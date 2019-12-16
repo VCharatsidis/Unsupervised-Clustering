@@ -20,13 +20,14 @@ import torch.nn as nn
 from torchvision import transforms
 import torchvision.transforms.functional as F
 import random
+from Mutual_Information.train_MIM import add_noise, augment, rotate, scale
 
 
 # Default constants
 DNN_HIDDEN_UNITS_DEFAULT = '1000'
 LEARNING_RATE_DEFAULT = 1e-3
 MAX_STEPS_DEFAULT = 30000
-BATCH_SIZE_DEFAULT = 128
+BATCH_SIZE_DEFAULT = 64
 HALF_BATCH = BATCH_SIZE_DEFAULT // 2
 EVAL_FREQ_DEFAULT = 300
 
@@ -121,6 +122,7 @@ def train():
         sm.train()
 
         ######## prepare input 1 for encoder 1 ######
+
         ids = np.random.choice(len(X_train), size=BATCH_SIZE_DEFAULT, replace=False)
         X_train_clean = X_train[ids, :]
         X_train_clean = np.reshape(X_train_clean, (BATCH_SIZE_DEFAULT, 1, 28, 28))
@@ -136,9 +138,10 @@ def train():
         X_train_new = X_train[concat_ids, :]
         X_train_new = transformations(X_train_new)
 
-        output = sm.forward(X_train_clean, X_train_new)
+        output, out_inv = sm.forward(X_train_clean, X_train_new)
 
-        loss = nn.functional.binary_cross_entropy(output, y_train_batch)
+        loss = nn.functional.binary_cross_entropy(output, y_train_batch) + torch.mean(torch.abs(output-out_inv))
+
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -170,11 +173,11 @@ def train():
                 X_test_new = X_test[concat_ids, :]
                 X_test_new = transformations(X_test_new)
 
-                output = sm.forward(X_test_clean, X_test_new)
+                output, out_inv = sm.forward(X_test_clean, X_test_new)
 
                 ####### calc losses ########
 
-                loss_test = nn.functional.binary_cross_entropy(output, y_test_batch)
+                loss_test = nn.functional.binary_cross_entropy(output, y_test_batch) + torch.mean(torch.abs(output-out_inv))
                 total_loss += loss_test.item()
 
                 acc = accuracy(output, y_test_batch)
@@ -199,7 +202,7 @@ def train():
                 # torch.save(sm.discriminator_4, discriminator4_model)
                 # torch.save(sm.discriminator_5, discriminator5_model)
                 # torch.save(sm.discriminator_6, discriminator6_model)
-                torch.save(sm.meta_model, meta_discriminator_model)
+                torch.save(sm.discriminator, meta_discriminator_model)
 
             print("total accuracy " + str(total_acc) + " total loss " + str(total_loss))
 
@@ -214,9 +217,10 @@ def train():
 
 def transformations(X):
     noise = random.uniform(0, 1) > 0.6
-
+    # #TODO
+    noise = False
     if noise:
-        threshold = random.uniform(0, 0.35)
+        threshold = random.uniform(0, 0.6)
         for i in range(X.shape[0]):
             nums = np.random.uniform(low=0, high=1, size=(X[i].shape[0],))
             X[i] = np.where(nums > threshold, X[i], 0)
@@ -227,16 +231,19 @@ def transformations(X):
     if not noise:
         for i in range(X.shape[0]):
             rotate = random.uniform(0, 1) > 0.5
+            # TODO
+            rotate = False
             if rotate:
-                transformation = transforms.RandomRotation(10)
+                transformation = transforms.RandomRotation(20)
                 trans = transforms.Compose(
                     [transformation, transforms.ToTensor()])
             else:
-                transformation = transforms.Resize(20, interpolation=2)
+                transformation = transforms.Resize(22, interpolation=1)
                 trans = transforms.Compose(
-                    [transformation, transforms.Pad(4), transforms.ToTensor()])
+                    [transformation, transforms.Pad(3), transforms.ToTensor()])
 
             a = F.to_pil_image(X[i])
+
             trans_image = trans(a)
             X[i] = trans_image
 
@@ -262,7 +269,11 @@ def rotate_image(image):
     trans = transforms.RandomRotation(30)
     #trans = transforms.Resize(20, interpolation=2)
 
-    trans = transforms.Compose([trans, transforms.Pad(4)])
+    # transformation = transforms.RandomRotation(10)
+    # trans = transforms.Compose(
+    #     [transformation, transforms.ToTensor()])
+
+    #trans = transforms.Compose([trans, transforms.Pad(4)])
     a = F.to_pil_image(image)
 
     trans_image = trans(a)

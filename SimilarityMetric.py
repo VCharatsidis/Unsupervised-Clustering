@@ -14,7 +14,7 @@ class SimilarityMetric(nn.Module):
 
         input_dim = 512
 
-        self.meta_model = MetaMLP(1024)
+        self.discriminator = MetaMLP(512)
 
 
     def flatten(self, out):
@@ -24,6 +24,9 @@ class SimilarityMetric(nn.Module):
     def forward(self, image_1, image_2):
         out_6 = self.encoder(image_1)
         out_2_6 = self.encoder2(image_2)
+
+        out_inverse = self.encoder(image_2)
+        out_inverse_2 = self.encoder2(image_1)
 
         # out_1 = self.flatten(out_1)
         # out_2_1 = self.flatten(out_2_1)
@@ -43,6 +46,9 @@ class SimilarityMetric(nn.Module):
         out_6 = self.flatten(out_6)
         out_2_6 = self.flatten(out_2_6)
 
+        out_inverse = self.flatten(out_inverse)
+        out_inverse_2 = self.flatten(out_inverse_2)
+
 
         #discriminator_1_input = torch.cat([out_1, out_2_1], 1)
         #discriminator_2_input = torch.cat([out_2, out_2_2], 1)
@@ -50,6 +56,7 @@ class SimilarityMetric(nn.Module):
         # discriminator_4_input = torch.cat([out_4, out_2_4], 1)
         # discriminator_5_input = torch.cat([out_5, out_2_5], 1)
         discriminator_6_input = torch.cat([out_6, out_2_6], 1)
+        inverse_input = torch.cat([out_inverse, out_inverse_2], 1)
 
         # print("disc")
         # # print(discriminator_1_input.shape)
@@ -69,6 +76,7 @@ class SimilarityMetric(nn.Module):
 
         #print(meta_model_input.shape)
 
-        output = self.meta_model(discriminator_6_input)
+        output = self.discriminator(discriminator_6_input)
+        output_inv = self.discriminator(inverse_input)
 
-        return output
+        return output, output_inv
