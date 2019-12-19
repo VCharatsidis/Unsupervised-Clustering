@@ -22,15 +22,16 @@ import torchvision.transforms.functional as F
 import random
 import copy
 from predictor import Predictor
+import statistics
 
 
 # Default constants
 DNN_HIDDEN_UNITS_DEFAULT = '1000'
-LEARNING_RATE_DEFAULT = 1e-3
+LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 30000
-BATCH_SIZE_DEFAULT = 1
+BATCH_SIZE_DEFAULT = 4
 HALF_BATCH = BATCH_SIZE_DEFAULT // 2
-EVAL_FREQ_DEFAULT = 200
+EVAL_FREQ_DEFAULT = 1000
 
 # Directory in which cifar data is saved
 DATA_DIR_DEFAULT = './cifar10/cifar-10-batches-py'
@@ -67,10 +68,17 @@ def accuracy(predictions, targets):
     return accuracy
 
 
-def calc_distance(out, out_2):
-    abs_difference = torch.abs(out - out_2)
+def calc_distance(out, y):
+    abs_difference = torch.abs(out - y)
     information_loss = torch.log(1 - abs_difference)
     mean = torch.mean(information_loss)
+
+    # print(out)
+    # print(y)
+    # print(abs_difference)
+    # print(mean)
+    # print(torch.abs(mean))
+    # input()
 
     return torch.abs(mean)
 
@@ -79,33 +87,73 @@ def flatten(out):
     return out.view(out.shape[0], -1)
 
 
-def forward_block(X, ids, conv, predictor):
+def forward_block(X, ids, conv, predictor, optimizer, train):
     x_train = X[ids, :]
 
     x_tensor = to_Tensor(x_train)
+
     convolutions = conv.forward(x_tensor)
+
     x = flatten(convolutions)
 
     size = x.shape[1]
 
-    loss = 0
+    # One hot encoding buffer that you create out of the loop and just keep reusing
+    i_one_hot = torch.FloatTensor(BATCH_SIZE_DEFAULT, size)
+
+    total_loss = []
+    total_distances = []
 
     for i in range(size):
-        y = x[:, i]
-        x_reduced = torch.cat([x[:, 0:i], x[:, i + 1:]], 1)
 
+        predictor.train()
+        y = x[:, i]
+        # y.unsqueeze_(0)
+        # y.t_()
+
+        # In your for loop
+        i_one_hot.zero_()
+
+        i_tensor = torch.LongTensor(BATCH_SIZE_DEFAULT, 1)
+        i_tensor[:, 0] = i
+        i_one_hot.scatter_(1, i_tensor, 1)
+
+        x_reduced = torch.cat([x[:, 0:i], x[:, i + 1:]], 1)
+        x_reduced = torch.cat([x_reduced, i_one_hot], 1)
+
+        #print(x_reduced)
         res = predictor.forward(x_reduced.detach())
 
-        loss += calc_distance(res[0], y)
+        distances = calc_distance(res, y)
+        total_distances.append(distances)
 
-    return loss
+        # if train:
+        #     optimizer.zero_grad()
+        #     distances.backward(retain_graph=True)
+        #     optimizer.step()
+
+        total_loss.append(distances.item())
+
+    loss = 0
+    for i in total_distances:
+        loss += i
+
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+    print("loss")
+    print(loss)
+    print(loss.shape)
+    print(loss.item())
+
+    return total_loss
 
 
 def train():
     mnist = fetch_openml('mnist_784', version=1, cache=True)
     targets = mnist.target
 
-    X_train = mnist.data[:60000]
+    X_train = mnist.data[:4]
     X_test = mnist.data[60000:]
 
     print(X_test.shape)
@@ -113,15 +161,15 @@ def train():
     input_dim = 256
 
     conv = DetachedConvNet(1)
-    predictor = Predictor(168)
+    predictor = Predictor(1351)
     optimizer = torch.optim.Adam(predictor.parameters())
 
     script_directory = os.path.split(os.path.abspath(__file__))[0]
     filepath = 'detached_net.model'
-    encoder1_model = os.path.join(script_directory, filepath)
+    detached_model = os.path.join(script_directory, filepath)
 
     filepath = 'predictor.model'
-    encoder1_model = os.path.join(script_directory, filepath)
+    predictor_model = os.path.join(script_directory, filepath)
 
     ones = torch.ones(HALF_BATCH)
     zeros = torch.zeros(HALF_BATCH)
@@ -133,51 +181,52 @@ def train():
     y_train_batch = Variable(torch.FloatTensor(y_train_batch.float()))
 
     max_loss = 100
-    saturation = 100
-    best_accuracy = 0
 
     for iteration in range(MAX_STEPS_DEFAULT):
-        conv.train()
+        print(iteration)
+        predictor.train()
 
         ids = np.random.choice(len(X_train), size=BATCH_SIZE_DEFAULT, replace=False)
-        loss = forward_block(X_train, ids, conv, predictor)
 
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+        train = True
+        loss_list = forward_block(X_train, ids, conv, predictor, optimizer, train)
 
-        if iteration % EVAL_FREQ_DEFAULT == 0:
-            conv.eval()
+        print(loss_list)
+        print(statistics.mean(loss_list))
 
-            total_acc = 0
-            total_loss = 0
-            similarity_total = 0
-
-            accuracies = []
-            losses = []
-
-            test_size = 9984
-            for i in range(BATCH_SIZE_DEFAULT, test_size, BATCH_SIZE_DEFAULT):
-
-                ids = np.array(range(i - BATCH_SIZE_DEFAULT, i))
-                loss = forward_block(X_test, ids, conv, predictor)
-
-                total_loss += loss.item()
-
-
-            denom = test_size // BATCH_SIZE_DEFAULT
-            total_acc = total_acc / denom
-            total_loss = total_loss / denom
-            similarity_total = similarity_total / denom
-            accuracies.append(total_acc)
-            losses.append(total_loss)
-
-            if best_accuracy < total_acc:
-                best_accuracy = total_acc
-                print("models saved iter: " + str(iteration))
-                torch.save(conv.encoder, encoder1_model)
-
-            print("total accuracy " + str(total_acc) + " total loss " + str(total_loss)+" similarity: "+str(similarity_total))
+        # if iteration % EVAL_FREQ_DEFAULT == 0:
+        #     print(iteration)
+        #     predictor.eval()
+        #
+        #     total_acc = 0
+        #     total_loss = 0
+        #     similarity_total = 0
+        #
+        #     accuracies = []
+        #     # losses = []
+        #
+        #     test_size = 9984
+        #     for i in range(BATCH_SIZE_DEFAULT, test_size, BATCH_SIZE_DEFAULT):
+        #         ids = np.array(range(i - BATCH_SIZE_DEFAULT, i))
+        #         loss_list = forward_block(X_test, ids, conv, predictor, optimizer, False)
+        #
+        #         total_loss += statistics.mean(loss_list)
+        #
+        #     denom = test_size // BATCH_SIZE_DEFAULT
+        #     print(total_loss)
+        #     total_acc = total_acc / denom
+        #     total_loss = total_loss / denom
+        #     similarity_total = similarity_total / denom
+        #     accuracies.append(total_acc)
+        #     # losses.append(total_loss)
+        #
+        #     if max_loss > total_loss:
+        #         max_loss = total_loss
+        #         print("models saved iter: " + str(iteration))
+        #         torch.save(conv, detached_model)
+        #         torch.save(predictor, predictor_model)
+        #
+        #     print("total accuracy " + str(total_acc) + " total loss " + str(total_loss)+" similarity: "+str(similarity_total))
 
     plt.plot(accuracies)
     plt.ylabel('accuracies')
@@ -186,7 +235,6 @@ def train():
     plt.plot(losses)
     plt.ylabel('losses')
     plt.show()
-
 
 
 def to_Tensor(X, batch_size=BATCH_SIZE_DEFAULT):

@@ -26,7 +26,7 @@ class DetachedConvNet(nn.Module):
 
         super(DetachedConvNet, self).__init__()
 
-        self.conv = nn.Conv2d(n_channels, 1, kernel_size=3, stride=2, padding=0)
+        self.conv = nn.Conv2d(n_channels, 1, kernel_size=3, stride=1, padding=0)
         self.sigmoid = nn.Sigmoid()
 
 

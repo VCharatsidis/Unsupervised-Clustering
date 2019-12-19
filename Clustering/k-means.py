@@ -2,11 +2,12 @@ from sklearn.cluster import KMeans
 from torchvision.utils import make_grid
 from train import _read_raw_image_file
 from sklearn.datasets import fetch_openml
-from utils import string_to_numpy
+from utils import string_to_numpy, most_frequent
 from matplotlib import pyplot as plt
 import os
 import matplotlib
 import numpy as np
+
 
 
 # def display_centroid(centroid, number):
@@ -29,10 +30,6 @@ import numpy as np
 
 # = mnist.data[:60000]
 # = mnist.data[60000:]
-
-
-def most_frequent(List):
-    return max(set(List), key=List.count)
 
 
 def get_centroids(write_file, read_file):

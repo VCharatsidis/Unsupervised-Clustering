@@ -37,15 +37,15 @@ class MLP(nn.Module):
         hlaf = n_hidden // 2
         self.layers = nn.Sequential(
             nn.Linear(n_inputs, n_hidden),
-            nn.BatchNorm1d(n_hidden),
+            #nn.BatchNorm1d(n_hidden),
             nn.Tanh(),
 
             nn.Linear(n_hidden, n_hidden),
-            nn.BatchNorm1d(n_hidden),
+            #nn.BatchNorm1d(n_hidden),
             nn.Tanh(),
 
             nn.Linear(n_hidden, hlaf),
-            nn.BatchNorm1d(hlaf),
+            #nn.BatchNorm1d(hlaf),
             nn.Tanh(),
 
             # nn.Linear(n_hidden, n_hidden),

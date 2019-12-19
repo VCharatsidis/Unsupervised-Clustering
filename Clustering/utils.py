@@ -50,6 +50,10 @@ def miss_classifications(cluster):
     return missclassifications
 
 
+def flatten(out):
+    return out.view(out.shape[0], -1)
+
+
 def print_cluster_labels(cluster, members, targets):
 
     labels = [targets[int(members[m][0])+60000] for m in cluster]

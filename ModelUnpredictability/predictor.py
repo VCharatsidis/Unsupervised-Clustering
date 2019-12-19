@@ -32,13 +32,31 @@ class Predictor(nn.Module):
 
         """
         super(Predictor, self).__init__()
-
+        half = n_inputs // 2
+        quarter = half // 2
         self.layers = nn.Sequential(
             nn.Linear(n_inputs, n_inputs),
-            #nn.BatchNorm1d(n_inputs),
             nn.Tanh(),
 
-            nn.Linear(n_inputs, 1),
+            nn.Linear(n_inputs, n_inputs),
+            nn.Tanh(),
+
+            nn.Linear(n_inputs, half),
+            nn.Tanh(),
+
+            nn.Linear(half, half),
+            nn.Tanh(),
+
+            nn.Linear(half, quarter),
+            nn.Tanh(),
+
+            nn.Linear(quarter, quarter),
+            nn.Tanh(),
+
+            nn.Linear(quarter, quarter),
+            nn.Tanh(),
+
+            nn.Linear(quarter, 1),
             nn.Sigmoid()
         )
 

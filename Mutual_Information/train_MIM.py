@@ -105,7 +105,7 @@ def forward_block(X, ids, y, model):
     ce_loss = nn.functional.binary_cross_entropy(results[0], y)
     distances_loss = calc_all_distances(results)
 
-    coeff = 1.2
+    coeff = 1.1
     loss = ce_loss + coeff * distances_loss
     return loss, results[0], distances_loss
 

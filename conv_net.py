@@ -27,12 +27,12 @@ class ConvNet(nn.Module):
         super(ConvNet, self).__init__()
 
         self.conv1 = nn.Conv2d(n_channels, 64, kernel_size=3, stride=1, padding=1)
-        self.batchNorm1 = nn.BatchNorm2d(64)
+        #self.batchNorm1 = nn.BatchNorm2d(64)
         self.relu1 = nn.Tanh()
         self.maxpool1 = nn.MaxPool2d(kernel_size=2, stride=2, padding=1)
 
         self.conv2 = nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1)
-        self.batchNorm2 = nn.BatchNorm2d(128)
+        #self.batchNorm2 = nn.BatchNorm2d(128)
         self.relu2 = nn.Tanh()
         self.maxpool2 = nn.MaxPool2d(kernel_size=2, stride=2, padding=1)
 
@@ -101,14 +101,14 @@ class ConvNet(nn.Module):
         """
 
         out = self.conv1(x)
-        out = self.batchNorm1(out)
+       # out = self.batchNorm1(out)
         out = self.relu1(out)
         out_1 = self.maxpool1(out)
         # print("conv 1: ")
         # print(out_1.shape)
 
         out = self.conv2(out_1)
-        out = self.batchNorm2(out)
+       # out = self.batchNorm2(out)
         out = self.relu2(out)
         out_2 = self.maxpool2(out)
         # print("conv 2: ")
