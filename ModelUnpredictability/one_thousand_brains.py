@@ -28,7 +28,7 @@ from colon import Colon
 
 # Default constants
 DNN_HIDDEN_UNITS_DEFAULT = '1000'
-LEARNING_RATE_DEFAULT = 5e-4
+LEARNING_RATE_DEFAULT = 5e-3
 MAX_STEPS_DEFAULT = 30000
 BATCH_SIZE_DEFAULT = 256
 HALF_BATCH = BATCH_SIZE_DEFAULT // 2
@@ -41,6 +41,7 @@ FLAGS = None
 def calc_distance(out, y):
     abs_difference = torch.abs(out - y)
     information_loss = torch.log(1 - abs_difference)
+
     mean = torch.mean(information_loss)
 
     # print(out)
@@ -60,39 +61,33 @@ def flatten(out):
 def forward_block(X, ids, conv, colons, optimizers, train):
     x_train = X[ids, :]
 
-    x_tensor = to_Tensor(x_train)
+    x_tensor = to_Tensor(x_train, 1)
 
     convolutions = conv.forward(x_tensor)
 
-    x = flatten(convolutions)
+    flattened_convolutions = flatten(convolutions)
 
-    size = x.shape[1]
+    size = flattened_convolutions.shape[1]
 
     total_loss = []
-    total_distances = []
 
     for i in range(size):
         colon = colons[i]
-        optimizer = optimizers[i]
 
         if train:
             colon.train()
         else:
             colon.eval()
 
-        y = x[:, i]
-
-        x_reduced = torch.cat([x[:, 0:i], x[:, i + 1:]], 1)
-
+        y = flattened_convolutions[:, i]
+        x_reduced = torch.cat([flattened_convolutions[:, 0:i], flattened_convolutions[:, i + 1:]], 1)
         res = colon.forward(x_reduced.detach())
-
         distances = calc_distance(res, y)
-        total_distances.append(distances)
 
         if train:
-            optimizer.zero_grad()
+            optimizers[i].zero_grad()
             distances.backward(retain_graph=True)
-            optimizer.step()
+            optimizers[i].step()
 
         total_loss.append(distances.item())
 
@@ -110,32 +105,30 @@ def train():
 
     conv = DetachedConvNet(1)
 
-    number_convolutions = 676
-    colons = []
-    for i in range(number_convolutions):
-        c = Colon(number_convolutions-1)
-        colons.append(c)
-
-    optimizers = []
-    for i in range(number_convolutions):
-        c = colons[i]
-        optimizer = torch.optim.Adam(c.parameters())
-        optimizers.append(optimizer)
-
     script_directory = os.path.split(os.path.abspath(__file__))[0]
     filepath = 'detached_net.model'
     detached_model = os.path.join(script_directory, filepath)
+    torch.save(conv, detached_model)
 
+    number_convolutions = 676
+    colons = []
+    optimizers = []
     colons_paths = []
+
     for i in range(number_convolutions):
-        filepath = 'one_thousand_brains\\predictor_'+str(i)+'.model'
+        filepath = 'one_thousand_brains\\predictor_' + str(i) + '.model'
         predictor_model = os.path.join(script_directory, filepath)
         colons_paths.append(predictor_model)
+
+        c = Colon(number_convolutions-1)
+        colons.append(c)
+
+        optimizer = torch.optim.SGD(c.parameters(), lr=LEARNING_RATE_DEFAULT, momentum=0.9)
+        optimizers.append(optimizer)
 
     max_loss = 1999
 
     for iteration in range(MAX_STEPS_DEFAULT):
-
         ids = np.random.choice(len(X_train), size=BATCH_SIZE_DEFAULT, replace=False)
 
         train = True
@@ -161,7 +154,6 @@ def train():
             if max_loss > total_loss:
                 max_loss = total_loss
                 print("models saved iter: " + str(iteration))
-                torch.save(conv, detached_model)
                 for i in range(number_convolutions):
                     torch.save(colons[i], colons_paths[i])
 

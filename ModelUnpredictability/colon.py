@@ -32,20 +32,20 @@ class Colon(nn.Module):
 
         """
         super(Colon, self).__init__()
-        half = n_inputs // 2
+        half = n_inputs // 4
         quarter = half // 2
         self.layers = nn.Sequential(
-            nn.Linear(n_inputs, half),
-            nn.Tanh(),
+            nn.Linear(n_inputs, 1),
+            nn.Sigmoid(),
 
-            nn.Linear(half, half),
-            nn.Tanh(),
+            # nn.Linear(half, half),
+            # nn.Tanh(),
 
-            nn.Linear(half, quarter),
-            nn.Tanh(),
+            # nn.Linear(half, quarter),
+            # nn.Tanh(),
 
-            nn.Linear(quarter, 1),
-            nn.Sigmoid()
+            # nn.Linear(half, 1),
+            # nn.Sigmoid()
         )
 
     def forward(self, x):
