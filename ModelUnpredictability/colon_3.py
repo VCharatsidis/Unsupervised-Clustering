@@ -9,7 +9,7 @@ import torch.nn as nn
 import torch
 
 
-class Colon(nn.Module):
+class Colon_3(nn.Module):
     """
     This class implements a Multi-layer Perceptron in PyTorch.
     It handles the different layers and parameters of the model.
@@ -31,12 +31,30 @@ class Colon(nn.Module):
                      output dimensions of the MLP
 
         """
-        super(Colon, self).__init__()
+        super(Colon_3, self).__init__()
 
-        self.layers = nn.Sequential(
-            nn.Linear(n_inputs, 1),
-            nn.Sigmoid(),
-        )
+        self.base = nn.Linear(n_inputs, 3)
+        self.tanh = nn.Tanh()
+
+        self.a = nn.Linear(3, 1)
+        self.b = nn.Linear(3, 1)
+        self.c = nn.Linear(3, 1)
+
+        self.sigmoid = nn.Sigmoid()
+
+        # self.layers = nn.Sequential(
+        #     nn.Linear(n_inputs, 3),
+        #     nn.Tanh(),
+        #
+        #     nn.Linear(half, half),
+        #     nn.Tanh(),
+        #
+        #     nn.Linear(half, quarter),
+        #     nn.Tanh(),
+        #
+        #     nn.Linear(half, 1),
+        #     nn.Sigmoid()
+        # )
 
     def forward(self, x):
         """
@@ -49,8 +67,19 @@ class Colon(nn.Module):
           out: outputs of the network
         """
 
-        out = x
-        for layer in self.layers:
-            out = layer.forward(out)
+        base = self.base(x)
+        base = self.tanh(base)
 
-        return out
+        a = self.a(base)
+        b = self.b(base)
+        c = self.c(base)
+
+        a = self.sigmoid(a)
+        b = self.sigmoid(b)
+        c = self.sigmoid(c)
+
+        # out = x
+        # for layer in self.layers:
+        #     out = layer.forward(out)
+
+        return a, b, c

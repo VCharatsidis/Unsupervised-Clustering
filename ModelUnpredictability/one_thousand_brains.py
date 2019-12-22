@@ -28,11 +28,11 @@ from colon import Colon
 
 # Default constants
 DNN_HIDDEN_UNITS_DEFAULT = '1000'
-LEARNING_RATE_DEFAULT = 5e-3
+LEARNING_RATE_DEFAULT = 2e-3
 MAX_STEPS_DEFAULT = 30000
-BATCH_SIZE_DEFAULT = 256
+BATCH_SIZE_DEFAULT = 2
 HALF_BATCH = BATCH_SIZE_DEFAULT // 2
-EVAL_FREQ_DEFAULT = 400
+EVAL_FREQ_DEFAULT = 200
 
 
 FLAGS = None
@@ -40,22 +40,73 @@ FLAGS = None
 
 def calc_distance(out, y):
     abs_difference = torch.abs(out - y)
-    information_loss = torch.log(1 - abs_difference)
-
-    mean = torch.mean(information_loss)
-
-    # print(out)
-    # print(y)
-    # print(abs_difference)
-    # print(mean)
-    # print(torch.abs(mean))
-    # input()
+    z = 1 - abs_difference
+    information_loss = torch.log(z)
+    mean_info = torch.mean(information_loss, 1)
+    mean = torch.mean(mean_info)
 
     return torch.abs(mean)
 
 
 def flatten(out):
     return out.view(out.shape[0], -1)
+
+
+def multi_filter_flatten(out):
+    return out.view(out.shape[0], out.shape[1], -1)
+
+
+def forward_block_3(X, ids, conv, colons, optimizers, train):
+    x_train = X[ids, :]
+
+    x_tensor = to_Tensor(x_train)
+
+    convolutions = conv.forward(x_tensor)
+
+    flattened_convolutions = multi_filter_flatten(convolutions)
+
+    size = flattened_convolutions.shape[2]
+
+    total_loss = []
+    # conv_loss_tensor = torch.zeros(size)
+
+    for i in range(size):
+        colon = colons[i]
+
+        if train:
+            colon.train()
+        else:
+            colon.eval()
+
+        y = flattened_convolutions[:, :, i]
+
+        x_reduced = torch.cat([flattened_convolutions[:, :, 0:i], flattened_convolutions[:, :, i + 1:]], 2)
+        x_reduced = flatten(x_reduced)
+
+        a, b, c = colon.forward(x_reduced.detach())
+        res = torch.cat([a, b, c], 1)
+
+        distances = calc_distance(res, y)
+
+        if train:
+            optimizers[i].zero_grad()
+            distances.backward(retain_graph=True)
+            optimizers[i].step()
+
+        # conv_loss_tensor[i] = distances
+        total_loss.append(distances.item())
+
+    # log_total_loss = torch.log(conv_loss_tensor)
+
+    # conv_loss = torch.mean(log_total_loss)
+    # abs_conv_loss = torch.abs(conv_loss)
+
+    # if train:
+    #     optimizers[-1].zero_grad()
+    #     abs_conv_loss.backward()
+    #     optimizers[-1].step()
+
+    return total_loss
 
 
 def forward_block(X, ids, conv, colons, optimizers, train):
@@ -94,6 +145,11 @@ def forward_block(X, ids, conv, colons, optimizers, train):
     return total_loss
 
 
+def print_params(model):
+    for param in model.parameters():
+        print(param.data)
+
+
 def train():
     mnist = fetch_openml('mnist_784', version=1, cache=True)
     targets = mnist.target
@@ -103,14 +159,21 @@ def train():
 
     print(X_test.shape)
 
-    conv = DetachedConvNet(1)
+    number_convolutions = 676
+
+    stride = 1
+    if number_convolutions == 169:
+        stride = 2
+
+    filters = 3
+    conv = DetachedConvNet(1, filters, stride)
 
     script_directory = os.path.split(os.path.abspath(__file__))[0]
     filepath = 'detached_net.model'
     detached_model = os.path.join(script_directory, filepath)
     torch.save(conv, detached_model)
 
-    number_convolutions = 676
+
     colons = []
     optimizers = []
     colons_paths = []
@@ -120,11 +183,14 @@ def train():
         predictor_model = os.path.join(script_directory, filepath)
         colons_paths.append(predictor_model)
 
-        c = Colon(number_convolutions-1)
+        c = Colon(filters * (number_convolutions-1))
         colons.append(c)
 
         optimizer = torch.optim.SGD(c.parameters(), lr=LEARNING_RATE_DEFAULT, momentum=0.9)
         optimizers.append(optimizer)
+
+    conv_optimizer = torch.optim.SGD(conv.parameters(), lr=1e-6, momentum=0.9)
+    optimizers.append(conv_optimizer)
 
     max_loss = 1999
 
@@ -135,6 +201,7 @@ def train():
         loss_list = forward_block(X_train, ids, conv, colons, optimizers, train)
 
         if iteration % EVAL_FREQ_DEFAULT == 0:
+            print_params(conv)
             print(loss_list)
             print(statistics.mean(loss_list))
             print(iteration)
@@ -154,11 +221,11 @@ def train():
             if max_loss > total_loss:
                 max_loss = total_loss
                 print("models saved iter: " + str(iteration))
+                torch.save(conv, detached_model)
                 for i in range(number_convolutions):
                     torch.save(colons[i], colons_paths[i])
 
             print("total loss " + str(total_loss))
-
 
 
 def to_Tensor(X, batch_size=BATCH_SIZE_DEFAULT):

@@ -11,7 +11,7 @@ class DetachedConvNet(nn.Module):
     Once initialized an ConvNet object can perform forward.
     """
 
-    def __init__(self, n_channels):
+    def __init__(self, n_channels, filters, stride):
         """
         Initializes ConvNet object.
 
@@ -26,7 +26,7 @@ class DetachedConvNet(nn.Module):
 
         super(DetachedConvNet, self).__init__()
 
-        self.conv = nn.Conv2d(n_channels, 1, kernel_size=3, stride=1, padding=0)
+        self.conv = nn.Conv2d(n_channels, filters, kernel_size=3, stride=stride, padding=0)
         self.sigmoid = nn.Sigmoid()
 
 

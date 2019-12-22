@@ -112,7 +112,8 @@ def log_distance_clustering(member_numbers):
     used = []
 
     for i in range(member_numbers):
-        min = 10000
+        min = 100000
+        min_idx = -1
         if i in used:
             continue
         for j in range(member_numbers):
@@ -135,5 +136,5 @@ def log_distance_clustering(member_numbers):
     print("missclassifications log distance best friend clustering: "+str(miss) + " percentage miss: "+str(miss/member_numbers))
 
 
-log_distance_clustering(10000)
-#get_centroids(300)
+log_distance_clustering(2000)
+#get_centroids(1000)
