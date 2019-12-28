@@ -10,17 +10,10 @@ import argparse
 import numpy as np
 import os
 import torch
-from sklearn.datasets import fetch_openml
-from MutualInfoMetric import MutualInfoMetric
 from torch.autograd import Variable
 import matplotlib.pyplot as plt
 from detached_conv import DetachedConvNet
 from sklearn.datasets import fetch_openml
-import torch.nn as nn
-from torchvision import transforms
-import torchvision.transforms.functional as F
-import random
-import copy
 from predictor import Predictor
 import statistics
 

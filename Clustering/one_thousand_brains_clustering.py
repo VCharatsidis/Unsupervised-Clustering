@@ -1,29 +1,22 @@
-from utils import string_to_numpy
 import torch
 import numpy as np
-from torch.autograd import Variable
 from sklearn.datasets import fetch_openml
-from utils import string_to_numpy, most_frequent, flatten
+from utils import most_frequent
 import os
-from torchvision import transforms
-import torchvision.transforms.functional as F
-import random
-from Mutual_Information.train_MIM import to_Tensor
-from ModelUnpredictability.train import calc_distance
-import copy
 from sklearn.cluster import KMeans
-from ModelUnpredictability.one_thousand_brains import forward_block
+#from one_thousand_brains import forward_block
+from ModelUnpredictability.two_thousand_brains.train_two_thousand import forward_block
 
-filepath = '..\\ModelUnpredictability\\'
-script_directory = os.path.split(os.path.abspath(__file__))[0]
-detached_net_model = os.path.join(script_directory, filepath + 'detached_net.model')
-conv = torch.load(detached_net_model)
-
-colons = []
-for i in range(676):
-    path = 'one_thousand_brains\\predictor_' + str(i) + '.model'
-    colon = os.path.join(script_directory, filepath + path)
-    colons.append(torch.load(colon))
+# filepath = '..\\ModelUnpredictability\\'
+# script_directory = os.path.split(os.path.abspath(__file__))[0]
+# detached_net_model = os.path.join(script_directory, filepath + 'detached_net.model')
+# conv = torch.load(detached_net_model)
+#
+# colons = []
+# for i in range(676):
+#     path = 'one_thousand_brains\\predictor_' + str(i) + '.model'
+#     colon = os.path.join(script_directory, filepath + path)
+#     colons.append(torch.load(colon))
 
 mnist = fetch_openml('mnist_784', version=1, cache=True)
 targets = mnist.target[60000:]
@@ -32,19 +25,48 @@ X_train = mnist.data[:60000]
 X_test = mnist.data[60000:]
 
 fake_optimizers = []
+fake_optimizers_second = []
 
 
-def loss_representations(member_ids):
+def loss_reps_second(member_ids):
+    filepath = '..\\ModelUnpredictability\\two_thousand_brains\\'
+    script_directory = os.path.split(os.path.abspath(__file__))[0]
+    detached_net_model = os.path.join(script_directory, filepath + 'conv_net.model')
+    conv = torch.load(detached_net_model)
+
+    filepath = '..\\ModelUnpredictability\\two_thousand_brains\\'
+    script_directory = os.path.split(os.path.abspath(__file__))[0]
+    detached_net_model = os.path.join(script_directory, filepath + 'conv_net_second.model')
+    conv_net_second = torch.load(detached_net_model)
+
+    colons = []
+    for i in range(676):
+        path = '..\\ModelUnpredictability\\two_thousand_brains\\predictors\\predictor_' + str(i) + '.model'
+        colon = os.path.join(script_directory, path)
+        colons.append(torch.load(colon))
+
+    colons_second = []
+    for i in range(576):
+        path = '..\\ModelUnpredictability\\two_thousand_brains\\second_predictors\\second_predictor_' + str(i) + '.model'
+        colon = os.path.join(script_directory, path)
+        colons_second.append(torch.load(colon))
+
     with torch.no_grad():
-        res = forward_block(X_test, member_ids, conv, colons, fake_optimizers, False)
+        res = forward_block(X_test, member_ids, conv, colons, fake_optimizers, conv_net_second, colons_second, fake_optimizers, False)
         return res
+
+
+# def loss_representations(member_ids):
+#     with torch.no_grad():
+#         res = forward_block(X_test, member_ids, conv, colons, fake_optimizers, False)
+#         return res
 
 
 def get_centroids(member_numbers):
     member_ids = np.random.choice(len(X_test), size=member_numbers, replace=False)
     X = []
     for i in member_ids:
-        X.append(loss_representations(i))
+        X.append(loss_reps_second(i))
 
     # X1 = copy.deepcopy(X)
     # X1 = np.array(X1)
@@ -105,7 +127,7 @@ def log_distance_clustering(member_numbers):
     member_ids = np.random.choice(len(X_test), size=member_numbers, replace=False)
     X = []
     for i in member_ids:
-        X.append(loss_representations(i))
+        X.append(loss_reps_second(i))
 
     X = np.array(X)
     miss = 0
@@ -136,5 +158,5 @@ def log_distance_clustering(member_numbers):
     print("missclassifications log distance best friend clustering: "+str(miss) + " percentage miss: "+str(miss/member_numbers))
 
 
-log_distance_clustering(2000)
-#get_centroids(1000)
+log_distance_clustering(1000)
+get_centroids(1000)

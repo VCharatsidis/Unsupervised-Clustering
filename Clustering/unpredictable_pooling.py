@@ -1,19 +1,11 @@
-from utils import string_to_numpy
 import torch
 import numpy as np
-from torch.autograd import Variable
 from sklearn.datasets import fetch_openml
-from utils import string_to_numpy, most_frequent, flatten
+from utils import most_frequent, flatten
 import os
-from torchvision import transforms
-import torchvision.transforms.functional as F
-import random
 from Mutual_Information.train_MIM import to_Tensor
-from ModelUnpredictability.train import calc_distance
-import copy
+from train import calc_distance
 from sklearn.cluster import KMeans
-from heapq import nlargest
-
 
 filepath = '..\\ModelUnpredictability\\'
 script_directory = os.path.split(os.path.abspath(__file__))[0]
