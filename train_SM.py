@@ -198,7 +198,7 @@ def train():
                 print("models saved iter: " + str(iteration))
                 torch.save(sm.encoder, encoder1_model)
                 torch.save(sm.encoder2, encoder2_model)
-                #torch.save(sm.discriminator_3, discriminator3_model)
+                # torch.save(sm.discriminator_3, discriminator3_model)
                 # torch.save(sm.discriminator_4, discriminator4_model)
                 # torch.save(sm.discriminator_5, discriminator5_model)
                 # torch.save(sm.discriminator_6, discriminator6_model)

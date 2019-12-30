@@ -34,8 +34,8 @@ class Colon(nn.Module):
         super(Colon, self).__init__()
 
         self.layers = nn.Sequential(
-            nn.Linear(n_inputs, 1),
-            nn.Sigmoid(),
+            nn.Linear(n_inputs, 10),
+            nn.Softmax(),
         )
 
     def forward(self, x):

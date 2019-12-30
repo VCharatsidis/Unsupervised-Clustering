@@ -30,9 +30,11 @@ class Colon(nn.Module):
                      output dimensions of the MLP
         """
         super(Colon, self).__init__()
-
+        hidden = 100
         self.layers = nn.Sequential(
-            nn.Linear(n_inputs, 1),
+            nn.Linear(n_inputs, hidden),
+            nn.Tanh(),
+            nn.Linear(hidden, 1),
             nn.Sigmoid(),
         )
 

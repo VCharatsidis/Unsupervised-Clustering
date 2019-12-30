@@ -80,7 +80,8 @@ def calc_all_distances(results):
 
 def calc_distance(out, out_2):
     abs_difference = torch.abs(out - out_2)
-    information_loss = torch.log(1 - abs_difference)
+    eps = 1e-8
+    information_loss = torch.log(1 - abs_difference + eps)
     mean = torch.mean(information_loss)
 
     return torch.abs(mean)

@@ -2,7 +2,7 @@ import torch
 import numpy as np
 from torch.autograd import Variable
 from sklearn.datasets import fetch_openml
-from train_pixel import forward_block
+from train_pixel import forward_block, forward_decoder
 import os
 from sigmoid_layer import SigmoidLayer
 import copy
@@ -19,6 +19,9 @@ conv = torch.load(detached_net_model)
 
 base_conv_model = os.path.join(script_directory, 'base_conv.model')
 base_conv = torch.load(base_conv_model)
+
+decoder_model = os.path.join(script_directory, 'decoder.model')
+decoder = torch.load(decoder_model)
 
 colons = []
 for i in range(784):
@@ -37,8 +40,9 @@ fake_optimizers = []
 
 def loss_representations(member_ids):
     with torch.no_grad():
-        loss, _, res = forward_block(X_test, member_ids, conv, base_conv, colons, fake_optimizers, False, 1)
-        return loss, res
+        loss, _, res, flatten_convolusions = forward_block(X_test, member_ids, conv, base_conv, colons, fake_optimizers, False, 1)
+        #loss, res, flatten_convolusions = forward_decoder(X_test, member_ids, base_conv, decoder, fake_optimizers, False)
+        return loss, res, flatten_convolusions
 
 
 def miss_classifications(cluster):
@@ -55,7 +59,8 @@ def get_centroids(member_numbers):
     member_ids = np.random.choice(len(X_test), size=member_numbers, replace=False)
     X = []
     for i in member_ids:
-        X.append(loss_representations([i]))
+        loss, res, flatten_convolusions = loss_representations([i])
+        X.append(res)
 
     # X1 = copy.deepcopy(X)
     # X1 = np.array(X1)
@@ -95,10 +100,10 @@ def get_centroids(member_numbers):
         cluster_size = len(clusters_to_ids[c])
         print("cluster size " + str(cluster_size))
         percentage_miss = (counter * 100) / cluster_size
-        avg += percentage_miss
+        avg += counter
         print("clsuter: " + str(c) + " mfe " + str(mfe) + " miss percentage " + str(percentage_miss))
 
-    print("avg  miss: " + str(avg / 10))
+    print("avg  miss: " + str(avg / member_numbers))
 
     print(clusters_to_ids[0])
     print(clusters_to_ids[1])
@@ -117,9 +122,6 @@ def most_frequent(List):
 
 
 def log_distance_pairing(member_numbers):
-    conv = SigmoidLayer()
-    base_conv = BaseConv(1)
-
     member_ids = np.random.choice(len(X_test), size=member_numbers, replace=False)
     X = X_test[member_ids]
 
@@ -228,8 +230,18 @@ def calculate_distances(sigmoided_data):
             if idx >= idx2:
                 continue
 
-            distance = np.log(1 - np.abs(i[1] - j[1]))
+            absolute_differece = np.abs(i[1] - j[1])
+
+            zeros = np.zeros(absolute_differece.shape[1])
+            ones = np.ones(absolute_differece.shape[1])
+
+            absolute_differece = np.maximum(zeros, absolute_differece[0].detach().numpy())
+            absolute_differece = np.minimum(ones, absolute_differece)
+
+            eps = 1e-8
+            distance = np.log(1 - absolute_differece+eps)
             sum = np.abs(distance.sum())
+            print(sum)
 
             key1 = str(i[0])+'_'+str(j[0])
             distances[key1] = sum
@@ -301,7 +313,7 @@ def call_log_dist_clustering(member_numbers, cluster_number):
         ids = []
         ids.append(member_ids[counter])
         ids = np.array(ids)
-        loss, res = loss_representations(ids)
+        loss, res, flatten_convs = loss_representations(ids)
 
         res = np.array(res)
         res = np.reshape(res, (1, 1, 28, 28))
@@ -311,16 +323,29 @@ def call_log_dist_clustering(member_numbers, cluster_number):
         i = np.reshape(i, (1, 1, 28, 28))
         i = Variable(torch.FloatTensor(i))
 
+        loss = np.array(loss)
+
         show_mnist(i)
         show_mnist(res)
-
-        loss = np.array(loss)
         show_mnist(loss)
+
+        # indexes_of_biggest_elements = loss.argsort()[-100:][::-1]
+        # print(indexes_of_biggest_elements)
+        #
+        # for c, image in enumerate(loss):
+        #     if c not in indexes_of_biggest_elements:
+        #         loss[c] = 0
+
+
 
         # abs_difference = torch.abs(i - res)
         # eps = 1e-8
         # L_reconstruction = torch.log(1 - abs_difference + eps)
         # show_mnist(L_reconstruction)
+
+
+        # loss = np.reshape(loss, (1, 1, 28, 28))
+        # loss = Variable(torch.FloatTensor(loss))
 
         image_and_index = (member_ids[counter], res)
 
@@ -355,8 +380,6 @@ def call_log_dist_clustering(member_numbers, cluster_number):
     print("number classes: "+str(len(sigmoided)))
 
 
-
-
-call_log_dist_clustering(100, 15)
+call_log_dist_clustering(300, 12)
 #log_distance_pairing(1000)
-#get_centroids(10000)
+#get_centroids(700)

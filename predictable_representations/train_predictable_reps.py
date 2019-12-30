@@ -19,8 +19,9 @@ from sigmoid_layer import SigmoidLayer
 from sklearn.datasets import fetch_openml
 
 import statistics
-from colon import Colon
-from losses import IID_loss, mi
+from encoder import Encoder
+from decoder import Decoder
+from guesser import Guesser
 
 # Default constants
 DNN_HIDDEN_UNITS_DEFAULT = '1000'
@@ -35,10 +36,13 @@ FLAGS = None
 
 def calc_distance(out, y):
     abs_difference = torch.abs(out - y)
+    abs_difference = torch.min(torch.ones(abs_difference.shape), abs_difference)
+    abs_difference = torch.max(torch.zeros(abs_difference.shape), abs_difference)
+
     eps = 1e-8
     information_loss = torch.log(1 - abs_difference + eps)
 
-    mean = torch.mean(information_loss)
+    mean = torch.sum(information_loss)
 
     return torch.abs(mean)
 
@@ -51,19 +55,20 @@ def multi_filter_flatten(out):
     return out.view(out.shape[0], out.shape[1], -1)
 
 
-def neighbours(convolutions):
+def neighbours(convolutions, perimeter):
     size = convolutions.shape[0]
     inputs = []
 
     for i in range(size):
         for j in range(size):
-            conv_loss_tensor = torch.zeros(7, 7)
+            total_input = 2 * perimeter + 1
+            conv_loss_tensor = torch.zeros(total_input, total_input)
 
-            for row in range(i-3, i+4):
-                for col in range(j-3, j+4):
-                    if row >= 0 and row < 28:
-                        if col >= 0 and col < 28:
-                            conv_loss_tensor[row - (i-3), col - (j-3)] = convolutions[row, col]
+            for row in range(i-perimeter, i+perimeter+1):
+                for col in range(j-perimeter, j+perimeter+1):
+                    if row >= 0 and row < size:
+                        if col >= 0 and col < size:
+                            conv_loss_tensor[row - (i-perimeter), col - (j-perimeter)] = convolutions[row, col]
 
             flatten_input = torch.flatten(conv_loss_tensor)
             inputs.append(flatten_input)
@@ -71,49 +76,49 @@ def neighbours(convolutions):
     return inputs
 
 
-def forward_block(X, ids, colons, optimizers, train, to_tensor_size):
+def forward_decoder(X, ids, encoder, guesser, decoder, optimizer, train):
+    if train:
+        decoder.train()
+        guesser.train()
+        encoder.train()
+    else:
+        decoder.eval()
+        guesser.eval()
+        encoder.eval()
+
     x_train = X[ids, :]
 
-    x_tensor = to_Tensor(x_train, to_tensor_size)
-    convolutions = x_tensor/255
+    x_tensor = to_Tensor(x_train, 1)
+    image = x_tensor / 255
 
-    inputs = neighbours(convolutions[0, 0])
+    encoded_image = encoder.forward(image)
+    flatten_convolved_image = flatten(encoded_image)
 
-    flattened_convolutions = flatten(convolutions)
-    size = flattened_convolutions.shape[1]
+    # Guess the convolved here
 
-    colon_outputs = []
+    inputs = neighbours(encoded_image, 1)
+    losses = torch.zeros(len(inputs))
 
-    for i in range(size):
-        colon = colons[i]
+    for i in range(len(inputs)):
+        guess = guesser(inputs[i])
+        losses[i] = calc_distance(guess, flatten_convolved_image[i])
 
-        if train:
-            colon.train()
-        else:
-            colon.eval()
+    sum_guess_loss = torch.sum(losses)
+    sum_guess_loss = torch.abs(sum_guess_loss)
 
-        x_reduced = inputs[i]
-        res = colon.forward(x_reduced.detach())
-        colon_outputs.append(res)
+    flattened_image = flatten(image)
 
-    mutual_infos = []
-    for idx1, i in enumerate(colon_outputs):
-        for idx2, j in enumerate(colon_outputs):
-            if idx1 >= idx2:
-                continue
+    res = decoder.forward(flatten_convolved_image)
+    distance = calc_distance(res, flattened_image)
 
-            loss = mi(i, j)
-            mutual_infos.append(loss.item())
-            if train:
-                optimizers[idx1].zero_grad()
-                loss.backward(retain_graph=True)
-                optimizers[idx1].step()
+    total_loss = sum_guess_loss + distance
 
-                optimizers[idx2].zero_grad()
-                loss.backward(retain_graph=True)
-                optimizers[idx2].step()
+    if train:
+        optimizer.zero_grad()
+        total_loss.backward(retain_graph=True)
+        optimizer.step()
 
-    return colon_outputs, mutual_infos
+    return total_loss, distance, res, flatten_convolved_image
 
 
 def print_params(model):
@@ -130,63 +135,71 @@ def train():
 
     print(X_test.shape)
 
-    number_convolutions = 784
+    guesser = Guesser()
+    encoder = Encoder(1)
+    decoder = Decoder()
 
     script_directory = os.path.split(os.path.abspath(__file__))[0]
+    filepath = 'guesser.model'
+    guesser_model = os.path.join(script_directory, filepath)
+    torch.save(guesser, guesser_model)
 
+    filepath = 'encoder.model'
+    encoder_model = os.path.join(script_directory, filepath)
+    torch.save(encoder, encoder_model)
 
-    colons = []
+    filepath = 'decoder.model'
+    decoder_model = os.path.join(script_directory, filepath)
+    torch.save(decoder, decoder_model)
+
     optimizers = []
-    colons_paths = []
 
-    for i in range(number_convolutions):
-        filepath = 'colons\\colon_' + str(i) + '.model'
-        predictor_model = os.path.join(script_directory, filepath)
-        colons_paths.append(predictor_model)
-
-        c = Colon(49)
-        colons.append(c)
-
-        optimizer = torch.optim.SGD(c.parameters(), lr=LEARNING_RATE_DEFAULT, momentum=0.9)
-        optimizers.append(optimizer)
-
-    max_loss = 1999
+    params = list(encoder.parameters()) + list(decoder.parameters())
+    base_conv_optimizer = torch.optim.Adam(params, lr=1e-3)
+    optimizers.append(base_conv_optimizer)
+    max_loss = 10000000
 
     for iteration in range(MAX_STEPS_DEFAULT):
-        if iteration % 50 == 0:
-            print("iteration: ",iteration)
+        if iteration % 100 == 0:
+            # print_params(base_conv)
+            print("iteration: ", iteration)
 
         ids = np.random.choice(len(X_train), size=BATCH_SIZE_DEFAULT, replace=False)
 
         train = True
-        loss_list, mutual_infos = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT)
+        loss_list, distance, res, flatten_convolved_image = forward_decoder(X_train, ids, encoder, guesser, decoder, optimizers, train)
 
         if iteration % EVAL_FREQ_DEFAULT == 0:
             print("iteration: ", iteration)
-
+            #print("convolution loss: " + str(base_conv_loss))
+            # numpy_loss = np.array(loss_list)
+            # show_mnist(numpy_loss)
+            # print_params(conv)
             print(loss_list)
-            print("mean: " + str(statistics.mean(loss_list)))
+            #print("mean: " + str(statistics.mean(loss_list)))
 
             total_loss = 0
 
-            test_batch_size = 1048
+            test_batch_size = 500
 
             test_ids = np.random.choice(len(X_test), size=test_batch_size, replace=False)
 
             for c, i in enumerate(test_ids):
                 if c % 100 == 0:
                     print("test iteration: "+str(c))
-                loss_list, mutual_infos = forward_block(X_test, i, colons, optimizers, False, 1)
+                loss_list, distance, res, flatten_convolved_image = forward_decoder(X_test, ids, encoder, guesser, decoder, optimizers, False)
 
-                total_loss += statistics.mean(mutual_infos)
+                #total_loss += statistics.mean(loss_list)
+                total_loss += loss_list
 
             total_loss = total_loss / test_batch_size
 
             if max_loss > total_loss:
                 max_loss = total_loss
                 print("models saved iter: " + str(iteration))
-                for i in range(number_convolutions):
-                    torch.save(colons[i], colons_paths[i])
+                torch.save(encoder, encoder_model)
+                torch.save(guesser, guesser_model)
+                torch.save(decoder, decoder_model)
 
             print("total loss " + str(total_loss))
             print("")

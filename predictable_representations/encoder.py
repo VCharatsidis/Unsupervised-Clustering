@@ -4,7 +4,7 @@ from __future__ import print_function
 import torch.nn as nn
 
 
-class BaseConv(nn.Module):
+class Encoder(nn.Module):
     """
     This class implements a Convolutional Neural Network in PyTorch.
     It handles the different layers and parameters of the model.
@@ -21,7 +21,7 @@ class BaseConv(nn.Module):
         Implement initialization of the network.
         """
 
-        super(BaseConv, self).__init__()
+        super(Encoder, self).__init__()
 
         self.conv1 = nn.Conv2d(n_channels, 32, kernel_size=3, stride=1, padding=0)
         self.batchNorm1 = nn.BatchNorm2d(32)
@@ -32,11 +32,11 @@ class BaseConv(nn.Module):
         self.batchNorm2 = nn.BatchNorm2d(32)
         self.relu2 = nn.Tanh()
         self.maxpool2 = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
-        #
-        self.conv3 = nn.Conv2d(32, 10, kernel_size=3, stride=1, padding=0)
-        self.batchNorm3 = nn.BatchNorm2d(10)
-        self.relu3 = nn.Tanh()
-        self.maxpool3 = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
+
+        # self.conv3 = nn.Conv2d(32, 10, kernel_size=3, stride=1, padding=0)
+        # self.batchNorm3 = nn.BatchNorm2d(10)
+        # self.relu3 = nn.Tanh()
+        # self.maxpool3 = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
 
 
     def forward(self, x):
@@ -59,9 +59,9 @@ class BaseConv(nn.Module):
         out = self.relu2(out)
         out = self.maxpool2(out)
 
-        out = self.conv3(out)
-        out = self.batchNorm3(out)
-        out = self.relu3(out)
-        out = self.maxpool3(out)
+        # out = self.conv3(out)
+        # out = self.batchNorm3(out)
+        # out = self.relu3(out)
+        # out = self.maxpool3(out)
 
         return out

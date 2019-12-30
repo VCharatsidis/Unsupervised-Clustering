@@ -178,7 +178,7 @@ def train():
     colons_paths = []
 
     for i in range(number_convolutions):
-        filepath = 'predictors\\predictor_' + str(i) + '.model'
+        filepath = 'colons\\predictor_' + str(i) + '.model'
         predictor_model = os.path.join(script_directory, filepath)
         colons_paths.append(predictor_model)
 

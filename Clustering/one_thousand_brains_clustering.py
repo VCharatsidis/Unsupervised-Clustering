@@ -41,7 +41,7 @@ def loss_reps_second(member_ids):
 
     colons = []
     for i in range(676):
-        path = '..\\ModelUnpredictability\\two_thousand_brains\\predictors\\predictor_' + str(i) + '.model'
+        path = '..\\ModelUnpredictability\\two_thousand_brains\\colons\\predictor_' + str(i) + '.model'
         colon = os.path.join(script_directory, path)
         colons.append(torch.load(colon))
 
