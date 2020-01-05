@@ -10,9 +10,11 @@ class MutualInfoMetric(nn.Module):
         super().__init__()
 
         self.encoder = ConvNet(1)
-        self.encoder_2 = ConvNet(1)
+        self.encoder.cuda()
+        #self.encoder_2 = ConvNet(1)
 
-        self.discriminator = MLP(90)
+        self.discriminator = MLP(12800)
+        self.discriminator.cuda()
 
     def flatten(self, out):
         return out.view(out.shape[0], -1)
@@ -38,29 +40,53 @@ class MutualInfoMetric(nn.Module):
 
         return encodings, encodings_2
 
-    def forward(self, set_1, set_2):
-        results = []
+    def get_results(self, counter, results, encoded_1, encoded_2):
+        for i in encoded_1:
+            for j in encoded_2:
+                results[counter] = self.pair_forward(i, j)
+                counter += 1
+
+        return counter, results
+
+    def forward(self, set_1, set_2, set_3, set_4):
 
         results_encoder_set_1, results_encoder_set_2 = self.encode(set_1, set_2, self.encoder)
-        results_encoder_2_set_1, results_encoder_2_set_2 = self.encode(set_1, set_2, self.encoder_2)
+        results_encoder_set_3, results_encoder_set_4 = self.encode(set_3, set_4, self.encoder)
 
-        for i in results_encoder_set_1:
-            for j in results_encoder_set_2:
-                res = self.pair_forward(i, j)
-                results.append(res)
+        combinations = len(results_encoder_set_1) * 32
+        results = torch.zeros(combinations)
 
-            for j in results_encoder_2_set_2:
-                res = self.pair_forward(i, j)
-                results.append(res)
+        counter = 0
+        counter, results = self.get_results(counter, results, results_encoder_set_1, results_encoder_set_1)
+        counter, results = self.get_results(counter, results, results_encoder_set_2, results_encoder_set_2)
+        counter, results = self.get_results(counter, results, results_encoder_set_3, results_encoder_set_3)
+        counter, results = self.get_results(counter, results, results_encoder_set_4, results_encoder_set_4)
 
-        for i in results_encoder_2_set_1:
-            for j in results_encoder_set_2:
-                res = self.pair_forward(i, j)
-                results.append(res)
+        counter, results = self.get_results(counter, results, results_encoder_set_1, results_encoder_set_2)
+        counter, results = self.get_results(counter, results, results_encoder_set_2, results_encoder_set_3)
+        counter, results = self.get_results(counter, results, results_encoder_set_3, results_encoder_set_4)
+        counter, results = self.get_results(counter, results, results_encoder_set_4, results_encoder_set_1)
 
-            for j in results_encoder_2_set_2:
-                res = self.pair_forward(i, j)
-                results.append(res)
+        # for i in results_encoder_set_1:
+        #     for j in results_encoder_set_1:
+        #         results[counter] = self.pair_forward(i, j)
+        #         counter += 1
+        #
+        # for i in results_encoder_set_2:
+        #     for j in results_encoder_set_2:
+        #         results[counter] = self.pair_forward(i, j)
+        #         counter += 1
+        #
+        # for i in results_encoder_set_1:
+        #     for j in results_encoder_set_2:
+        #         results[counter] = self.pair_forward(i, j)
+        #         counter += 1
+        #
+        # for i in results_encoder_set_2:
+        #     for j in results_encoder_set_1:
+        #         results[counter] = self.pair_forward(i, j)
+        #         counter += 1
+
 
         return results
 

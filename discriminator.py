@@ -33,42 +33,13 @@ class MLP(nn.Module):
         """
 
         super(MLP, self).__init__()
-        n_hidden = n_inputs//4
-        hlaf = n_hidden // 2
+        n_hidden = 100
+        hlaf = n_hidden // 4
         self.layers = nn.Sequential(
             nn.Linear(n_inputs, n_hidden),
-            #nn.BatchNorm1d(n_hidden),
             nn.Tanh(),
 
-            nn.Linear(n_hidden, n_hidden),
-            #nn.BatchNorm1d(n_hidden),
-            nn.Tanh(),
-
-            nn.Linear(n_hidden, hlaf),
-            #nn.BatchNorm1d(hlaf),
-            nn.Tanh(),
-
-            # nn.Linear(n_hidden, n_hidden),
-            # nn.BatchNorm1d(n_hidden),
-            # nn.Tanh(),
-            #
-            # nn.Linear(n_hidden, n_hidden),
-            # nn.BatchNorm1d(n_hidden),
-            # nn.Tanh(),
-            #
-            # nn.Linear(n_hidden, hlaf),
-            # nn.BatchNorm1d(hlaf),
-            # nn.Tanh(),
-            #
-            # nn.Linear(hlaf, hlaf),
-            # nn.BatchNorm1d(hlaf),
-            # nn.Tanh(),
-            #
-            # nn.Linear(hlaf, hlaf),
-            # nn.BatchNorm1d(hlaf),
-            # nn.Tanh(),
-
-            nn.Linear(hlaf, 1),
+            nn.Linear(n_hidden, 1),
             nn.Sigmoid()
         )
 

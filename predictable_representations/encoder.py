@@ -25,13 +25,13 @@ class Encoder(nn.Module):
 
         self.conv1 = nn.Conv2d(n_channels, 32, kernel_size=3, stride=1, padding=0)
         self.batchNorm1 = nn.BatchNorm2d(32)
-        self.relu1 = nn.Tanh()
+        self.relu1 = nn.Sigmoid()
         self.maxpool1 = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
 
-        self.conv2 = nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=0)
-        self.batchNorm2 = nn.BatchNorm2d(32)
-        self.relu2 = nn.Tanh()
-        self.maxpool2 = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
+        # self.conv2 = nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=0)
+        # self.batchNorm2 = nn.BatchNorm2d(32)
+        # self.relu2 = nn.Tanh()
+        # self.maxpool2 = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
 
         # self.conv3 = nn.Conv2d(32, 10, kernel_size=3, stride=1, padding=0)
         # self.batchNorm3 = nn.BatchNorm2d(10)
@@ -54,10 +54,10 @@ class Encoder(nn.Module):
         out = self.relu1(out)
         out = self.maxpool1(out)
 
-        out = self.conv2(out)
-        out = self.batchNorm2(out)
-        out = self.relu2(out)
-        out = self.maxpool2(out)
+        # out = self.conv2(out)
+        # out = self.batchNorm2(out)
+        # out = self.relu2(out)
+        # out = self.maxpool2(out)
 
         # out = self.conv3(out)
         # out = self.batchNorm3(out)

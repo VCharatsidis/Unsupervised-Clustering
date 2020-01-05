@@ -3,7 +3,7 @@ import torch.nn as nn
 
 class Decoder(nn.Module):
 
-    def __init__(self, hidden_dim=500, z_dim=10):
+    def __init__(self, hidden_dim=500, z_dim=800):
         super().__init__()
 
         input_dim = 28 * 28

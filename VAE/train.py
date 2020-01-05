@@ -31,8 +31,8 @@ def main():
 
     data = (X_train, X_test)
 
-    model = VAE(500, 2)
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+    model = VAE(500, 20)
+    optimizer = torch.optim.Adam(model.parameters(), lr=2e-4)
     size_width = 28
 
     script_directory = os.path.split(os.path.abspath(__file__))[0]
@@ -144,7 +144,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--epochs', default=80, type=int,
                         help='max number of epochs')
-    parser.add_argument('--zdim', default=2, type=int,
+    parser.add_argument('--zdim', default=20, type=int,
                         help='dimensionality of latent space')
 
     ARGS = parser.parse_args()

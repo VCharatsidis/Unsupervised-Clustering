@@ -25,14 +25,12 @@ import copy
 
 # Default constants
 DNN_HIDDEN_UNITS_DEFAULT = '1000'
-LEARNING_RATE_DEFAULT = 1e-3
-MAX_STEPS_DEFAULT = 30000
-BATCH_SIZE_DEFAULT = 64
+LEARNING_RATE_DEFAULT = 1e-7
+MAX_STEPS_DEFAULT = 300000
+BATCH_SIZE_DEFAULT = 1
 HALF_BATCH = BATCH_SIZE_DEFAULT // 2
-EVAL_FREQ_DEFAULT = 200
+EVAL_FREQ_DEFAULT = 300
 
-# Directory in which cifar data is saved
-DATA_DIR_DEFAULT = './cifar10/cifar-10-batches-py'
 
 FLAGS = None
 
@@ -66,20 +64,11 @@ def accuracy(predictions, targets):
     return accuracy
 
 
-def calc_all_distances(results):
-    size = len(results)-1
-    distances = 0
-    count = 0
-    for i in range(size):
-        for j in range(i+1, size):
-            distances += calc_distance(results[i], results[j])
-            count += 1
-
-    return distances / count
-
-
 def calc_distance(out, out_2):
     abs_difference = torch.abs(out - out_2)
+    abs_difference = torch.min(torch.ones(abs_difference.shape), abs_difference)
+    abs_difference = torch.max(torch.zeros(abs_difference.shape), abs_difference)
+
     eps = 1e-8
     information_loss = torch.log(1 - abs_difference + eps)
     mean = torch.mean(information_loss)
@@ -87,28 +76,41 @@ def calc_distance(out, out_2):
     return torch.abs(mean)
 
 
-def forward_block(X, ids, y, model):
-    ######## prepare input 1 for encoder 1 ######
+def sample(X):
+    id = np.random.choice(len(X), size=1, replace=False)
+    x_train = X[id]
 
-    x_train = X[ids, :]
-    x = get_data(x_train)
+    return x_train
 
-    ######## prepare input 2 for encoder 2 ######
 
-    new_ids = np.random.choice(len(X), size=HALF_BATCH, replace=False)
-    concat_ids = np.concatenate((ids[:HALF_BATCH], new_ids), axis=0)
+def forward_block(X, y, model):
 
-    x_train_new = X[concat_ids, :]
-    x_new = get_data(x_train_new)
+    sample_1 = sample(X)
+    x1 = get_data(sample_1)
 
-    results = model.forward(x, x_new)
+    sample_2 = sample(X)
+    x2 = get_data(sample_2)
 
-    ce_loss = nn.functional.binary_cross_entropy(results[0], y)
-    distances_loss = calc_all_distances(results)
+    sample_3 = sample(X)
+    x3 = get_data(sample_3)
 
-    coeff = 1.1
-    loss = ce_loss + coeff * distances_loss
-    return loss, results[0], distances_loss
+    sample_4 = sample(X)
+    x4 = get_data(sample_4)
+
+    results = model.forward(x1, x2, x3, x4)
+    # print("results")
+    # print(results.shape)
+    # print(results)
+    # print("ÿ")
+    # print(y.shape)
+    # print(y)
+
+    # print(results)
+    # print(y)
+
+    loss = nn.functional.binary_cross_entropy(results, y)
+
+    return loss, results
 
 
 def train():
@@ -118,31 +120,11 @@ def train():
     X_train = mnist.data[:60000]
     X_test = mnist.data[60000:]
 
-    # z = add_noise(X_train[2:3])
-    # show_mnist(z[0])
-    # z = add_noise(X_train[2:3])
-    # show_mnist(z[0])
-    # z = add_noise(X_train[2:3])
-    # show_mnist(z[0])
-    # z = add_noise(X_train[2:3])
-    # show_mnist(z[0])
-    # z = add_noise(X_train[2:3])
-    # show_mnist(z[0])
-    # z = add_noise(X_train[2:3])
-    # show_mnist(z[0])
-    # z = add_noise(X_train[2:3])
-    # show_mnist(z[0])
-    # z = add_noise(X_train[2:3])
-    # show_mnist(z[0])
-    # z = add_noise(X_train[2:3])
-    # show_mnist(z[0])
-
     print(X_test.shape)
 
-    input_dim = 256
-
     model = MutualInfoMetric()
-    optimizer = torch.optim.Adam(model.parameters())
+    model.cuda()
+    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE_DEFAULT)
 
     script_directory = os.path.split(os.path.abspath(__file__))[0]
     filepath = 'mi_encoder_1.model'
@@ -154,8 +136,8 @@ def train():
     filepath = 'mi_discriminator.model'
     mi_discriminator_model = os.path.join(script_directory, filepath)
 
-    ones = torch.ones(HALF_BATCH)
-    zeros = torch.zeros(HALF_BATCH)
+    ones = torch.ones(64)
+    zeros = torch.zeros(64)
 
     y_test_batch = torch.cat([ones, zeros], 0)
     y_test_batch = Variable(torch.FloatTensor(y_test_batch.float()))
@@ -163,15 +145,17 @@ def train():
     y_train_batch = torch.cat([ones, zeros], 0)
     y_train_batch = Variable(torch.FloatTensor(y_train_batch.float()))
 
-    max_loss = 100
+    max_loss = 10000
     saturation = 100
     best_accuracy = 0
 
     for iteration in range(MAX_STEPS_DEFAULT):
         model.train()
 
-        ids = np.random.choice(len(X_train), size=BATCH_SIZE_DEFAULT, replace=False)
-        loss, mlp_out, distances = forward_block(X_train, ids, y_train_batch, model)
+        loss1, mlp_out1 = forward_block(X_train, y_train_batch, model)
+        loss2, mlp_out2 = forward_block(X_train, y_train_batch, model)
+
+        loss = loss1 + loss2
 
         optimizer.zero_grad()
         loss.backward()
@@ -187,14 +171,11 @@ def train():
             accuracies = []
             losses = []
 
-            test_size = 9984
-            for i in range(BATCH_SIZE_DEFAULT, test_size, BATCH_SIZE_DEFAULT):
-
-                ids = np.array(range(i - BATCH_SIZE_DEFAULT, i))
-                loss, mlp_out, distances = forward_block(X_test, ids, y_test_batch, model)
+            test_size = 300
+            for i in range(test_size):
+                loss, mlp_out = forward_block(X_test, y_test_batch, model)
 
                 total_loss += loss.item()
-                similarity_total += distances.item()
 
                 # TODO fix
                 acc = accuracy(mlp_out, y_test_batch)
@@ -203,7 +184,7 @@ def train():
             denom = test_size // BATCH_SIZE_DEFAULT
             total_acc = total_acc / denom
             total_loss = total_loss / denom
-            similarity_total = similarity_total / denom
+
             accuracies.append(total_acc)
             losses.append(total_loss)
 
@@ -211,10 +192,10 @@ def train():
                 best_accuracy = total_acc
                 print("models saved iter: " + str(iteration))
                 torch.save(model.encoder, encoder1_model)
-                torch.save(model.encoder_2, encoder2_model)
+                #torch.save(model.encoder_2, encoder2_model)
                 torch.save(model.discriminator, mi_discriminator_model)
 
-            print("total accuracy " + str(total_acc) + " total loss " + str(total_loss)+" similarity: "+str(similarity_total))
+            print("total accuracy " + str(total_acc) + " total loss " + str(total_loss))
 
     plt.plot(accuracies)
     plt.ylabel('accuracies')
@@ -232,6 +213,15 @@ def get_data(x_train):
     x_noised = add_noise(x_train)
     x_scaled = scale(x_train)
     x_rotate = rotate(x_train)
+
+    x_original = x_original.to('cuda')
+    x_noised = x_noised.to('cuda')
+    x_scaled = x_scaled.to('cuda')
+    x_rotate = x_rotate.to('cuda')
+    # show_mnist(x_noised)
+    # show_mnist(x_scaled)
+    # show_mnist(x_rotate)
+    # show_mnist(x_original)
 
     data.append(x_original)
     data.append(x_noised)
@@ -313,9 +303,9 @@ def scale(X, batch_size=BATCH_SIZE_DEFAULT):
     size = 22
     pad = 3
 
-    if random.uniform(0,1) > 0.5:
-        size = 18
-        pad = 5
+    if random.uniform(0, 1) > 0.5:
+        size = 20
+        pad = 4
 
     for i in range(X_copy.shape[0]):
         transformation = transforms.Resize(size, interpolation=2)
@@ -377,9 +367,6 @@ def main():
     Main function
     """
 
-    if not os.path.exists(FLAGS.data_dir):
-        os.makedirs(FLAGS.data_dir)
-
     # Run the training operation
     train()
 
@@ -396,8 +383,7 @@ if __name__ == '__main__':
                         help='Batch size to run trainer.')
     parser.add_argument('--eval_freq', type=int, default=EVAL_FREQ_DEFAULT,
                         help='Frequency of evaluation on the test set')
-    parser.add_argument('--data_dir', type=str, default=DATA_DIR_DEFAULT,
-                        help='Directory for storing input data')
+
     FLAGS, unparsed = parser.parse_known_args()
 
     main()
