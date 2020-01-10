@@ -70,21 +70,27 @@ class ConvNet(nn.Module):
 
         self.layers = nn.Sequential(
             nn.Conv2d(n_channels, 64, kernel_size=(3, 3), stride=1, padding=1),
-            nn.BatchNorm2d(64),
+            #nn.BatchNorm2d(64),
             nn.Tanh(),
             nn.MaxPool2d(kernel_size=(2, 2), stride=2, padding=1),
 
             nn.Conv2d(64, 128, kernel_size=(3, 3), stride=1, padding=1),
-            nn.BatchNorm2d(128),
+            #nn.BatchNorm2d(64),
             nn.Tanh(),
             nn.MaxPool2d(kernel_size=(2, 2), stride=2, padding=1),
 
-            nn.Conv2d(128, 256, kernel_size=(3, 3), stride=1, padding=1),
-            nn.BatchNorm2d(256),
+            nn.Conv2d(128, 32, kernel_size=(3, 3), stride=1, padding=1),
+            #nn.BatchNorm2d(64),
             nn.Tanh(),
             nn.MaxPool2d(kernel_size=(2, 2), stride=2, padding=1),
 
-            #nn.Linear(25088, 256)
+            # nn.Conv2d(256, 64, kernel_size=(3, 3), stride=1, padding=1),
+            # #nn.BatchNorm2d(64),
+            # nn.Tanh(),
+            # nn.MaxPool2d(kernel_size=(2, 2), stride=2, padding=1),
+
+            nn.Linear(800, 10),
+            nn.Softmax()
         )
 
 

@@ -11,6 +11,7 @@ class Encoder(nn.Module):
         self.mean = nn.Linear(hidden_dim, z_dim)
         self.std = nn.Linear(hidden_dim, z_dim)
         self.relu = nn.ReLU()
+        self.softmax = nn.Softmax()
 
     def forward(self, input):
         """
@@ -20,8 +21,12 @@ class Encoder(nn.Module):
         """
         h = self.fc1(input)
         h = self.relu(h)
+
         mean = self.mean(h)
+        mean = self.softmax(mean)
+
         std = self.std(h)
+        std = self.softmax(std)
 
         return mean, std
 

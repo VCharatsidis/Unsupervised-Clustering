@@ -2,6 +2,7 @@ import torch.nn as nn
 from conv_net import ConvNet
 from discriminator import MLP
 import torch
+
 import random
 
 
@@ -13,7 +14,7 @@ class MutualInfoMetric(nn.Module):
         self.encoder.cuda()
         #self.encoder_2 = ConvNet(1)
 
-        self.discriminator = MLP(12800)
+        self.discriminator = MLP(20)
         self.discriminator.cuda()
 
     def flatten(self, out):
@@ -48,47 +49,54 @@ class MutualInfoMetric(nn.Module):
 
         return counter, results
 
-    def forward(self, set_1, set_2, set_3, set_4):
+    def get_KLs(self, KLs, encoded_1, encoded_2):
+        counter = 0
+        for i in encoded_1:
+            for j in encoded_2:
+                print(self.kl_divergence(i, j))
+                input()
+                KLs[counter] = self.kl_divergence(i, j)
+
+                counter += 1
+
+        return KLs
+
+    def kl_divergence(self, p, q):
+        print(p)
+        print(q)
+        return torch.nn.functional.kl_div(p, q)
+
+
+    def forward(self, set_1, set_2):
 
         results_encoder_set_1, results_encoder_set_2 = self.encode(set_1, set_2, self.encoder)
-        results_encoder_set_3, results_encoder_set_4 = self.encode(set_3, set_4, self.encoder)
+        #results_encoder_set_3, results_encoder_set_4 = self.encode(set_3, set_4, self.encoder)
 
-        combinations = len(results_encoder_set_1) * 32
+        comparisons = 4
+        versions = 7
+
+        combinations = versions * versions * comparisons
         results = torch.zeros(combinations)
 
         counter = 0
         counter, results = self.get_results(counter, results, results_encoder_set_1, results_encoder_set_1)
         counter, results = self.get_results(counter, results, results_encoder_set_2, results_encoder_set_2)
-        counter, results = self.get_results(counter, results, results_encoder_set_3, results_encoder_set_3)
-        counter, results = self.get_results(counter, results, results_encoder_set_4, results_encoder_set_4)
+        # counter, results = self.get_results(counter, results, results_encoder_set_3, results_encoder_set_3)
+        # counter, results = self.get_results(counter, results, results_encoder_set_4, results_encoder_set_4)
 
         counter, results = self.get_results(counter, results, results_encoder_set_1, results_encoder_set_2)
-        counter, results = self.get_results(counter, results, results_encoder_set_2, results_encoder_set_3)
-        counter, results = self.get_results(counter, results, results_encoder_set_3, results_encoder_set_4)
-        counter, results = self.get_results(counter, results, results_encoder_set_4, results_encoder_set_1)
+        counter, results = self.get_results(counter, results, results_encoder_set_2, results_encoder_set_1)
+        # counter, results = self.get_results(counter, results, results_encoder_set_2, results_encoder_set_3)
+        # counter, results = self.get_results(counter, results, results_encoder_set_3, results_encoder_set_4)
+        # counter, results = self.get_results(counter, results, results_encoder_set_4, results_encoder_set_1)
 
-        # for i in results_encoder_set_1:
-        #     for j in results_encoder_set_1:
-        #         results[counter] = self.pair_forward(i, j)
-        #         counter += 1
-        #
-        # for i in results_encoder_set_2:
-        #     for j in results_encoder_set_2:
-        #         results[counter] = self.pair_forward(i, j)
-        #         counter += 1
-        #
-        # for i in results_encoder_set_1:
-        #     for j in results_encoder_set_2:
-        #         results[counter] = self.pair_forward(i, j)
-        #         counter += 1
-        #
-        # for i in results_encoder_set_2:
-        #     for j in results_encoder_set_1:
-        #         results[counter] = self.pair_forward(i, j)
-        #         counter += 1
+        KL_1 = torch.zeros(versions * versions)
+        KL_2 = torch.zeros(versions * versions)
 
+        KL_1 = self.get_KLs(KL_1, results_encoder_set_1, results_encoder_set_1)
+        KL_2 = self.get_KLs(KL_2, results_encoder_set_2, results_encoder_set_2)
 
-        return results
+        return results, KL_1, KL_2
 
 
 

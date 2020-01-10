@@ -21,15 +21,17 @@ from torchvision import transforms
 import torchvision.transforms.functional as F
 import random
 import copy
+import statistics
+from RandomErase import RandomErasing
 
 
 # Default constants
 DNN_HIDDEN_UNITS_DEFAULT = '1000'
-LEARNING_RATE_DEFAULT = 1e-7
+LEARNING_RATE_DEFAULT = 1e-5
 MAX_STEPS_DEFAULT = 300000
 BATCH_SIZE_DEFAULT = 1
 HALF_BATCH = BATCH_SIZE_DEFAULT // 2
-EVAL_FREQ_DEFAULT = 300
+EVAL_FREQ_DEFAULT = 50
 
 
 FLAGS = None
@@ -53,6 +55,7 @@ def accuracy(predictions, targets):
 
     predictions = predictions.detach().numpy()
     predictions = predictions.flatten()
+
     targets = targets.detach().numpy()
 
     preds = np.round(predictions)
@@ -62,18 +65,6 @@ def accuracy(predictions, targets):
     accuracy = sum / float(targets.shape[0])
 
     return accuracy
-
-
-def calc_distance(out, out_2):
-    abs_difference = torch.abs(out - out_2)
-    abs_difference = torch.min(torch.ones(abs_difference.shape), abs_difference)
-    abs_difference = torch.max(torch.zeros(abs_difference.shape), abs_difference)
-
-    eps = 1e-8
-    information_loss = torch.log(1 - abs_difference + eps)
-    mean = torch.mean(information_loss)
-
-    return torch.abs(mean)
 
 
 def sample(X):
@@ -91,13 +82,13 @@ def forward_block(X, y, model):
     sample_2 = sample(X)
     x2 = get_data(sample_2)
 
-    sample_3 = sample(X)
-    x3 = get_data(sample_3)
+    # sample_3 = sample(X)
+    # x3 = get_data(sample_3)
+    #
+    # sample_4 = sample(X)
+    # x4 = get_data(sample_4)
 
-    sample_4 = sample(X)
-    x4 = get_data(sample_4)
-
-    results = model.forward(x1, x2, x3, x4)
+    results, KL_1, KL_2 = model.forward(x1, x2)
     # print("results")
     # print(results.shape)
     # print(results)
@@ -108,9 +99,12 @@ def forward_block(X, y, model):
     # print(results)
     # print(y)
 
-    loss = nn.functional.binary_cross_entropy(results, y)
+    mean_1 = torch.mean(KL_1)
+    mean_2 = torch.mean(KL_2)
 
-    return loss, results
+    loss = nn.functional.binary_cross_entropy(results, y) + mean_1 + mean_2
+
+    return loss, results, KL_1, KL_2
 
 
 def train():
@@ -136,8 +130,8 @@ def train():
     filepath = 'mi_discriminator.model'
     mi_discriminator_model = os.path.join(script_directory, filepath)
 
-    ones = torch.ones(64)
-    zeros = torch.zeros(64)
+    ones = torch.ones(98)
+    zeros = torch.zeros(98)
 
     y_test_batch = torch.cat([ones, zeros], 0)
     y_test_batch = Variable(torch.FloatTensor(y_test_batch.float()))
@@ -148,21 +142,38 @@ def train():
     max_loss = 10000
     saturation = 100
     best_accuracy = 0
+    train_accs = []
 
     for iteration in range(MAX_STEPS_DEFAULT):
+
         model.train()
 
-        loss1, mlp_out1 = forward_block(X_train, y_train_batch, model)
-        loss2, mlp_out2 = forward_block(X_train, y_train_batch, model)
+        loss1, mlp_out1, k1, k2 = forward_block(X_train, y_train_batch, model)
+        train_accuracy = accuracy(mlp_out1, y_test_batch)
 
-        loss = loss1 + loss2
+        loss = loss1
+
+        for i in range(63):
+            loss_x, mlp_out_x, _, _ = forward_block(X_train, y_train_batch, model)
+
+            loss += loss_x
+            train_accuracy += accuracy(mlp_out_x, y_test_batch)
+
+        loss = loss / 64
+        train_accuracy /= 64
+        train_accs.append(train_accuracy)
 
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
         if iteration % EVAL_FREQ_DEFAULT == 0:
-            model.eval()
+            print(k1)
+            print(k2)
+            print("train accuracies: ", statistics.mean(train_accs))
+            train_accs = []
+
+            #model.eval()
 
             total_acc = 0
             total_loss = 0
@@ -171,15 +182,33 @@ def train():
             accuracies = []
             losses = []
 
-            test_size = 300
-            for i in range(test_size):
-                loss, mlp_out = forward_block(X_test, y_test_batch, model)
+            test_size = 100
+            with torch.no_grad():
+                for i in range(test_size):
 
-                total_loss += loss.item()
+                    loss, mlp_out, _, _ = forward_block(X_test, y_test_batch, model)
 
-                # TODO fix
-                acc = accuracy(mlp_out, y_test_batch)
-                total_acc += acc
+                    total_loss += loss.item()
+
+                    # TODO fix
+                    acc = accuracy(mlp_out, y_test_batch)
+
+                    if i == 100:
+                        predictions = mlp_out.detach().numpy()
+                        predictions = predictions.flatten()
+
+                        targets = y_test_batch.detach().numpy()
+                        print("predictions: ", predictions)
+                        preds = np.round(predictions)
+                        print("round preds: ", preds)
+                        result = preds == targets
+
+                        sum = np.sum(result)
+                        print("sum: ", sum)
+                        a = sum / float(targets.shape[0])
+                        print("accuracy: ", a)
+
+                    total_acc += acc
 
             denom = test_size // BATCH_SIZE_DEFAULT
             total_acc = total_acc / denom
@@ -212,57 +241,36 @@ def get_data(x_train):
     x_original = to_Tensor(x_train)
     x_noised = add_noise(x_train)
     x_scaled = scale(x_train)
-    x_rotate = rotate(x_train)
+    x_rotate = rotate(x_train, 25)
+    x_rotate2 = rotate(x_train, -25)
+    x_erase = random_erease(x_train)
+    x_erase2 = random_erease(x_train)
 
     x_original = x_original.to('cuda')
     x_noised = x_noised.to('cuda')
     x_scaled = x_scaled.to('cuda')
     x_rotate = x_rotate.to('cuda')
+    x_rotate2 = x_rotate2.to('cuda')
+    x_erase = x_erase.to('cuda')
+    x_erase2 = x_erase2.to('cuda')
+
+    # show_mnist(x_original)
     # show_mnist(x_noised)
     # show_mnist(x_scaled)
     # show_mnist(x_rotate)
-    # show_mnist(x_original)
+    # show_mnist(x_rotate2)
+    # show_mnist(x_erase)
+    # show_mnist(x_erase2)
 
     data.append(x_original)
     data.append(x_noised)
     data.append(x_scaled)
     data.append(x_rotate)
+    data.append(x_rotate2)
+    data.append(x_erase)
+    data.append(x_erase2)
 
     return data
-
-
-def mutual_info_loss(original, augmented):
-    """ Mutual information for joint histogram
-    ...     """
-    T = 1
-    D = original.shape[1]
-    original = torch.nn.functional.softmax(original / T, dim=1)
-    augmented = torch.nn.functional.softmax(augmented / T, dim=1)
-
-    P = (original.unsqueeze(2) * augmented.unsqueeze(1)).sum(dim=0)
-    P = ((P + P.t()) / 2) / P.sum()
-    Pi = P.sum(dim=1).view(D, 1).expand(D, D)
-    Pj = P.sum(dim=0).view(1, D).expand(D, D)
-    loss = (P * (torch.log(Pi) + torch.log(Pj) - torch.log(P))).sum()
-
-    return loss
-
-    pxy = torch.div(semantic_representation, sum.view(2, 2, D))
-
-    print(pxy.shape)
-    print(pxy[0])
-    input()
-    # print()
-
-    px = torch.sum(pxy, 1)  # marginal for x over y
-    print(px.shape)
-    print(px[0])
-    input()
-    py = np.sum(pxy, axis=0)  # marginal for y over x
-    px_py = px[:, None] * py[None, :]  # Broadcast to multiply marginals
-    nzs = pxy > 0  # Only non-zero pxy values contribute to the sum
-
-    return np.sum(pxy[nzs] * np.log(pxy[nzs] / px_py[nzs]))
 
 
 def to_Tensor(X, batch_size=BATCH_SIZE_DEFAULT):
@@ -274,7 +282,7 @@ def to_Tensor(X, batch_size=BATCH_SIZE_DEFAULT):
 
 def add_noise(X, batch_size=BATCH_SIZE_DEFAULT, max_noise_percentage=0.5):
     X_copy = copy.deepcopy(X)
-    threshold = random.uniform(0, max_noise_percentage)
+    threshold = random.uniform(0.4, max_noise_percentage)
 
     for i in range(X_copy.shape[0]):
         nums = np.random.uniform(low=0, high=1, size=(X_copy[i].shape[0],))
@@ -283,12 +291,12 @@ def add_noise(X, batch_size=BATCH_SIZE_DEFAULT, max_noise_percentage=0.5):
     return to_Tensor(X_copy, batch_size)
 
 
-def rotate(X, batch_size=BATCH_SIZE_DEFAULT):
+def rotate(X, degrees, batch_size=BATCH_SIZE_DEFAULT):
     X_copy = copy.deepcopy(X)
     X_copy = to_Tensor(X_copy, batch_size)
 
     for i in range(X_copy.shape[0]):
-        transformation = transforms.RandomRotation(20)
+        transformation = transforms.RandomRotation(degrees=[degrees, degrees])
         trans = transforms.Compose([transformation, transforms.ToTensor()])
         a = F.to_pil_image(X_copy[i])
         trans_image = trans(a)
@@ -300,12 +308,12 @@ def rotate(X, batch_size=BATCH_SIZE_DEFAULT):
 def scale(X, batch_size=BATCH_SIZE_DEFAULT):
     X_copy = copy.deepcopy(X)
     X_copy = to_Tensor(X_copy, batch_size)
-    size = 22
-    pad = 3
+    size = 20
+    pad = 4
 
-    if random.uniform(0, 1) > 0.5:
-        size = 20
-        pad = 4
+    # if random.uniform(0, 1) > 0.5:
+    #     size = 20
+    #     pad = 4
 
     for i in range(X_copy.shape[0]):
         transformation = transforms.Resize(size, interpolation=2)
@@ -317,16 +325,18 @@ def scale(X, batch_size=BATCH_SIZE_DEFAULT):
     return X_copy
 
 
-def augment(X):
-    augment = [1, 2, 3]
-    method = random.choice(augment)
+def random_erease(X, batch_size=BATCH_SIZE_DEFAULT):
+    X_copy = copy.deepcopy(X)
+    X_copy = to_Tensor(X_copy, batch_size)
 
-    if method == 1:
-        return add_noise(X)
-    elif method == 2:
-        return rotate(X)
-    elif method == 3:
-        return scale(X)
+    for i in range(X_copy.shape[0]):
+        transformation = RandomErasing()
+        trans = transforms.Compose([transforms.ToTensor(), transformation])
+        a = F.to_pil_image(X_copy[i])
+        trans_image = trans(a)
+        X_copy[i] = trans_image
+
+    return X_copy
 
 
 def show_mnist(first_image):
@@ -334,33 +344,6 @@ def show_mnist(first_image):
     plt.imshow(pixels, cmap='gray')
     plt.show()
 
-
-def display_transformations(image):
-    show_mnist(image)
-
-    #transforms.RandomChoice
-
-    #trans = transforms.Compose([transforms.RandomPerspective(distortion_scale=0.5, p=0.5, interpolation=3)])
-    #trans = transforms.Compose([transforms.RandomAffine(20)])
-    #trans = transforms.Compose([transforms.Scale(20)])
-    #trans = transforms.Compose([transforms.CenterCrop(23)])
-    #trans = transforms.Resize(20, interpolation=2)
-    trans = transforms.RandomRotation(30)
-    #trans = transforms.Resize(20, interpolation=2)
-
-    # transformation = transforms.RandomRotation(10)
-    # trans = transforms.Compose(
-    #     [transformation, transforms.ToTensor()])
-
-    #trans = transforms.Compose([trans, transforms.Pad(4)])
-    a = F.to_pil_image(image)
-
-    trans_image = trans(a)
-
-    pixels = trans_image.resize((28, 28))
-    plt.imshow(pixels, cmap='gray')
-    plt.show()
-    input()
 
 def main():
     """

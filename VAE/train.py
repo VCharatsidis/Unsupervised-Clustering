@@ -31,7 +31,7 @@ def main():
 
     data = (X_train, X_test)
 
-    model = VAE(500, 20)
+    model = VAE(500, 10)
     optimizer = torch.optim.Adam(model.parameters(), lr=2e-4)
     size_width = 28
 
@@ -62,8 +62,8 @@ def main():
             manifold = model.manifold_sample(256)
             save_sample(manifold, size_width, epoch, 16)
 
-        # mean_sample = model.sample(64)
-        # save_sample(mean_sample, size_width, epoch)
+        mean_sample = model.sample(64)
+        save_sample(mean_sample, size_width, epoch)
         print(f"[Epoch {epoch}] train elbo: {train_elbo} val_elbo: {val_elbo}")
 
     mean_sample = model.sample(64)
