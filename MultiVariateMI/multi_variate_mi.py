@@ -42,16 +42,28 @@ def joint(x_1, x_2, x_3):
   assert (x_2.size(0) == bn and x_2.size(1) == k)
   assert (x_3.size(1) == k)
 
-  print("x_1: ", x_1.shape)
-  print("x_2.unsq.t(): ", x_2.unsqueeze(0).t().shape)
-  combine_1_2 = x_1 * x_2.unsqueeze(0).t()  # k, k
+  # print("x_1: ", x_1.shape)
+  # print("x_2: ", x_2.shape)
+
+
+  x_2_unsq_transpose = x_2.unsqueeze(1)
+  # print("x_2.unsq.t(): ", x_2_unsq_transpose.shape)
+  #
+  # print("x_1.unsq(2): ", x_1.unsqueeze(2).shape)
+  # print("")
+  combine_1_2 = x_1.unsqueeze(2) * x_2_unsq_transpose  # batch, k, k
+  # print("combine_1_2: ", combine_1_2.shape)
+  # print("combine_1_2.unsq: ", combine_1_2.unsqueeze(3).shape)
+
 
   x_3_unsq = x_3.unsqueeze(0).unsqueeze(0).transpose(0, 2)
-  #print("x_3_unsq: ", x_3_unsq.shape)
-
-  combine_1_2_3 = combine_1_2 * x_3_unsq
-  #print("combine_1_2_3: ", combine_1_2_3.shape)
-
+  # print("x_3_unsq: ", x_3_unsq.shape)
+  #
+  #
+  # print("")
+  combine_1_2_3 = combine_1_2.unsqueeze(3) * x_3_unsq
+  # print("combine_1_2_3: ", combine_1_2_3.shape)
+  # input()
   return combine_1_2_3
 
 
@@ -63,7 +75,6 @@ def compute_joint(x_out, x_tf_out):
 
   p_i_j = x_out.unsqueeze(2) * x_tf_out.unsqueeze(1)  # bn, k, k
   p_i_j = p_i_j.sum(dim=0)  # k, k
-  p_i_j = (p_i_j + p_i_j.t()) / 2.  # symmetrise
   p_i_j = p_i_j / p_i_j.sum()  # normalise
 
   return p_i_j
@@ -72,14 +83,8 @@ def compute_joint(x_out, x_tf_out):
 def compute_three_joint(x_1, x_2, x_3):
   joint_1_2_3 = joint(x_1, x_2, x_3)
 
-  # p_i_j = p_i_j.sum(dim=0)  # k, k
-  # p_i_j = (p_i_j + p_i_j.t()) / 2.  # symmetrise
-  # p_i_j = p_i_j / p_i_j.sum()  # normalise
+  joint_1_2_3 = joint_1_2_3.sum(dim=0)  # k, k, k
+  joint_1_2_3 = joint_1_2_3 / joint_1_2_3.sum()  # normalise
 
   return joint_1_2_3
 
-
-def compute_joint(x_out, x_tf_out):
-  p_i_j = x_out * x_tf_out.unsqueeze(0).t()  # k, k
-
-  return p_i_j
