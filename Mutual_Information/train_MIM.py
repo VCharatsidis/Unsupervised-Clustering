@@ -10,11 +10,9 @@ import argparse
 import numpy as np
 import os
 import torch
-from sklearn.datasets import fetch_openml
 from MutualInfoMetric import MutualInfoMetric
 from torch.autograd import Variable
 import matplotlib.pyplot as plt
-from conv_net import ConvNet
 from sklearn.datasets import fetch_openml
 import torch.nn as nn
 from torchvision import transforms
@@ -23,6 +21,7 @@ import random
 import copy
 import statistics
 from RandomErase import RandomErasing
+from torchvision.utils import make_grid
 
 
 # Default constants
@@ -31,7 +30,7 @@ LEARNING_RATE_DEFAULT = 1e-5
 MAX_STEPS_DEFAULT = 300000
 BATCH_SIZE_DEFAULT = 1
 HALF_BATCH = BATCH_SIZE_DEFAULT // 2
-EVAL_FREQ_DEFAULT = 50
+EVAL_FREQ_DEFAULT = 200
 
 
 FLAGS = None
@@ -88,7 +87,7 @@ def forward_block(X, y, model):
     # sample_4 = sample(X)
     # x4 = get_data(sample_4)
 
-    results, KL_1, KL_2 = model.forward(x1, x2)
+    results, KL_1, KL_2, d, d1 = model.forward(x1, x2)
     # print("results")
     # print(results.shape)
     # print(results)
@@ -99,12 +98,12 @@ def forward_block(X, y, model):
     # print(results)
     # print(y)
 
-    mean_1 = torch.mean(KL_1)
-    mean_2 = torch.mean(KL_2)
+    mean_1 = torch.sum(KL_1)
+    mean_2 = torch.sum(KL_2)
 
     loss = nn.functional.binary_cross_entropy(results, y) + mean_1 + mean_2
 
-    return loss, results, KL_1, KL_2
+    return loss, results, KL_1, KL_2, d, d1
 
 
 def train():
@@ -148,19 +147,20 @@ def train():
 
         model.train()
 
-        loss1, mlp_out1, k1, k2 = forward_block(X_train, y_train_batch, model)
+        loss1, mlp_out1, k1, k2, _, _ = forward_block(X_train, y_train_batch, model)
         train_accuracy = accuracy(mlp_out1, y_test_batch)
 
         loss = loss1
+        batch = 64
 
-        for i in range(63):
-            loss_x, mlp_out_x, _, _ = forward_block(X_train, y_train_batch, model)
+        for i in range(batch-1):
+            loss_x, mlp_out_x, _, _, _, _ = forward_block(X_train, y_train_batch, model)
 
             loss += loss_x
             train_accuracy += accuracy(mlp_out_x, y_test_batch)
 
-        loss = loss / 64
-        train_accuracy /= 64
+        loss /= batch
+        train_accuracy /= batch
         train_accs.append(train_accuracy)
 
         optimizer.zero_grad()
@@ -168,8 +168,18 @@ def train():
         optimizer.step()
 
         if iteration % EVAL_FREQ_DEFAULT == 0:
+            if iteration > 1000:
+                kernels = model.encoder.encoder[0].weight.detach().clone()
+
+                kernels = kernels - kernels.min()
+                kernels = kernels / kernels.max()
+                img = make_grid(kernels)
+                print(img.shape)
+                plt.imshow(img.permute(1, 2, 0))
+                plt.show()
+
             print(k1)
-            print(k2)
+
             print("train accuracies: ", statistics.mean(train_accs))
             train_accs = []
 
@@ -186,14 +196,14 @@ def train():
             with torch.no_grad():
                 for i in range(test_size):
 
-                    loss, mlp_out, _, _ = forward_block(X_test, y_test_batch, model)
+                    loss, mlp_out, _, _ , _, _= forward_block(X_test, y_test_batch, model)
 
                     total_loss += loss.item()
 
                     # TODO fix
                     acc = accuracy(mlp_out, y_test_batch)
 
-                    if i == 100:
+                    if i == 5:
                         predictions = mlp_out.detach().numpy()
                         predictions = predictions.flatten()
 

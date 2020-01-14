@@ -256,8 +256,7 @@ def calculate_distances(sigmoided_data):
         for idx2, j in enumerate(sigmoided_data):
             if idx >= idx2:
                 continue
-            print(i[1])
-            print(j[1])
+
             absolute_differece = np.abs(i[1] - j[1])
 
             zeros = np.zeros(absolute_differece.shape[0])
@@ -269,7 +268,6 @@ def calculate_distances(sigmoided_data):
             eps = 1e-8
             distance = np.log(1 - absolute_differece+eps)
             sum = np.abs(distance.sum())
-            print(sum)
 
             key1 = str(i[0])+'_'+str(j[0])
             distances[key1] = sum
@@ -303,7 +301,7 @@ def loss_representations(id, member_ids):
 
             mean_rep = mean_rep.detach().numpy()
 
-            similarities.append(rep[0])
+            similarities.append(mean_rep)
 
         return similarities
 

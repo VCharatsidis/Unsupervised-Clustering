@@ -4,7 +4,7 @@ from sklearn.datasets import fetch_openml
 from utils import most_frequent, flatten
 import os
 from Mutual_Information.train_MIM import to_Tensor
-from train import calc_distance
+from SimilarityMetric.train import calc_distance
 from sklearn.cluster import KMeans
 
 filepath = '..\\ModelUnpredictability\\'
