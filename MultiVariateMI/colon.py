@@ -37,7 +37,7 @@ class Colon(nn.Module):
             nn.Linear(100, 10)
         )
 
-        self.softmax = nn.Softmax(dim=0)
+        self.softmax = nn.Softmax(dim=1)
 
     def forward(self, x):
         """

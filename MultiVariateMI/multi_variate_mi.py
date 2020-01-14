@@ -8,9 +8,21 @@ def three_variate_IID_loss(x_1, x_2, x_3, EPS=sys.float_info.epsilon):
   joint_1_2_3 = compute_three_joint(x_1, x_2, x_3)
   assert (joint_1_2_3.size() == (k, k, k))
 
-  p_z = joint_1_2_3.sum(dim=2).view(k, k, 1).expand(k, k, k)
-  p_i = joint_1_2_3.sum(dim=1).view(k, 1, k).expand(k, k, k)
-  p_j = joint_1_2_3.sum(dim=0).view(1, k, k).expand(k, k, k)  # but should be same, symmetric
+  # sum_i = joint_1_2_3.sum(dim=0).view(1, k, k).expand(k, k, k)
+  # sum_j = joint_1_2_3.sum(dim=1).view(k, 1, k).expand(k, k, k)
+  # sum_z = joint_1_2_3.sum(dim=2).view(k, k, 1).expand(k, k, k)
+
+  #print(joint_1_2_3.sum(dim=1).view(k, 1, k))
+
+  p_i = joint_1_2_3.sum(dim=1).view(k, 1, k).sum(dim=2).view(k, 1, 1).expand(k, k, k)
+  p_j = joint_1_2_3.sum(dim=0).view(1, k, k).sum(dim=2).view(1, k, 1).expand(k, k, k)
+  p_z = joint_1_2_3.sum(dim=0).view(1, k, k).sum(dim=1).view(1, 1, k).expand(k, k, k)
+
+  # print(joint_1_2_3.shape)
+  # print(p_i)
+  # print(p_j)
+  # print(p_z)
+  # input()
 
   p_i_j = compute_joint(x_1, x_2)
   p_j_z = compute_joint(x_2, x_3)
@@ -45,21 +57,17 @@ def joint(x_1, x_2, x_3):
   # print("x_1: ", x_1.shape)
   # print("x_2: ", x_2.shape)
 
-
-  x_2_unsq_transpose = x_2.unsqueeze(1)
-  # print("x_2.unsq.t(): ", x_2_unsq_transpose.shape)
-  #
   # print("x_1.unsq(2): ", x_1.unsqueeze(2).shape)
   # print("")
-  combine_1_2 = x_1.unsqueeze(2) * x_2_unsq_transpose  # batch, k, k
+  combine_1_2 = x_1.unsqueeze(2) * x_2.unsqueeze(1)  # batch, k, k
   # print("combine_1_2: ", combine_1_2.shape)
   # print("combine_1_2.unsq: ", combine_1_2.unsqueeze(3).shape)
 
 
   x_3_unsq = x_3.unsqueeze(0).unsqueeze(0).transpose(0, 2)
-  # print("x_3_unsq: ", x_3_unsq.shape)
-  #
-  #
+  #print("x_3_unsq: ", x_3_unsq.shape)
+
+
   # print("")
   combine_1_2_3 = combine_1_2.unsqueeze(3) * x_3_unsq
   # print("combine_1_2_3: ", combine_1_2_3.shape)
@@ -75,6 +83,7 @@ def compute_joint(x_out, x_tf_out):
 
   p_i_j = x_out.unsqueeze(2) * x_tf_out.unsqueeze(1)  # bn, k, k
   p_i_j = p_i_j.sum(dim=0)  # k, k
+  #p_i_j = (p_i_j + p_i_j.t()) / 2.
   p_i_j = p_i_j / p_i_j.sum()  # normalise
 
   return p_i_j
@@ -84,7 +93,9 @@ def compute_three_joint(x_1, x_2, x_3):
   joint_1_2_3 = joint(x_1, x_2, x_3)
 
   joint_1_2_3 = joint_1_2_3.sum(dim=0)  # k, k, k
-  joint_1_2_3 = joint_1_2_3 / joint_1_2_3.sum()  # normalise
+  sum = joint_1_2_3.sum()
+
+  joint_1_2_3 = joint_1_2_3 / sum  # normalise
 
   return joint_1_2_3
 

@@ -21,9 +21,9 @@ from colon import Colon
 DNN_HIDDEN_UNITS_DEFAULT = '1000'
 LEARNING_RATE_DEFAULT = 1e-5
 MAX_STEPS_DEFAULT = 30000
-BATCH_SIZE_DEFAULT = 512
+BATCH_SIZE_DEFAULT = 1024
 HALF_BATCH = BATCH_SIZE_DEFAULT // 2
-EVAL_FREQ_DEFAULT = 100
+EVAL_FREQ_DEFAULT = 500
 
 FLAGS = None
 
@@ -82,9 +82,9 @@ def encode_4_patches(image, colons):
     print(flat_1.shape)
 
     pred_1 = colons[0](flat_1)
-    pred_2 = colons[0](flat_2)
-    pred_3 = colons[0](flat_3)
-    pred_4 = colons[0](flat_4)
+    pred_2 = colons[1](flat_2)
+    pred_3 = colons[2](flat_3)
+    pred_4 = colons[3](flat_4)
 
     return pred_1, pred_2, pred_3, pred_4
 
@@ -107,7 +107,9 @@ def encode_3_patches(image, colons):
     # print("pred_1 ", pred_1.shape)
     # print("pred_2 ", pred_2.shape)
     # print("pred_3 ", pred_3.shape)
+    # print(pred_1[0])
     # input()
+
     return pred_1, pred_2, pred_3
 
 
@@ -120,14 +122,14 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size):
 
     pred_1, pred_2, pred_3 = encode_3_patches(images, colons)
 
-    joint = three_variate_IID_loss(pred_1, pred_2, pred_3, encode_3_patches)
+    joint = three_variate_IID_loss(pred_1, pred_2, pred_3)
 
     loss = joint.sum()
 
     if train:
         for i in optimizers:
             i.zero_grad()
-            loss.sum().backward(retain_graph=True)
+            loss.backward(retain_graph=True)
             i.step()
 
     return pred_1, pred_2, pred_3, loss
@@ -212,11 +214,11 @@ def train():
         if iteration % EVAL_FREQ_DEFAULT == 0:
             print()
             print("iteration: ", iteration)
-            print(p1)
-            print(p2)
-            print(p3)
+            print(p1[0])
+            print(p2[0])
+            print(p3[0])
             print("mean: ", mim.item())
-            print(targets[ids])
+            print(targets[ids[0]])
 
             total_loss = 0
 
