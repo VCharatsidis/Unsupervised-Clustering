@@ -5,14 +5,14 @@ import torch.nn as nn
 import torch
 
 
-class Colon(nn.Module):
+class Ensemble(nn.Module):
     """
     This class implements a Multi-layer Perceptron in PyTorch.
     It handles the different layers and parameters of the model.
     Once initialized an MLP object can perform forward.
     """
 
-    def __init__(self, n_channels, n_inputs):
+    def __init__(self):
         """
         Initializes MLP object.
         Args:
@@ -25,10 +25,10 @@ class Colon(nn.Module):
                      This number is required in order to specify the
                      output dimensions of the MLP
         """
-        super(Colon, self).__init__()
+        super(Ensemble, self).__init__()
 
         self.conv = nn.Sequential(
-            nn.Conv2d(n_channels, 64, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(1, 64, kernel_size=3, stride=1, padding=1),
             nn.Tanh(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
 
@@ -36,19 +36,36 @@ class Colon(nn.Module):
             nn.Tanh(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
 
-            nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
-            nn.Tanh(),
-            nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
+            # nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
+            # nn.Tanh(),
+            # nn.MaxPool2d(kernel_size=2, stride=2, padding=1)
         )
 
-        self.linear = nn.Sequential(
-            nn.Linear(n_inputs, 400),
+        input = 8192
+        self.a = nn.Sequential(
+            nn.Linear(input, 200),
             nn.Tanh(),
 
-            nn.Linear(400, 10)
+            nn.Linear(200, 10),
+            nn.Softmax(dim=1)
         )
 
-        self.softmax = nn.Softmax(dim=1)
+        self.b = nn.Sequential(
+            nn.Linear(input, 200),
+            nn.Tanh(),
+
+            nn.Linear(200, 10),
+            nn.Softmax(dim=1)
+        )
+
+        self.c = nn.Sequential(
+            nn.Linear(input, 200),
+            nn.Tanh(),
+
+            nn.Linear(200, 10),
+            nn.Softmax(dim=1)
+        )
+
 
     def forward(self, x):
         """
@@ -59,11 +76,11 @@ class Colon(nn.Module):
         Returns:
           out: outputs of the network
         """
-
         conv = self.conv(x)
-        conv = torch.flatten(conv, 1)
+        flat = torch.flatten(conv, 1)
 
-        logits = self.linear(conv)
-        out = self.softmax(logits)
+        a = self.a(flat)
+        b = self.b(flat)
+        c = self.c(flat)
 
-        return out
+        return a, b, c

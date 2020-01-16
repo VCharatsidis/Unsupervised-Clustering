@@ -12,13 +12,14 @@ import matplotlib.pyplot as plt
 
 from sklearn.datasets import fetch_openml
 from multi_variate_mi import three_variate_IID_loss
+from ensemble import Ensemble
 
 from colon import Colon
 
 # Default constants
 LEARNING_RATE_DEFAULT = 1e-3
 MAX_STEPS_DEFAULT = 30000
-BATCH_SIZE_DEFAULT = 1024
+BATCH_SIZE_DEFAULT = 800
 EVAL_FREQ_DEFAULT = 400
 
 FLAGS = None
@@ -76,7 +77,7 @@ def encode_4_patches(image, colons):
 
 
 def encode_3_patches(image, colons):
-    i_1, i_2, i_3 = split_image_to_3(image)
+    # i_1, i_2, i_3 = split_image_to_3(image)
 
     # flat_1 = torch.flatten(i_1, 1)
     # flat_2 = torch.flatten(i_2, 1)
@@ -86,9 +87,12 @@ def encode_3_patches(image, colons):
     # print("flat 2 ", flat_2.shape)
     # print("flat 3 ", flat_3.shape)
 
-    pred_1 = colons[0](i_1)
-    pred_2 = colons[0](i_2)
-    pred_3 = colons[0](i_3)
+    # pred_1 = colons[0](i_1)
+    # pred_2 = colons[0](i_2)
+    # pred_3 = colons[0](i_3)
+
+    image = image.to('cuda')
+    pred_1, pred_2, pred_3 = colons[0](image)
 
     # print("pred_1 ", pred_1.shape)
     # print("pred_2 ", pred_2.shape)
@@ -175,10 +179,14 @@ def train():
     predictor_model = os.path.join(script_directory, filepath)
     colons_paths.append(predictor_model)
 
+    #input = 3840
     input = 5120
 
-    c = Colon(1, input)
+    c = Ensemble()
     c.cuda()
+
+    # c = Colon(1, input)
+    # c.cuda()
     colons.append(c)
 
     optimizer = torch.optim.Adam(c.parameters(), lr=LEARNING_RATE_DEFAULT)
@@ -199,7 +207,10 @@ def train():
             print()
             print("iteration: ", iteration)
 
-            for i in range(20):
+            for i in range(25):
+                if i == 10:
+                    print("")
+
                 val, index = torch.max(p1[i], 0)
                 val, index2 = torch.max(p2[i], 0)
                 val, index3 = torch.max(p3[i], 0)
