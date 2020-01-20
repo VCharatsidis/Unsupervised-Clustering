@@ -36,33 +36,33 @@ class Ensemble(nn.Module):
             nn.Tanh(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
 
-            # nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
-            # nn.Tanh(),
-            # nn.MaxPool2d(kernel_size=2, stride=2, padding=1)
+            nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
+            nn.Tanh(),
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=1)
         )
 
-        input = 8192
+        input = 6400
         self.a = nn.Sequential(
-            nn.Linear(input, 200),
+            nn.Linear(input, 300),
             nn.Tanh(),
 
-            nn.Linear(200, 10),
+            nn.Linear(300, 10),
             nn.Softmax(dim=1)
         )
 
         self.b = nn.Sequential(
-            nn.Linear(input, 200),
+            nn.Linear(input, 300),
             nn.Tanh(),
 
-            nn.Linear(200, 10),
+            nn.Linear(300, 10),
             nn.Softmax(dim=1)
         )
 
         self.c = nn.Sequential(
-            nn.Linear(input, 200),
+            nn.Linear(input, 300),
             nn.Tanh(),
 
-            nn.Linear(200, 10),
+            nn.Linear(300, 10),
             nn.Softmax(dim=1)
         )
 

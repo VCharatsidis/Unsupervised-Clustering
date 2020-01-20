@@ -31,21 +31,23 @@ class Colon(nn.Module):
             nn.Conv2d(n_channels, 64, kernel_size=3, stride=1, padding=1),
             nn.Tanh(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
-
+            #
             nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
             nn.Tanh(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
-
+            #
             nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
             nn.Tanh(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
         )
 
         self.linear = nn.Sequential(
-            nn.Linear(n_inputs, 400),
+            nn.Dropout(0.5),
+            nn.Linear(n_inputs, 1000),
             nn.Tanh(),
 
-            nn.Linear(400, 10)
+            nn.Dropout(0.5),
+            nn.Linear(1000, 10)
         )
 
         self.softmax = nn.Softmax(dim=1)
