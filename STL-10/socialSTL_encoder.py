@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch
 
 
-class Colon(nn.Module):
+class SocialEncoderSTL(nn.Module):
     """
     This class implements a Multi-layer Perceptron in PyTorch.
     It handles the different layers and parameters of the model.
@@ -25,34 +25,41 @@ class Colon(nn.Module):
                      This number is required in order to specify the
                      output dimensions of the MLP
         """
-        super(Colon, self).__init__()
-
+        super(SocialEncoderSTL, self).__init__()
+        stride = 1
         self.conv = nn.Sequential(
-            nn.Conv2d(n_channels, 64, kernel_size=3, stride=1, padding=1),
-            nn.Tanh(),
+            nn.Conv2d(n_channels, 32, kernel_size=3, stride=stride, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
             #
-            nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
-            nn.Tanh(),
+            nn.Conv2d(32, 32, kernel_size=3, stride=stride, padding=1),
+            nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
             #
-            nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
-            nn.Tanh(),
+            nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
+
+            # nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
+            # nn.ReLU(),
+            # nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
+
+            # nn.Conv2d(128, 128, kernel_size=3, stride=1, padding=1),
+            # nn.ReLU(),
+            # nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
         )
 
         self.linear = nn.Sequential(
-            nn.Dropout(0.5),
-            nn.Linear(n_inputs, 1000),
-            nn.Tanh(),
+            # nn.Linear(n_inputs, 500),
+            # nn.Tanh(),
 
-            nn.Dropout(0.5),
-            nn.Linear(1000, 10)
+            nn.Linear(n_inputs, 10)
         )
 
         self.softmax = nn.Softmax(dim=1)
 
-    def forward(self, x):
+    def forward(self, x, p1, p2, p3, p4, p5):
         """
         Performs forward pass of the input. Here an input tensor x is transformed through
         several layer transformations.
@@ -65,7 +72,9 @@ class Colon(nn.Module):
         conv = self.conv(x)
         conv = torch.flatten(conv, 1)
 
-        logits = self.linear(conv)
+        linear_input = torch.cat([conv, p1, p2, p3, p4, p5], 1)
+
+        logits = self.linear(linear_input)
         out = self.softmax(logits)
 
         return out

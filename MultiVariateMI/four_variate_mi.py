@@ -12,10 +12,13 @@ def four_variate_IID_loss(x_1, x_2, x_3, x_4, EPS=sys.float_info.epsilon):
   # assert (joint_probability_1_2_3_4.size() == (k, k, k, k, k, k))
 
   # mvmi = multi_variate_mutual_info(joint_probability_1_2_3_4)
-
+  total_corr = total_correlation(joint_probability_1_2_3_4)
   loss = my_loss(joint_probability_1_2_3_4)
 
-  loss = loss.sum()
+  if random.uniform(0,1)>0.995:
+      print("total corr: ", total_corr)
+
+  loss = loss.sum() + total_corr
 
   return loss
 
@@ -38,9 +41,10 @@ def six_variate_IID_loss(x_1, x_2, x_3, x_4, x_5, x_6, EPS=sys.float_info.epsilo
 
 
 def my_loss_8(joint_probability_1_2_3_4):
-    #p_1, p_2, p_3, p_4 = one_variate_marginals(joint_probability_1_2_3_4)
+    p_1, p_2, p_3, p_4 = one_variate_marginals(joint_probability_1_2_3_4)
     classes = 10
     general_target = 1 / classes
+
 
     sum = 0
     for num in range(10):
@@ -55,9 +59,14 @@ def my_loss(joint_probability_1_2_3_4):
     classes = 10
     class_weight = 1/classes
 
+
     sum = 0
     for num in range(10):
         joint_prob = joint_probability_1_2_3_4[num, num, num, num]
+
+        if random.uniform(0, 1) > 0.999:
+            print("diag joint ", num, joint_prob)
+
         # prob = p_1[num, num, num, num] * p_2[num, num, num, num] * p_3[num, num, num, num] * p_4[num, num, num, num]
         #
         # target = torch.log(1 - torch.abs(joint_prob-prob))
@@ -67,8 +76,12 @@ def my_loss(joint_probability_1_2_3_4):
         # t4 = torch.log(1 - torch.log(p_4[num, num, num, num] - general_target))
 
         #joint_target = torch.log(1 - torch.abs(joint_prob - general_target))
+        # log_1 = torch.log(p_1[num, num, num, num])
+        # log_2 = torch.log(p_2[num, num, num, num])
+        # log_3 = torch.log(p_3[num, num, num, num])
+        # log_4 = torch.log(p_4[num, num, num, num])
 
-        sum += - class_weight * torch.log(joint_prob)
+        sum += -torch.log(joint_prob)
 
     return sum
 
@@ -101,6 +114,8 @@ def total_correlation(joint_probability_1_2_3_4):
     denominator = torch.log(p_1) + torch.log(p_2) + torch.log(p_3) + torch.log(p_4)
 
     total_corr = - joint_probability_1_2_3_4 * (numerator - denominator) #* (-denominator)
+    total_corr = total_corr.sum()
+
     return total_corr
 
 
