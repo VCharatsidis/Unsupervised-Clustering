@@ -37,24 +37,21 @@ class EncoderSTL(nn.Module):
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
             #
-            nn.Conv2d(128, 128, kernel_size=3, stride=stride, padding=1),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
-
             nn.Conv2d(128, 256, kernel_size=3, stride=stride, padding=1),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
 
-            # nn.Conv2d(128, 128, kernel_size=3, stride=1, padding=1),
-            # nn.ReLU(),
-            # nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
+            nn.Conv2d(256, 512, kernel_size=3, stride=stride, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
         )
 
         self.linear = nn.Sequential(
-            nn.Linear(n_inputs, 500),
+            nn.Linear(n_inputs, 1000),
             nn.Tanh(),
 
-            nn.Linear(500, 10)
+            nn.Dropout(),
+            nn.Linear(1000, 10)
         )
 
         self.softmax = nn.Softmax(dim=1)

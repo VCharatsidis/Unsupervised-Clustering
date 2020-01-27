@@ -26,7 +26,7 @@ class SocialColon(nn.Module):
                      output dimensions of the MLP
         """
         super(SocialColon, self).__init__()
-
+        two =2
         self.conv = nn.Sequential(
             nn.Conv2d(n_channels, 64, kernel_size=3, stride=1, padding=1),
             nn.Tanh(),

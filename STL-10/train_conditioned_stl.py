@@ -13,19 +13,21 @@ from stl10_input import read_all_images, read_labels
 from socialSTL_encoder import SocialEncoderSTL
 import copy
 
+from Mutual_Information.RandomErase import RandomErasing
 from torchvision import transforms
 import torchvision.transforms.functional as F
 import copy
 import numpy as np
 from torch.autograd import Variable
 import torch
+from stl_utils import vertical_flip
 
 # Default constants
-LEARNING_RATE_DEFAULT = 1e-4
+LEARNING_RATE_DEFAULT = 1e-5
 MAX_STEPS_DEFAULT = 300000
-BATCH_SIZE_DEFAULT = 130
+BATCH_SIZE_DEFAULT = 65
 EVAL_FREQ_DEFAULT = 200
-
+NUMBER_CLASSES = 10
 FLAGS = None
 
 
@@ -41,14 +43,14 @@ def kl_divergence(p, q):
     return torch.nn.functional.kl_div(p, q)
 
 
-def encode_4_patches(image, colons,
-                     p1=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
-                     p2=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
-                     p3=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
-                     p4=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
-                     p5=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
-                     p6=torch.zeros([BATCH_SIZE_DEFAULT, 10])
-                     ):
+def encode_4_patches(image,
+                     colons,
+                     p1=torch.zeros([BATCH_SIZE_DEFAULT, NUMBER_CLASSES]),
+                     p2=torch.zeros([BATCH_SIZE_DEFAULT, NUMBER_CLASSES]),
+                     p3=torch.zeros([BATCH_SIZE_DEFAULT, NUMBER_CLASSES]),
+                     p4=torch.zeros([BATCH_SIZE_DEFAULT, NUMBER_CLASSES]),
+                     p5=torch.zeros([BATCH_SIZE_DEFAULT, NUMBER_CLASSES]),
+                     p6=torch.zeros([BATCH_SIZE_DEFAULT, NUMBER_CLASSES])):
 
     split_at_pixel = 30
     #split_at_pixel = 19
@@ -84,17 +86,63 @@ def encode_4_patches(image, colons,
     # image_5 = image[:, :, 10:60, 10:60]
     # image_6 = image[:, :, 30:80, 30:80]
 
-    image_1 = image[:, :, 0: 45, 0:30]
-    image_2 = image[:, :, 45:90, 0:30]
-    image_2 = to_gray(image_2)
+    image_1 = image[:, :, 10: 60, 0:50]
+    image_2 = image[:, :, 40:90, 0:50]
+    image_3 = image[:, :, 30: 80, 20:70]
+    image_4 = image[:, :, 0:50, 10:60]
+    image_5 = image[:, :, 10: 60, 40:90]
+    image_6 = image[:, :, 40:90, 40:90]
 
-    image_3 = image[:, :, 0: 45, 30:60]
-    image_3 = scale(image_3)
+    patches = {0: image_1,
+               1: image_2,
+               2: image_3,
+               3: image_4,
+               4: image_5,
+               5: image_6}
 
-    image_4 = image[:, :, 45:90, 30:60]
-    image_5 = image[:, :, 0: 45, 60:90]
-    image_6 = image[:, :, 45:90, 60:90]
-    image_6 = to_gray(image_6)
+    patch_ids = np.random.choice(len(patches), size=6, replace=False)
+
+    augments = {0: to_gray(patches[patch_ids[0]], BATCH_SIZE_DEFAULT),
+                1: rotate(patches[patch_ids[1]], 20, BATCH_SIZE_DEFAULT),
+                2: rotate(patches[patch_ids[2]], -20, BATCH_SIZE_DEFAULT),
+                3: scale(patches[patch_ids[3]], 40, 5, BATCH_SIZE_DEFAULT),
+                4: vertical_flip(patches[patch_ids[4]], BATCH_SIZE_DEFAULT),
+                5: scale(patches[patch_ids[5]], 30, 10, BATCH_SIZE_DEFAULT),
+                6: random_erease(patches[patch_ids[0]], BATCH_SIZE_DEFAULT),
+                7: patches[patch_ids[2]]}
+
+    ids = np.random.choice(len(augments), size=6, replace=False)
+
+    image_1 = augments[ids[0]]
+    image_2 = augments[ids[1]]
+    image_3 = augments[ids[2]]
+    image_4 = augments[ids[3]]
+    image_5 = augments[ids[4]]
+    image_6 = augments[ids[5]]
+
+    # image_1 = torch.transpose(image_1, 1, 3)
+    # show_mnist(image_1[0], image_1[0].shape[1], image_1[0].shape[2])
+    # image_1 = torch.transpose(image_1, 3, 1)
+    #
+    # image_2 = torch.transpose(image_2, 1, 3)
+    # show_mnist(image_2[0], image_2[0].shape[1], image_2[0].shape[2])
+    # image_2 = torch.transpose(image_2, 3, 1)
+    #
+    # image_3 = torch.transpose(image_3, 1, 3)
+    # show_mnist(image_3[0], image_3[0].shape[1], image_3[0].shape[2])
+    # image_3 = torch.transpose(image_3, 3, 1)
+    #
+    # image_4 = torch.transpose(image_4, 1, 3)
+    # show_mnist(image_4[0], image_4[0].shape[1], image_4[0].shape[2])
+    # image_4 = torch.transpose(image_4, 3, 1)
+    #
+    # image_5 = torch.transpose(image_5, 1, 3)
+    # show_mnist(image_5[0], image_5[0].shape[1], image_5[0].shape[2])
+    # image_5 = torch.transpose(image_5, 3, 1)
+    #
+    # image_6 = torch.transpose(image_6, 1, 3)
+    # show_mnist(image_6[0], image_6[0].shape[1], image_6[0].shape[2])
+    # image_6 = torch.transpose(image_6, 3, 1)
 
     image_1 = image_1.to('cuda')
     image_2 = image_2.to('cuda')
@@ -110,24 +158,30 @@ def encode_4_patches(image, colons,
     p5 = p5.to('cuda')
     p6 = p6.to('cuda')
 
+    # pred_1 = colons[0](image_1)
+    # pred_2 = colons[1](image_2)
+    # pred_3 = colons[2](image_3)
+    # pred_4 = colons[3](image_4)
+    # pred_5 = colons[4](image_5)
+    # pred_6 = colons[5](image_6)
+
     pred_1 = colons[0](image_1, p2, p3, p4, p5, p6)
-    pred_2 = colons[0](image_2, p1, p3, p4, p5, p6)
-    pred_3 = colons[0](image_3, p1, p2, p4, p5, p6)
-    pred_4 = colons[0](image_4, p1, p2, p3, p5, p6)
-    pred_5 = colons[0](image_5, p1, p2, p3, p4, p6)
-    pred_6 = colons[0](image_6, p1, p2, p3, p4, p5)
+    pred_2 = colons[1](image_2, p1, p3, p4, p5, p6)
+    pred_3 = colons[2](image_3, p1, p2, p4, p5, p6)
+    pred_4 = colons[3](image_4, p1, p2, p3, p5, p6)
+    pred_5 = colons[4](image_5, p1, p2, p3, p4, p6)
+    pred_6 = colons[5](image_6, p1, p2, p3, p4, p5)
 
     return pred_1, pred_2, pred_3, pred_4, pred_5, pred_6
 
 
-def scale(X, batch_size=BATCH_SIZE_DEFAULT):
+def rotate(X, degrees, batch_size=BATCH_SIZE_DEFAULT):
     X_copy = copy.deepcopy(X)
+    #X_copy = to_Tensor(X_copy, batch_size)
     X_copy = Variable(torch.FloatTensor(X_copy))
-    size = 20
-    pad = 5
 
     for i in range(X_copy.shape[0]):
-        transformation = transforms.Resize((45, 30), interpolation=2)
+        transformation = transforms.RandomRotation(degrees=[degrees, degrees])
         trans = transforms.Compose([transformation, transforms.ToTensor()])
         a = F.to_pil_image(X_copy[i])
         trans_image = trans(a)
@@ -135,6 +189,37 @@ def scale(X, batch_size=BATCH_SIZE_DEFAULT):
 
     return X_copy
 
+
+def scale(X, size, pad, batch_size=BATCH_SIZE_DEFAULT):
+    X_copy = copy.deepcopy(X)
+    # X_copy = to_Tensor(X_copy, batch_size)
+    X_copy = Variable(torch.FloatTensor(X_copy))
+
+    # if random.uniform(0, 1) > 0.5:
+    #     size = 20
+    #     pad = 4
+
+    for i in range(X_copy.shape[0]):
+        transformation = transforms.Resize(size, interpolation=2)
+        trans = transforms.Compose([transformation, transforms.Pad(pad), transforms.ToTensor()])
+        a = F.to_pil_image(X_copy[i])
+        trans_image = trans(a)
+        X_copy[i] = trans_image
+
+    return X_copy
+
+def random_erease(X, batch_size=BATCH_SIZE_DEFAULT):
+    X_copy = copy.deepcopy(X)
+    X_copy = Variable(torch.FloatTensor(X_copy))
+
+    for i in range(X_copy.shape[0]):
+        transformation = RandomErasing()
+        trans = transforms.Compose([transforms.ToTensor(), transformation])
+        a = F.to_pil_image(X_copy[i])
+        trans_image = trans(a)
+        X_copy[i] = trans_image
+
+    return X_copy
 
 def to_gray(X, batch_size=BATCH_SIZE_DEFAULT):
     X_copy = copy.deepcopy(X)
@@ -151,12 +236,12 @@ def to_gray(X, batch_size=BATCH_SIZE_DEFAULT):
 
 
 def forward_block(X, ids, colons, optimizers, train, to_tensor_size,
-                     p1=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
-                     p2=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
-                     p3=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
-                     p4=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
-                     p5=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
-                     p6=torch.zeros([BATCH_SIZE_DEFAULT, 10])):
+                     p1=torch.zeros([BATCH_SIZE_DEFAULT, NUMBER_CLASSES]),
+                     p2=torch.zeros([BATCH_SIZE_DEFAULT, NUMBER_CLASSES]),
+                     p3=torch.zeros([BATCH_SIZE_DEFAULT, NUMBER_CLASSES]),
+                     p4=torch.zeros([BATCH_SIZE_DEFAULT, NUMBER_CLASSES]),
+                     p5=torch.zeros([BATCH_SIZE_DEFAULT, NUMBER_CLASSES]),
+                     p6=torch.zeros([BATCH_SIZE_DEFAULT, NUMBER_CLASSES])):
 
     x_train = X[ids, :]
 
@@ -221,7 +306,7 @@ def train():
     colons_paths.append(predictor_model)
 
     preds = 50
-    input = 1170
+    input = 4146
     #input = 1152
 
     # c = Ensemble()
@@ -231,29 +316,43 @@ def train():
     c.cuda()
     colons.append(c)
 
-    # c2 = SocialEncoderSTL(3, input)
-    # c2.cuda()
-    # colons.append(c2)
-    #
-    # c3 = SocialEncoderSTL(3, input)
-    # c3.cuda()
-    # colons.append(c3)
-    #
-    # c4 = SocialEncoderSTL(3, input)
-    # c4.cuda()
-    # colons.append(c4)
+    c2 = SocialEncoderSTL(3, input)
+    c2.cuda()
+    colons.append(c2)
+
+    c3 = SocialEncoderSTL(3, input)
+    c3.cuda()
+    colons.append(c3)
+
+    c4 = SocialEncoderSTL(3, input)
+    c4.cuda()
+    colons.append(c4)
+
+    c5 = SocialEncoderSTL(3, input)
+    c5.cuda()
+    colons.append(c5)
+
+    c6 = SocialEncoderSTL(3, input)
+    c6.cuda()
+    colons.append(c6)
 
     optimizer = torch.optim.Adam(c.parameters(), lr=LEARNING_RATE_DEFAULT)
     optimizers.append(optimizer)
 
-    # optimizer2 = torch.optim.Adam(c2.parameters(), lr=LEARNING_RATE_DEFAULT)
-    # optimizers.append(optimizer2)
-    #
-    # optimizer3 = torch.optim.Adam(c3.parameters(), lr=LEARNING_RATE_DEFAULT)
-    # optimizers.append(optimizer3)
-    #
-    # optimizer4 = torch.optim.Adam(c4.parameters(), lr=LEARNING_RATE_DEFAULT)
-    # optimizers.append(optimizer4)
+    optimizer2 = torch.optim.Adam(c2.parameters(), lr=LEARNING_RATE_DEFAULT)
+    optimizers.append(optimizer2)
+
+    optimizer3 = torch.optim.Adam(c3.parameters(), lr=LEARNING_RATE_DEFAULT)
+    optimizers.append(optimizer3)
+
+    optimizer4 = torch.optim.Adam(c4.parameters(), lr=LEARNING_RATE_DEFAULT)
+    optimizers.append(optimizer4)
+
+    optimizer5 = torch.optim.Adam(c5.parameters(), lr=LEARNING_RATE_DEFAULT)
+    optimizers.append(optimizer5)
+
+    optimizer6 = torch.optim.Adam(c6.parameters(), lr=LEARNING_RATE_DEFAULT)
+    optimizers.append(optimizer6)
 
     max_loss = 1999
 
@@ -266,15 +365,17 @@ def train():
         p1, p2, p3, p4, p5, p6, mim = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, p1, p2, p3, p4, p5, p6)
         p1, p2, p3, p4, p5, p6, mim = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, p1, p2, p3, p4, p5, p6)
 
-
         if iteration % EVAL_FREQ_DEFAULT == 0:
 
             test_ids = np.random.choice(len(X_test), size=BATCH_SIZE_DEFAULT, replace=False)
-            p1, p2, p3, p4, p5, p6, mim = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT)
-            p1, p2, p3, p4, p5, p6, mim = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, p1, p2, p3,
+            p1, p2, p3, p4, p5, p6, mim = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT)
+            print(mim.item())
+            p1, p2, p3, p4, p5, p6, mim = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, p1, p2, p3,
                                                p4, p5, p6)
-            p1, p2, p3, p4, p5, p6, mim = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, p1, p2, p3,
+            print(mim.item())
+            p1, p2, p3, p4, p5, p6, mim = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, p1, p2, p3,
                                                p4, p5, p6)
+            print(mim.item())
 
             print()
             print("iteration: ", iteration)
@@ -309,8 +410,8 @@ def to_tensor(X, batch_size=BATCH_SIZE_DEFAULT):
 
 
 def show_mnist(first_image, w, h):
-    pixels = first_image.reshape((w, h))
-    plt.imshow(pixels, cmap='gray')
+    # pixels = first_image.reshape((w, h))
+    plt.imshow(first_image)
     plt.show()
 
 
