@@ -55,6 +55,7 @@ def vertical_flip(X, batch_size=BATCH_SIZE_DEFAULT):
 
     return X_copy
 
+
 def to_gray(X, channels, batch_size=BATCH_SIZE_DEFAULT):
     X_copy = copy.deepcopy(X)
     X_copy = Variable(torch.FloatTensor(X_copy))
