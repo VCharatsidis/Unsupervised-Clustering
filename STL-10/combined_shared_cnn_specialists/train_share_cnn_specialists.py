@@ -11,15 +11,15 @@ from torch.autograd import Variable
 import matplotlib.pyplot as plt
 from stl10_input import read_all_images, read_labels
 
-from combined_specialisation.combined_specialists import CombinedSpecialists
+from shared_cnn import CombinedCNNSpecialists
 from stl_utils import rotate, scale, to_gray, random_erease, vertical_flip
 
 
 # Default constants
-LEARNING_RATE_DEFAULT = 1e-4
+LEARNING_RATE_DEFAULT = 1e-5
 MAX_STEPS_DEFAULT = 300000
-BATCH_SIZE_DEFAULT = 60
-EVAL_FREQ_DEFAULT = 50
+BATCH_SIZE_DEFAULT = 105
+EVAL_FREQ_DEFAULT = 100
 NUMBER_CLASSES = 1
 FLAGS = None
 
@@ -97,7 +97,7 @@ def encode_4_patches(image, colons,
     ids = np.random.choice(len(augments), size=2, replace=False)
 
     image_2 = augments[ids[0]]
-    image_3 = augments[ids[1]]
+    #image_3 = augments[ids[1]]
 
     # image = torch.transpose(image, 1, 3)
     # show_mnist(image[0], image[0].shape[1], image[0].shape[2])
@@ -115,24 +115,24 @@ def encode_4_patches(image, colons,
     # show_mnist(image_1[0], image_1[0].shape[1], image_1[0].shape[2])
     # image_1 = torch.transpose(image_1, 1, 3)
 
-    p1 = p1.cuda()
-    p2 = p2.cuda()
-    p3 = p3.cuda()
-    p4 = p4.cuda()
-    p5 = p5.cuda()
-    p6 = p6.cuda()
-    p7 = p7.cuda()
-    p8 = p8.cuda()
-    p9 = p9.cuda()
-    p0 = p0.cuda()
+    # p1 = p1.cuda()
+    # p2 = p2.cuda()
+    # p3 = p3.cuda()
+    # p4 = p4.cuda()
+    # p5 = p5.cuda()
+    # p6 = p6.cuda()
+    # p7 = p7.cuda()
+    # p8 = p8.cuda()
+    # p9 = p9.cuda()
+    # p0 = p0.cuda()
 
     image = image.to('cuda')
-    new_preds_original_image = colons[0](image, p1, p2, p3, p4, p5, p6, p7, p8, p9, p0)
+    new_preds_original_image = colons[0](image)#, p1, p2, p3, p4, p5, p6, p7, p8, p9, p0)
     del image
     torch.cuda.empty_cache()
 
     image_2 = image_2.to('cuda')
-    new_preds_augment_1 = colons[0](image_2, p1, p2, p3, p4, p5, p6, p7, p8, p9, p0)
+    new_preds_augment_1 = colons[0](image_2)#, p1, p2, p3, p4, p5, p6, p7, p8, p9, p0)
     del image_2
     torch.cuda.empty_cache()
 
@@ -147,7 +147,7 @@ def encode_4_patches(image, colons,
         #pred_3 = new_preds_augment_2[idx]
 
         #total_pred = (pred + pred_2 + pred_3) / 3
-        total_pred = (pred + pred_2) / 2
+        total_pred = pred * pred_2
 
         total_preds.append(total_pred.to('cpu'))
 
@@ -160,7 +160,7 @@ def encode_4_patches(image, colons,
                 product *= torch.ones(prediction.shape) - prediction
             else:
                 product *= prediction
-                product *= prediction
+
                 # product *= prediction
                 # product *= prediction
                 # product *= prediction
@@ -220,6 +220,8 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size,
         log_p = -torch.log(mean)
         total_loss += log_p
 
+    total_loss /= 10
+
     if train:
         torch.autograd.set_detect_anomaly(True)
 
@@ -267,10 +269,10 @@ def train():
     predictor_model = os.path.join(script_directory, filepath)
     colons_paths.append(predictor_model)
 
-    input = 2058
+    input = 8192
     #input = 1152
 
-    c = CombinedSpecialists(3, input)
+    c = CombinedCNNSpecialists(3, input)
     c = c.cuda()
     colons.append(c)
 
@@ -278,7 +280,7 @@ def train():
     optimizers.append(optimizer)
 
     max_loss = 1999
-    max_loss_iter =0
+    max_loss_iter = 0
 
     for iteration in range(MAX_STEPS_DEFAULT):
 
@@ -286,10 +288,10 @@ def train():
 
         train = True
         products, mim, new_preds = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT)
-        p1, p2, p3, p4, p5, p6, p7, p8, p9, p0 = new_preds
-        products, mim, new_preds = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, p1, p2, p3, p4, p5, p6, p7, p8, p9, p0)
-        p1, p2, p3, p4, p5, p6, p7, p8, p9, p0 = new_preds
-        products, mim, new_preds = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, p1, p2, p3, p4, p5, p6, p7, p8, p9, p0)
+        # p1, p2, p3, p4, p5, p6, p7, p8, p9, p0 = new_preds
+        # products, mim, new_preds = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, p1, p2, p3, p4, p5, p6, p7, p8, p9, p0)
+        # p1, p2, p3, p4, p5, p6, p7, p8, p9, p0 = new_preds
+        # products, mim, new_preds = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, p1, p2, p3, p4, p5, p6, p7, p8, p9, p0)
 
         if iteration % EVAL_FREQ_DEFAULT == 0:
             test_ids = np.random.choice(len(X_test), size=BATCH_SIZE_DEFAULT, replace=False)
@@ -297,13 +299,13 @@ def train():
             products, mim, new_preds = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT)
             print("loss 1: ", mim.item())
 
-            p1, p2, p3, p4, p5, p6, p7, p8, p9, p0 = new_preds
-            products, mim, new_preds = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, p1, p2, p3, p4, p5, p6, p7, p8, p9, p0)
-            print("loss 2: ", mim.item())
-
-            p1, p2, p3, p4, p5, p6, p7, p8, p9, p0 = new_preds
-            products, mim, new_preds = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, p1, p2, p3, p4, p5, p6, p7, p8, p9, p0)
-            print("loss 3: ", mim.item())
+            # p1, p2, p3, p4, p5, p6, p7, p8, p9, p0 = new_preds
+            # products, mim, new_preds = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, p1, p2, p3, p4, p5, p6, p7, p8, p9, p0)
+            # print("loss 2: ", mim.item())
+            #
+            # p1, p2, p3, p4, p5, p6, p7, p8, p9, p0 = new_preds
+            # products, mim, new_preds = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, p1, p2, p3, p4, p5, p6, p7, p8, p9, p0)
+            # print("loss 3: ", mim.item())
 
             print()
             print("iteration: ", iteration,
@@ -312,7 +314,7 @@ def train():
                   ", best loss: ", max_loss_iter,
                   ": ", max_loss)
 
-            print_info(products, targets, test_ids)
+            print_info(new_preds, targets, test_ids)
 
             test_loss = mim.item()
 
