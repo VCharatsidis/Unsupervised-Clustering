@@ -11,15 +11,16 @@ from torch.autograd import Variable
 import matplotlib.pyplot as plt
 from stl10_input import read_all_images, read_labels
 
-from combined_specialisation.combined_specialists import CombinedSpecialists
+from one_net_model import OneNet
 from stl_utils import rotate, scale, to_gray, random_erease, vertical_flip
+import torchvision
 
 
 # Default constants
-LEARNING_RATE_DEFAULT = 1e-4
+LEARNING_RATE_DEFAULT = 1e-5
 MAX_STEPS_DEFAULT = 300000
-BATCH_SIZE_DEFAULT = 32
-EVAL_FREQ_DEFAULT = 50
+BATCH_SIZE_DEFAULT = 40
+EVAL_FREQ_DEFAULT = 100
 NUMBER_CLASSES = 1
 FLAGS = None
 
@@ -63,7 +64,10 @@ def encode_4_patches(image, colons,
 
     split_at_pixel = 50
 
-    image = image[:, :, 20:70, 20:70]
+    original_image = image[:, :, 20:70, 20:70]
+
+    image = to_gray(original_image, 1, BATCH_SIZE_DEFAULT)
+
     # image_1 = image[:, :, 0: split_at_pixel, 0: split_at_pixel]
     # image_2 = image[:, :, 85 - split_at_pixel:, 0: split_at_pixel]
     # image_3 = image[:, :, 0: split_at_pixel, 0: split_at_pixel]
@@ -76,14 +80,14 @@ def encode_4_patches(image, colons,
     #
     # patch_ids = np.random.choice(len(patches), size=4, replace=False)
     #
-    augments = {0: to_gray(image, 1, BATCH_SIZE_DEFAULT),
+    augments = {0: original_image,
                 1: rotate(image, 20, BATCH_SIZE_DEFAULT),
                 2: rotate(image, -20, BATCH_SIZE_DEFAULT),
                 3: scale(image, 40, 5, BATCH_SIZE_DEFAULT),
                 4: vertical_flip(image, BATCH_SIZE_DEFAULT),
                 5: scale(image, 30, 10, BATCH_SIZE_DEFAULT),
                 6: random_erease(image, BATCH_SIZE_DEFAULT),
-                7: vertical_flip(image, BATCH_SIZE_DEFAULT)}
+                }
 
     # augments = {0: to_gray(image, 3, BATCH_SIZE_DEFAULT),
     #             1: rotate(image, 20, BATCH_SIZE_DEFAULT),
@@ -94,10 +98,12 @@ def encode_4_patches(image, colons,
     #             6: random_erease(image, BATCH_SIZE_DEFAULT),
     #             7: image}
     #
-    ids = np.random.choice(len(augments), size=2, replace=False)
+    ids = np.random.choice(len(augments), size=4, replace=False)
 
     image_2 = augments[ids[0]]
     image_3 = augments[ids[1]]
+    image_4 = augments[ids[2]]
+    image_5 = augments[ids[3]]
 
     # image = torch.transpose(image, 1, 3)
     # show_mnist(image[0], image[0].shape[1], image[0].shape[2])
@@ -111,63 +117,63 @@ def encode_4_patches(image, colons,
     # show_mnist(image_3[0], image_3[0].shape[1], image_3[0].shape[2])
     # image_3 = torch.transpose(image_3, 1, 3)
     #
-    # image_1 = torch.transpose(image_1, 1, 3)
-    # show_mnist(image_1[0], image_1[0].shape[1], image_1[0].shape[2])
-    # image_1 = torch.transpose(image_1, 1, 3)
+    # image_4 = torch.transpose(image_4, 1, 3)
+    # show_mnist(image_4[0], image_4[0].shape[1], image_4[0].shape[2])
+    # image_4 = torch.transpose(image_4, 1, 3)
+    #
+    # image_5 = torch.transpose(image_5, 1, 3)
+    # show_mnist(image_5[0], image_5[0].shape[1], image_5[0].shape[2])
+    # image_5 = torch.transpose(image_5, 1, 3)
 
-    p1 = p1.cuda()
-    p2 = p2.cuda()
-    p3 = p3.cuda()
-    p4 = p4.cuda()
-    p5 = p5.cuda()
-    p6 = p6.cuda()
-    p7 = p7.cuda()
-    p8 = p8.cuda()
-    p9 = p9.cuda()
-    p0 = p0.cuda()
+    # p1 = p1.cuda()
+    # p2 = p2.cuda()
+    # p3 = p3.cuda()
+    # p4 = p4.cuda()
+    # p5 = p5.cuda()
+    # p6 = p6.cuda()
+    # p7 = p7.cuda()
+    # p8 = p8.cuda()
+    # p9 = p9.cuda()
+    # p0 = p0.cuda()
 
     image = image.to('cuda')
-    new_preds_original_image = colons[0](image, p1, p2, p3, p4, p5, p6, p7, p8, p9, p0)
+    new_preds_original_image = colons[0](image)#, p1, p2, p3, p4, p5, p6, p7, p8, p9, p0)
     del image
     torch.cuda.empty_cache()
 
     image_2 = image_2.to('cuda')
-    new_preds_augment_1 = colons[0](image_2, p1, p2, p3, p4, p5, p6, p7, p8, p9, p0)
+    new_preds_augment_1 = colons[0](image_2)#, p1, p2, p3, p4, p5, p6, p7, p8, p9, p0)
     del image_2
     torch.cuda.empty_cache()
 
-    # image_3 = image_3.to('cuda')
-    # new_preds_augment_2 = colons[0](image_3, p1, p2, p3, p4, p5, p6, p7, p8, p9, p0)
-    # del image_3
-    # torch.cuda.empty_cache()
+    image_3 = image_3.to('cuda')
+    new_preds_augment_2 = colons[0](image_3)#, p1, p2, p3, p4, p5, p6, p7, p8, p9, p0)
+    del image_3
+    torch.cuda.empty_cache()
 
-    total_preds = []
-    for idx, pred in enumerate(new_preds_original_image):
-        pred_2 = new_preds_augment_1[idx]
-        #pred_3 = new_preds_augment_2[idx]
+    image_4 = image_4.to('cuda')
+    new_preds_augment_4 = colons[0](image_4)  # , p1, p2, p3, p4, p5, p6, p7, p8, p9, p0)
+    del image_4
+    torch.cuda.empty_cache()
 
-        #total_pred = (pred + pred_2 + pred_3) / 3
-        total_pred = (pred + pred_2) / 2
+    image_5 = image_5.to('cuda')
+    new_preds_augment_5 = colons[0](image_5)  # , p1, p2, p3, p4, p5, p6, p7, p8, p9, p0)
+    del image_5
+    torch.cuda.empty_cache()
 
-        total_preds.append(total_pred.to('cpu'))
+    total_preds = new_preds_original_image * new_preds_augment_1 * new_preds_augment_2 * new_preds_augment_4 * new_preds_augment_5  # batch_size x 10
+    total_preds = total_preds.to('cpu')
 
     products = []
-    for prod in range(10):
-        product = torch.ones([BATCH_SIZE_DEFAULT, 1])
+    classes = 10
+    for prod in range(classes):
+        product = total_preds[:, prod].clone()
 
-        for idx, prediction in enumerate(total_preds):
+        for idx in range(classes):
             if idx != prod:
-                product *= torch.ones(prediction.shape) - prediction
+                product *= torch.ones(total_preds[:, idx].shape) - total_preds[:, idx].clone()
             else:
-                product *= prediction
-
-                # product *= prediction
-                # product *= prediction
-                # product *= prediction
-                # product *= prediction
-                # product *= prediction
-                # product *= prediction
-                # product *= prediction
+                product *= total_preds[:, idx].clone()
 
         products.append(product)
 
@@ -206,6 +212,10 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size,
                   ):
 
     x_train = X[ids, :]
+
+    # image = [torchvision.transforms.ToPILImage()(x) for x in x_train]
+    # image = [torchvision.transforms.Grayscale()(x) for x in image]
+    # image = [torchvision.transforms.ToTensor()(x) for x in image]
 
     x_tensor = to_tensor(x_train, to_tensor_size)
 
@@ -269,10 +279,10 @@ def train():
     predictor_model = os.path.join(script_directory, filepath)
     colons_paths.append(predictor_model)
 
-    input = 2058
+    input = 2048
     #input = 1152
 
-    c = CombinedSpecialists(3, input)
+    c = OneNet(3, input)
     c = c.cuda()
     colons.append(c)
 
@@ -280,7 +290,7 @@ def train():
     optimizers.append(optimizer)
 
     max_loss = 1999
-    max_loss_iter =0
+    max_loss_iter = 0
 
     for iteration in range(MAX_STEPS_DEFAULT):
 
@@ -288,10 +298,10 @@ def train():
 
         train = True
         products, mim, new_preds = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT)
-        p1, p2, p3, p4, p5, p6, p7, p8, p9, p0 = new_preds
-        products, mim, new_preds = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, p1, p2, p3, p4, p5, p6, p7, p8, p9, p0)
-        p1, p2, p3, p4, p5, p6, p7, p8, p9, p0 = new_preds
-        products, mim, new_preds = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, p1, p2, p3, p4, p5, p6, p7, p8, p9, p0)
+        # p1, p2, p3, p4, p5, p6, p7, p8, p9, p0 = new_preds
+        # products, mim, new_preds = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, p1, p2, p3, p4, p5, p6, p7, p8, p9, p0)
+        # p1, p2, p3, p4, p5, p6, p7, p8, p9, p0 = new_preds
+        # products, mim, new_preds = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, p1, p2, p3, p4, p5, p6, p7, p8, p9, p0)
 
         if iteration % EVAL_FREQ_DEFAULT == 0:
             test_ids = np.random.choice(len(X_test), size=BATCH_SIZE_DEFAULT, replace=False)
@@ -299,13 +309,13 @@ def train():
             products, mim, new_preds = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT)
             print("loss 1: ", mim.item())
 
-            p1, p2, p3, p4, p5, p6, p7, p8, p9, p0 = new_preds
-            products, mim, new_preds = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, p1, p2, p3, p4, p5, p6, p7, p8, p9, p0)
-            print("loss 2: ", mim.item())
-
-            p1, p2, p3, p4, p5, p6, p7, p8, p9, p0 = new_preds
-            products, mim, new_preds = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, p1, p2, p3, p4, p5, p6, p7, p8, p9, p0)
-            print("loss 3: ", mim.item())
+            # p1, p2, p3, p4, p5, p6, p7, p8, p9, p0 = new_preds
+            # products, mim, new_preds = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, p1, p2, p3, p4, p5, p6, p7, p8, p9, p0)
+            # print("loss 2: ", mim.item())
+            #
+            # p1, p2, p3, p4, p5, p6, p7, p8, p9, p0 = new_preds
+            # products, mim, new_preds = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, p1, p2, p3, p4, p5, p6, p7, p8, p9, p0)
+            # print("loss 3: ", mim.item())
 
             print()
             print("iteration: ", iteration,
@@ -314,7 +324,7 @@ def train():
                   ", best loss: ", max_loss_iter,
                   ": ", max_loss)
 
-            print_info(products, targets, test_ids)
+            print_info(new_preds, targets, test_ids)
 
             test_loss = mim.item()
 
@@ -346,21 +356,20 @@ def show_mnist(first_image, w, h):
 
 def print_info(products, targets, test_ids):
     #print_dict = {"0": "", "1": "", "2": "", "3": "", "4": "", "5": "", "6": "", "7": "", "8": "", "9": ""}
-    print_dict = {1: "", 2: "", 3: "", 4: "", 5: "", 6: "", 7: "", 8: "", 9: "", 10: ""}
+    print_dict = {1: "", 2: "", 3: "", 4: "", 5: "", 6: "", 7: "", 8: "", 9: "", 0: ""}
     # print(products[0].shape)
     # input()
-    for i in range(products[0].shape[0]):
+    for i in range(len(test_ids)):
         res = ""
 
-        for specialist in products:
-
-            index = torch.round(specialist[i])
-
-            res += str(int(index.data.cpu().numpy()[0])) + " "
+        index = torch.round(products[i])
+        res += str(index.data.cpu().numpy()) + " "
 
         res += ", "
 
         label = targets[test_ids[i]]
+        if label == 10:
+            label = 0
         print_dict[label] += res
 
     for i in print_dict.keys():

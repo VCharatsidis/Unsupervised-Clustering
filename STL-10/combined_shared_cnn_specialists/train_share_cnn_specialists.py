@@ -18,7 +18,7 @@ from stl_utils import rotate, scale, to_gray, random_erease, vertical_flip
 # Default constants
 LEARNING_RATE_DEFAULT = 1e-5
 MAX_STEPS_DEFAULT = 300000
-BATCH_SIZE_DEFAULT = 105
+BATCH_SIZE_DEFAULT = 50
 EVAL_FREQ_DEFAULT = 100
 NUMBER_CLASSES = 1
 FLAGS = None
@@ -161,14 +161,6 @@ def encode_4_patches(image, colons,
             else:
                 product *= prediction
 
-                # product *= prediction
-                # product *= prediction
-                # product *= prediction
-                # product *= prediction
-                # product *= prediction
-                # product *= prediction
-                # product *= prediction
-
         products.append(product)
 
 
@@ -269,7 +261,7 @@ def train():
     predictor_model = os.path.join(script_directory, filepath)
     colons_paths.append(predictor_model)
 
-    input = 8192
+    input = 2048
     #input = 1152
 
     c = CombinedCNNSpecialists(3, input)
