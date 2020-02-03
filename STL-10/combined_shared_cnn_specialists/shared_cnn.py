@@ -123,7 +123,10 @@ class CombinedCNNSpecialists(nn.Module):
             # nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1),
             # nn.ReLU(),
             # nn.MaxPool2d(kernel_size=2, stride=max_s, padding=1),
+
         )
+
+        nn.Softmax(dim=1)
 
         self.specialist1 = CNNSpecialist(n_inputs)
         self.specialist2 = CNNSpecialist(n_inputs)

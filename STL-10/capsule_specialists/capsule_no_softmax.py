@@ -105,66 +105,27 @@ class DigitCaps(nn.Module):
         return output_tensor
 
 
-class Classifier(nn.Module):
-
-    def __init__(self, input_width=160):
-        super(Classifier, self).__init__()
-
-        self.classification_layers = nn.Sequential(
-            nn.Linear(input_width, 500),
-            nn.Tanh(),
-
-            nn.Linear(500, 10),
-            nn.Softmax(dim=1)
-        )
-
-    def forward(self, x):
-
-        classifications = self.classification_layers(x)
-
-        return classifications
-
-
-class CapsNet(nn.Module):
+class BareCapsNet(nn.Module):
     def __init__(self):
-        super(CapsNet, self).__init__()
+        super(BareCapsNet, self).__init__()
 
         self.conv_layer = ConvLayer()
         self.primary_capsules = PrimaryCaps()
         self.digit_capsules = DigitCaps()
-
-        self.classifier = Classifier()
-
+        self.softmax = nn.Softmax(dim=1)
 
     def forward(self, data):
         conv = self.conv_layer(data)
         primary = self.primary_capsules(conv)
         output = self.digit_capsules(primary)
 
-        linear = torch.flatten(output, 1)
+        output = output.squeeze()
 
-        # linear_in_0 = torch.flatten(output[:, 0, :, :], 1)
-        # linear_in_1 = torch.flatten(output[:, 1, :, :], 1)
-        # linear_in_2 = torch.flatten(output[:, 2, :, :], 1)
-        # linear_in_3 = torch.flatten(output[:, 3, :, :], 1)
-        # linear_in_4 = torch.flatten(output[:, 4, :, :], 1)
-        # linear_in_5 = torch.flatten(output[:, 5, :, :], 1)
-        # linear_in_6 = torch.flatten(output[:, 6, :, :], 1)
-        # linear_in_7 = torch.flatten(output[:, 7, :, :], 1)
-        # linear_in_8 = torch.flatten(output[:, 8, :, :], 1)
-        # linear_in_9 = torch.flatten(output[:, 9, :, :], 1)
+        squared_norm = (output ** 2).sum(dim=2, keepdim=True)
 
-        # classification1 = self.classifier1(linear_in_0)
-        # classification2 = self.classifier2(linear_in_1)
-        # classification3 = self.classifier3(linear_in_2)
-        # classification4 = self.classifier4(linear_in_3)
-        # classification5 = self.classifier5(linear_in_4)
-        # classification6 = self.classifier6(linear_in_5)
-        # classification7 = self.classifier7(linear_in_6)
-        # classification8 = self.classifier8(linear_in_7)
-        # classification9 = self.classifier9(linear_in_8)
-        # classification0 = self.classifier0(linear_in_9)
+        magnitude = torch.sqrt(squared_norm)
+        magnitude = magnitude.squeeze()
 
-        classification = self.classifier(linear)
+        classification = self.softmax(magnitude)
 
         return classification

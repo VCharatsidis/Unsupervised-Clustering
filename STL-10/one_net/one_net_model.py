@@ -72,20 +72,17 @@ class OneNet(nn.Module):
         )
 
         self.linear = nn.Sequential(
-            nn.Linear(n_inputs, 2000),
-            nn.Tanh(),
-
-            nn.Linear(2000, 2000),
+            nn.Linear(n_inputs, 1000),
             nn.Tanh(),
 
             # nn.Dropout(0.5),
-            nn.Linear(2000, 10),
-            nn.Sigmoid()
+            nn.Linear(1000, 10),
+            nn.Softmax(dim=1)
         )
 
 
 
-    def forward(self, x):#, p1, p2, p3, p4, p5, p6, p7, p8, p9, p0):
+    def forward(self, x):
         """
         Performs forward pass of the input. Here an input tensor x is transformed through
         several layer transformations.
@@ -98,8 +95,6 @@ class OneNet(nn.Module):
         conv = self.conv(x)
         conv = torch.flatten(conv, 1)
 
-        linear_input = conv # torch.cat([conv, p1, p2, p3, p4, p5, p6, p7, p8, p9, p0], 1)
-
-        preds = self.linear(linear_input)
+        preds = self.linear(conv)
 
         return preds

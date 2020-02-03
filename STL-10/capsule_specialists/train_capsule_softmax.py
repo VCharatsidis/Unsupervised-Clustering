@@ -16,10 +16,10 @@ from capsule_net import CapsNet
 import random
 
 # Default constants
-LEARNING_RATE_DEFAULT = 1e-3
+LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 300000
-BATCH_SIZE_DEFAULT = 55
-EVAL_FREQ_DEFAULT = 50
+BATCH_SIZE_DEFAULT = 40
+EVAL_FREQ_DEFAULT = 100
 NUMBER_CLASSES = 1
 FLAGS = None
 
@@ -37,42 +37,37 @@ def kl_divergence(p, q):
 
 
 def encode_4_patches(image, colons):
+    orig_image = scale(image, 50, 23, BATCH_SIZE_DEFAULT)
 
-    #split_at_pixel = 19
+    # orig_image = torch.transpose(orig_image, 1, 3)
+    # show_mnist(orig_image[0], orig_image[0].shape[1], orig_image[0].shape[2])
+    # orig_image = torch.transpose(orig_image, 1, 3)
 
-    # image = np.reshape(image, (BATCH_SIZE_DEFAULT, 1, 28, 28))
-    # image = torch.FloatTensor(image)
+    scaled_orig_image = orig_image[:, :, 23:73, 23:73]
 
-    # print(image.shape)
-    # print(image.shape[2])
-    # print(image.shape[3])
-    # input()
-    width = image.shape[2]
-    height = image.shape[3]
+    # orig_image = torch.transpose(orig_image, 1, 3)
+    # show_mnist(orig_image[0], orig_image[0].shape[1], orig_image[0].shape[2])
+    # orig_image = torch.transpose(orig_image, 1, 3)
 
-    split_at_pixel = 50
 
-    orig_image = image[:, :, 20:70, 20:70]
-    image = to_gray(orig_image, 1, BATCH_SIZE_DEFAULT)
+    augments = {0: to_gray(scaled_orig_image, 1, BATCH_SIZE_DEFAULT),
+                1: rotate(scaled_orig_image, 20, BATCH_SIZE_DEFAULT),
+                2: rotate(scaled_orig_image, -20, BATCH_SIZE_DEFAULT),
+                3: scale(scaled_orig_image, 40, 5, BATCH_SIZE_DEFAULT),
+                4: vertical_flip(scaled_orig_image, BATCH_SIZE_DEFAULT),
+                5: scale(scaled_orig_image, 30, 10, BATCH_SIZE_DEFAULT),
+                6: random_erease(scaled_orig_image, BATCH_SIZE_DEFAULT),
+                7: scaled_orig_image}
 
-    augments = {0: orig_image,
-                1: rotate(image, 20, BATCH_SIZE_DEFAULT),
-                2: rotate(image, -20, BATCH_SIZE_DEFAULT),
-                3: scale(image, 40, 5, BATCH_SIZE_DEFAULT),
-                #3: scale(image, 32, 4, BATCH_SIZE_DEFAULT),
-                4: vertical_flip(image, BATCH_SIZE_DEFAULT),
-                5: scale(image, 30, 10, BATCH_SIZE_DEFAULT),
-                #5: scale(image, 24, 8, BATCH_SIZE_DEFAULT),
-                6: random_erease(image, BATCH_SIZE_DEFAULT),
-                7: vertical_flip(image, BATCH_SIZE_DEFAULT)}
+    ids = np.random.choice(len(augments), size=3, replace=False)
 
-    ids = np.random.choice(len(augments), size=1, replace=False)
+    image_1 = augments[ids[0]]
+    image_2 = augments[ids[1]]
+    image_3 = augments[ids[2]]
 
-    image_2 = augments[ids[0]]
-
-    # image = torch.transpose(image, 1, 3)
-    # show_mnist(image[0], image[0].shape[1], image[0].shape[2])
-    # image = torch.transpose(image, 1, 3)
+    # scaled_orig_image = torch.transpose(scaled_orig_image, 1, 3)
+    # show_mnist(scaled_orig_image[0], scaled_orig_image[0].shape[1], scaled_orig_image[0].shape[2])
+    # scaled_orig_image = torch.transpose(scaled_orig_image, 1, 3)
     #
     # image_2 = torch.transpose(image_2, 1, 3)
     # show_mnist(image_2[0], image_2[0].shape[1], image_2[0].shape[2])
@@ -86,9 +81,9 @@ def encode_4_patches(image, colons):
     # show_mnist(image_1[0], image_1[0].shape[1], image_1[0].shape[2])
     # image_1 = torch.transpose(image_1, 1, 3)
 
-    image = image.to('cuda')
-    preds = colons[0](image)  # , p1, p2, p3, p4, p5, p6, p7, p8, p9, p0)
-    del image
+    image_1 = image_1.to('cuda')
+    preds = colons[0](image_1)  # , p1, p2, p3, p4, p5, p6, p7, p8, p9, p0)
+    del image_1
     torch.cuda.empty_cache()
 
     image_2 = image_2.to('cuda')
@@ -96,22 +91,10 @@ def encode_4_patches(image, colons):
     del image_2
     torch.cuda.empty_cache()
 
-    total_preds = preds * preds_2
-    total_preds = total_preds.to('cpu')
-
-
-    products = []
-    classes = 10
-    for prod in range(classes):
-        product = total_preds[:, prod].clone()
-
-        for idx in range(classes):
-            if idx != prod:
-                product *= torch.ones(total_preds[:, idx].shape) - total_preds[:, idx].clone()
-            else:
-                product *= total_preds[:, idx].clone()
-
-        products.append(product)
+    image_3 = image_3.to('cuda')
+    preds_3 = colons[0](image_3)  # , p1, p2, p3, p4, p5, p6, p7, p8, p9, p0)
+    del image_3
+    torch.cuda.empty_cache()
 
     # print(len(products))
     # print(products[0])
@@ -131,27 +114,36 @@ def encode_4_patches(image, colons):
     # show_mnist(image_4[0], image_4.shape[1], image_4.shape[2])
 
 
-    return products, total_preds
+    return preds, preds_2, preds_3
 
 
-def forward_block(X, ids, colons, optimizers, train, to_tensor_size):
+def forward_block(X, ids, colons, optimizers, train, to_tensor_size, momentum_mean_prob):
 
     x_train = X[ids, :]
 
     x_tensor = to_tensor(x_train, to_tensor_size)
 
-    images = x_tensor/255.0
+    #images = x_tensor/255.0
 
-    products, new_preds = encode_4_patches(images, colons)
+    pred_1, pred_2, pred_3 = encode_4_patches(x_tensor, colons)
 
-    total_loss = torch.zeros([1])
+    product = pred_1 * pred_2 * pred_3
+    product = product.mean(dim=0)
+    # log_product = torch.log(product)
+    # total_loss = - log_product.mean(dim=0)
 
-    for p in products:
-        mean = p.mean(dim=0)
-        log_p = -torch.log(mean)
-        total_loss += log_p
+    mean_probs = (pred_1.mean(dim=0) + pred_2.mean(dim=0) + pred_3.mean(dim=0))/3
+    betta = 0.5
+    #momentum_mean_prob = betta * momentum_mean_prob.detach() + (1 - betta) * mean_probs
 
-    total_loss /= 10
+    if not train:
+        print("mean probs", mean_probs)
+        print("product", product)
+        print("poduct/mean", product/mean_probs)
+        print("prod - mean", torch.log(product) - torch.log(mean_probs))
+
+    log_product = torch.log(product) - torch.log(mean_probs)
+    total_loss = - log_product.mean(dim=0)
 
     if train:
         torch.autograd.set_detect_anomaly(True)
@@ -164,7 +156,7 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size):
         for idx, i in enumerate(optimizers):
             i.step()
 
-    return products, total_loss, new_preds
+    return pred_1, pred_2, pred_3, momentum_mean_prob, total_loss
 
 
 def print_params(model):
@@ -201,7 +193,7 @@ def train():
     colons_paths.append(predictor_model)
 
     c = CapsNet()
-    c = c.cuda()
+    c = c.to('cuda')
     colons.append(c)
 
     optimizer = torch.optim.Adam(c.parameters(), lr=LEARNING_RATE_DEFAULT)
@@ -209,20 +201,21 @@ def train():
 
     max_loss = 10000000
     max_loss_iter = 0
+    momentum_mean_prob = (torch.ones([10]) / 10).to('cuda')
 
     for iteration in range(MAX_STEPS_DEFAULT):
 
         ids = np.random.choice(len(X_train), size=BATCH_SIZE_DEFAULT, replace=False)
 
         train = True
-        products, mim, new_preds= forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT)
+        p1, p2, p3, momentum_mean_prob, mim = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, momentum_mean_prob)
 
         if iteration % EVAL_FREQ_DEFAULT == 0:
             # print_dict = {"0": "", "1": "", "2": "", "3": "", "4": "", "5": "", "6": "", "7": "", "8": "", "9": ""}
             print_dict = {1: "", 2: "", 3: "", 4: "", 5: "", 6: "", 7: "", 8: "", 9: "", 0: ""}
 
             test_ids = np.random.choice(len(X_test), size=BATCH_SIZE_DEFAULT, replace=False)
-            products, mim, new_preds = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT)
+            p1, p2, p3, momentum_mean_prob, mim = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, momentum_mean_prob)
 
             # test_ids = np.random.choice(len(X_test), size=BATCH_SIZE_DEFAULT, replace=False)
             # products, mim = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT)
@@ -242,7 +235,7 @@ def train():
                   ", best loss: ", max_loss_iter,
                   ": ", max_loss)
 
-            print_dict = gather_data(print_dict, new_preds, targets, test_ids)
+            print_dict = gather_data(print_dict, p1, p2, p3, targets, test_ids)
             print_info(print_dict)
 
             test_loss = mim.item()
@@ -259,7 +252,6 @@ def train():
 
 
 def to_tensor(X, batch_size=BATCH_SIZE_DEFAULT):
-    #X = np.reshape(X, (batch_size, 1, 96, 96))
     with torch.no_grad():
         X = Variable(torch.FloatTensor(X))
 
@@ -272,19 +264,19 @@ def show_mnist(first_image, w, h):
     plt.imshow(pixels)
     plt.show()
 
-def gather_data(print_dict, products, targets, test_ids):
-    for i in range(len(test_ids)):
-        res = ""
+def gather_data(print_dict, p1, p2, p3, targets, test_ids):
+    print_dict = {1: "", 2: "", 3: "", 4: "", 5: "", 6: "", 7: "", 8: "", 9: "", 0: ""}
+    for i in range(p1.shape[0]):
+        val, index = torch.max(p1[i], 0)
+        val, index2 = torch.max(p2[i], 0)
 
-        index = torch.round(products[i])
-        res += str(index.data.cpu().numpy().astype(int)) + " "
-
-        res += ", "
+        string = str(index.data.cpu().numpy()) + " " + str(index2.data.cpu().numpy()) + " " + str(index2.data.cpu().numpy()) + ", "
 
         label = targets[test_ids[i]]
         if label == 10:
             label = 0
-        print_dict[label] += res
+        print_dict[label] += string
+
 
     return print_dict
 
