@@ -11,16 +11,13 @@ from torch.autograd import Variable
 import matplotlib.pyplot as plt
 
 from sklearn.datasets import fetch_openml
-from four_variate_mi import four_variate_IID_loss
-from ensemble import Ensemble
 from transform_utils import scale, rotate, random_erease, vertical_flip
-from vae_transformer import VaeDecoder, VaeEncoder
 from SocialColon import SocialColon
 
 # Default constants
 LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 30000
-BATCH_SIZE_DEFAULT = 120
+BATCH_SIZE_DEFAULT = 105
 EVAL_FREQ_DEFAULT = 200
 
 FLAGS = None
@@ -48,12 +45,20 @@ def encode_4_patches(image,
     p3 = p3.to('cuda')
     p4 = p4.to('cuda')
 
-    pred_1 = colons[0](i_1, p2, p3, p4)
-    pred_2 = colons[1](i_2, p1, p3, p4)
-    pred_3 = colons[2](i_3, p1, p2, p4)
-    pred_4 = colons[3](i_4, p1, p2, p3)
+    ids = np.random.choice(len(colons), size=4, replace=False)
 
-    return pred_1, pred_2, pred_3, pred_4, i_4
+    pred_1 = colons[ids[0]](i_1, p2, p3, p4)
+    pred_2 = colons[ids[1]](i_2, p1, p3, p4)
+    pred_3 = colons[ids[2]](i_3, p1, p2, p4)
+    pred_4 = colons[ids[3]](i_4, p1, p2, p3)
+
+    pred_5 = colons[ids[3]](i_1, p2, p3, p4)
+    pred_6 = colons[ids[2]](i_2, p1, p3, p4)
+    pred_7 = colons[ids[1]](i_3, p1, p2, p4)
+    pred_8 = colons[ids[0]](i_4, p1, p2, p3)
+
+
+    return pred_1, pred_2, pred_3, pred_4, pred_5, pred_6, pred_7, pred_8,  i_4
 
 
 def forward_block(X, ids, colons, optimizers, train, to_tensor_size):
@@ -63,11 +68,25 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size):
 
     images = x_tensor/255
 
-    pred_1, pred_2, pred_3, pred_4, i_4 = encode_4_patches(images, colons)
+    pred_1, pred_2, pred_3, pred_4, pred_5, pred_6, pred_7, pred_8, i_4 = encode_4_patches(images, colons)
 
-    product = pred_1 * pred_2 * pred_3 * pred_4
+    product = pred_1 * pred_2 * pred_3 * pred_4 * pred_5 * pred_6 * pred_7 * pred_8
+    #product = pred_1 * pred_2 * pred_3 * pred_4
     product = product.mean(dim=0)
     log_product = torch.log(product)
+
+    # mean_probs = (pred_1.mean(dim=0) + pred_2.mean(dim=0) + pred_3.mean(dim=0) + pred_4.mean(dim=0)) / 4
+    #
+    # # momentum_mean_prob = betta * momentum_mean_prob.detach() + (1 - betta) * mean_probs
+    #
+    # if not train:
+    #     print("mean probs", mean_probs)
+    #     print("product", product)
+    #     print("poduct/mean", product / mean_probs)
+    #     print("prod - mean", torch.log(product) - torch.log(mean_probs))
+    #
+    # log_product = torch.log(product) - torch.log(mean_probs)
+
     loss = - log_product.mean(dim=0)
 
     if train:
@@ -79,7 +98,7 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size):
         for i in optimizers:
             i.step()
 
-    return pred_1, pred_2, pred_3, pred_4, loss, i_4
+    return pred_1, pred_2, pred_3, pred_4, pred_5, pred_6, pred_7, pred_8, loss, i_4
 
 
 def split_image_to_4(image, vae_enc, vae_dec):
@@ -95,10 +114,11 @@ def split_image_to_4(image, vae_enc, vae_dec):
         3: vertical_flip(image, BATCH_SIZE_DEFAULT),
         4: scale(image, BATCH_SIZE_DEFAULT),
         5: random_erease(image, BATCH_SIZE_DEFAULT),
-        6: image
+        6: image,
+        7: image
     }
 
-    ids = np.random.choice(len(augments), size=4, replace=False)
+    ids = np.random.choice(len(augments), size=4, replace=True)
 
     image_1 = augments[ids[0]]
     image_2 = augments[ids[1]]
@@ -153,11 +173,12 @@ def second_guess(X, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, p1, p2, 
     # pred_1, pred_2, pred_3 = encode_3_patches(images, colons)
     # loss = three_variate_IID_loss(pred_1, pred_2, pred_3)
 
-    pred_1, pred_2, pred_3, pred_4, i_4 = encode_4_patches(images, colons, p1, p2, p3, p4)
+    pred_1, pred_2, pred_3, pred_4, pred_5, pred_6, pred_7, pred_8, i_4 = encode_4_patches(images, colons, p1, p2, p3, p4)
 
-    product = pred_1 * pred_2 * pred_3 * pred_4
+    product = pred_1 * pred_2 * pred_3 * pred_4 * pred_5 * pred_6 * pred_7 * pred_8
+    #product = pred_1 * pred_2 * pred_3 * pred_4
     product = product.mean(dim=0)
-    log_product = torch.log(product) #+ 2.3
+    log_product = torch.log(product)
     loss = - log_product.mean(dim=0)
 
     if train:
@@ -169,7 +190,7 @@ def second_guess(X, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, p1, p2, 
         for i in optimizers:
             i.step()
 
-    return pred_1, pred_2, pred_3, pred_4, loss, i_4
+    return pred_1, pred_2, pred_3, pred_4, pred_5, pred_6, pred_7, pred_8, loss, i_4
 
 
 def train():
@@ -250,14 +271,16 @@ def train():
         ids = np.random.choice(len(X_train), size=BATCH_SIZE_DEFAULT, replace=False)
 
         train = True
-        p1, p2, p3, p4, mim, i_4 = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT)
-        # p1, p2, p3, p4, mim, i_4 = second_guess(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, p1, p2, p3, p4)
+        p1, p2, p3, p4, p5, p6, p7, p8, mim, i_4 = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT)
+        p1, p2, p3, p4, p5, p6, p7, p8, mim, i_4 = second_guess(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, p1, p2, p3, p4)
         # p1, p2, p3, p4, mim, i_4 = second_guess(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, p1, p2, p3, p4)
 
         if iteration % EVAL_FREQ_DEFAULT == 0:
             test_ids = np.random.choice(len(X_test), size=BATCH_SIZE_DEFAULT, replace=False)
-            p1, p2, p3, p4, mim, i_4 = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT)
-            # p1, p2, p3, p4, mim, i_4 = second_guess(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, p1, p2, p3, p4)
+            p1, p2, p3, p4, p5, p6, p7, p8, mim, i_4 = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT)
+            print("loss 1", mim.item())
+            p1, p2, p3, p4, p5, p6, p7, p8, mim, i_4 = second_guess(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, p1, p2, p3, p4)
+            print("loss 2", mim.item())
             # p1, p2, p3, p4, mim, i_4 = second_guess(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, p1, p2, p3, p4)
 
             # if iteration > 1200:
@@ -306,8 +329,15 @@ def train():
                 val, index3 = torch.max(p3[i], 0)
                 val, index4 = torch.max(p4[i], 0)
 
-                string = str(index.data.cpu().numpy())+" "+ str(index2.data.cpu().numpy()) + " "+\
-                         str(index3.data.cpu().numpy())+" "+ str(index4.data.cpu().numpy()) +", "
+                val, index5 = torch.max(p5[i], 0)
+                val, index6 = torch.max(p6[i], 0)
+                val, index7 = torch.max(p7[i], 0)
+                val, index8 = torch.max(p8[i], 0)
+
+                string = str(index.data.cpu().numpy())+" "+ str(index2.data.cpu().numpy()) + " " + \
+                         str(index3.data.cpu().numpy()) + " " + str(index4.data.cpu().numpy()) + " " +\
+                         str(index5.data.cpu().numpy()) + " " + str(index6.data.cpu().numpy()) + " " +\
+                         str(index7.data.cpu().numpy()) + " " + str(index8.data.cpu().numpy()) + ", "
 
                 print_dict[targets[test_ids[i]]] += string
 
@@ -319,6 +349,8 @@ def train():
 
             if max_loss > test_loss:
                 max_loss = test_loss
+                measure_accuracy(X_test, colons, targets)
+                measure_acc_augments(X_test, colons, targets)
                 print("models saved iter: " + str(iteration))
                 # for i in range(number_colons):
                 #     torch.save(colons[i], colons_paths[i])
@@ -326,6 +358,149 @@ def train():
             print("test loss " + str(test_loss))
             print("")
 
+def measure_acc_block(X_test, test_ids, colons, BATCH_SIZE_DEFAULT,
+                     p1=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
+                     p2=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
+                     p3=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
+                     p4=torch.zeros([BATCH_SIZE_DEFAULT, 10])):
+
+    x_train = X_test[test_ids, :]
+
+    image = to_Tensor(x_train, BATCH_SIZE_DEFAULT)
+    image = image.to('cuda')
+
+    p1 = p1.to('cuda')
+    p2 = p2.to('cuda')
+    p3 = p3.to('cuda')
+    p4 = p4.to('cuda')
+
+    ids = np.random.choice(len(colons), size=4, replace=False)
+
+    pred_1 = colons[ids[0]](image, p2, p3, p4)
+    pred_2 = colons[ids[1]](image, p1, p3, p4)
+    pred_3 = colons[ids[2]](image, p1, p2, p4)
+    pred_4 = colons[ids[3]](image, p1, p2, p3)
+
+    product = pred_1 * pred_2 * pred_3 * pred_4
+    product = product.mean(dim=0)
+    log_product = torch.log(product)
+
+    # mean_probs = (pred_1.mean(dim=0) + pred_2.mean(dim=0) + pred_3.mean(dim=0) + pred_4.mean(dim=0)) / 4
+    #
+    # # momentum_mean_prob = betta * momentum_mean_prob.detach() + (1 - betta) * mean_probs
+    #
+    # if not train:
+    #     print("mean probs", mean_probs)
+    #     print("product", product)
+    #     print("poduct/mean", product / mean_probs)
+    #     print("prod - mean", torch.log(product) - torch.log(mean_probs))
+    #
+    # log_product = torch.log(product) - torch.log(mean_probs)
+
+    loss = - log_product.mean(dim=0)
+
+    return pred_1, pred_2, pred_3, pred_4, loss
+
+
+def measure_acc_augments(X_test, colons, targets):
+    print_dict = {"0": [], "1": [], "2": [], "3": [], "4": [], "5": [], "6": [], "7": [], "8": [], "9": []}
+    runs = 80
+    avg_loss = 0
+    for j in range(runs):
+        test_ids = range(j * BATCH_SIZE_DEFAULT, (j + 1) * BATCH_SIZE_DEFAULT)
+        optimizers = []
+        p1, p2, p3, p4, p5, p6, p7, p8, mim, _ = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT)
+        p1, p2, p3, p4, p5, p6, p7, p8, mim, _ = second_guess(X_test, test_ids, colons,  optimizers, False, BATCH_SIZE_DEFAULT, p1, p2, p3, p4)
+        avg_loss += mim.item()
+        for i in range(p1.shape[0]):
+            val, index = torch.max(p1[i], 0)
+            val, index2 = torch.max(p2[i], 0)
+            val, index3 = torch.max(p3[i], 0)
+            val, index4 = torch.max(p4[i], 0)
+
+            preds = [index.data.cpu().numpy(), index2.data.cpu().numpy(), index3.data.cpu().numpy(),
+                     index4.data.cpu().numpy()]
+            preds = list(preds)
+            preds = [int(x) for x in preds]
+            # print(preds)
+            verdict = most_frequent(preds)
+
+            # print("verdict", verdict)
+            # print("target", targets[test_ids[i]])
+            # input()
+            print_dict[targets[test_ids[i]]].append(verdict)
+
+    total_miss = 0
+    for element in print_dict.keys():
+        length = len(print_dict[element])
+        misses = miss_classifications(print_dict[element])
+        total_miss += misses
+
+    print()
+    print("avg loss: ", avg_loss / runs)
+    print("AUGMENTS miss: ", total_miss)
+    print("AUGMENTS datapoints: ", runs * BATCH_SIZE_DEFAULT)
+    print("AUGMENTS miss percentage: ", total_miss / (runs * BATCH_SIZE_DEFAULT))
+    print()
+
+def measure_accuracy(X_test, colons, targets):
+    print_dict = {"0": [], "1": [], "2": [], "3": [], "4": [], "5": [], "6": [], "7": [], "8": [], "9": []}
+    runs = 80
+    avg_loss = 0
+    for j in range(runs):
+        test_ids = range(j*BATCH_SIZE_DEFAULT, (j+1)*BATCH_SIZE_DEFAULT)
+
+        p1, p2, p3, p4, mim = measure_acc_block(X_test, test_ids, colons, BATCH_SIZE_DEFAULT)
+        p1, p2, p3, p4, mim = measure_acc_block(X_test, test_ids, colons, BATCH_SIZE_DEFAULT, p1, p2, p3, p4)
+        avg_loss += mim.item()
+        for i in range(p1.shape[0]):
+
+            val, index = torch.max(p1[i], 0)
+            val, index2 = torch.max(p2[i], 0)
+            val, index3 = torch.max(p3[i], 0)
+            val, index4 = torch.max(p4[i], 0)
+
+            preds = [index.data.cpu().numpy(), index2.data.cpu().numpy(), index3.data.cpu().numpy(), index4.data.cpu().numpy()]
+            preds = list(preds)
+            preds = [int(x) for x in preds]
+            #print(preds)
+            verdict = most_frequent(preds)
+
+            # print("verdict", verdict)
+            # print("target", targets[test_ids[i]])
+            # input()
+            print_dict[targets[test_ids[i]]].append(verdict)
+
+    total_miss = 0
+    for element in print_dict.keys():
+        print(element)
+        length = len(print_dict[element])
+        print("length", length)
+        print("most frequent: ", most_frequent(print_dict[element]))
+        misses = miss_classifications(print_dict[element])
+        total_miss += misses
+        print("miss classifications: ", misses)
+
+        print("miss percentage", misses/length)
+        print()
+
+    print("avg loss: ", avg_loss/runs)
+    print("TOTAL miss: ", total_miss)
+    print("TOTAL datapoints: ", runs*BATCH_SIZE_DEFAULT)
+    print("TOTAL miss percentage: ", total_miss/(runs*BATCH_SIZE_DEFAULT))
+
+
+def miss_classifications(cluster):
+    mfe = most_frequent(cluster)
+    missclassifications = 0
+    for j in cluster:
+        if j != mfe:
+            missclassifications += 1
+
+    return missclassifications
+
+def most_frequent(List):
+    return max(set(List), key=List.count)
 
 def to_Tensor(X, batch_size=BATCH_SIZE_DEFAULT):
     X = np.reshape(X, (batch_size, 1, 28, 28))

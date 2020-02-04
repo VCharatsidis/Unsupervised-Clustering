@@ -42,11 +42,11 @@ class SocialColon(nn.Module):
         )
 
         self.linear = nn.Sequential(
-            # nn.Dropout(0.5),
+            #nn.Dropout(0.6),
             nn.Linear(n_inputs, 1000),
             nn.Tanh(),
 
-            nn.Dropout(0.5),
+            #nn.Dropout(0.6),
             nn.Linear(1000, 10)
         )
 
