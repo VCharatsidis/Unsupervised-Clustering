@@ -43,9 +43,9 @@ class OneNet(nn.Module):
             nn.BatchNorm2d(256),
             nn.ReLU(),
 
-            nn.Conv2d(256, 256, kernel_size=(3, 3), stride=1, padding=1),
-            nn.BatchNorm2d(256),
-            nn.ReLU(),
+            # nn.Conv2d(256, 256, kernel_size=(3, 3), stride=1, padding=1),
+            # nn.BatchNorm2d(256),
+            # nn.ReLU(),
 
             nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1),
 
@@ -53,22 +53,22 @@ class OneNet(nn.Module):
             nn.BatchNorm2d(512),
             nn.ReLU(),
 
-            nn.Conv2d(512, 512, kernel_size=(3, 3), stride=1, padding=1),
-            nn.BatchNorm2d(512),
-            nn.ReLU(),
+            # nn.Conv2d(512, 512, kernel_size=(3, 3), stride=1, padding=1),
+            # nn.BatchNorm2d(512),
+            # nn.ReLU(),
 
             nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1),
 
-            nn.Conv2d(512, 512, kernel_size=(3, 3), stride=1, padding=1),
-            nn.BatchNorm2d(512),
-            nn.ReLU(),
-
-            nn.Conv2d(512, 512, kernel_size=(3, 3), stride=1, padding=1),
-            nn.BatchNorm2d(512),
-            nn.ReLU(),
-
-            nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1),
-            nn.AvgPool2d(kernel_size=(1, 1), stride=1, padding=0),
+            # nn.Conv2d(512, 512, kernel_size=(3, 3), stride=1, padding=1),
+            # nn.BatchNorm2d(512),
+            # nn.ReLU(),
+            #
+            # nn.Conv2d(512, 512, kernel_size=(3, 3), stride=1, padding=1),
+            # nn.BatchNorm2d(512),
+            # nn.ReLU(),
+            #
+            # nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1),
+            # nn.AvgPool2d(kernel_size=(1, 1), stride=1, padding=0),
         )
 
         self.linear = nn.Sequential(
