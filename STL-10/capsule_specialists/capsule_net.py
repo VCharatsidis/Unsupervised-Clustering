@@ -11,7 +11,7 @@ class ConvLayer(nn.Module):
         super(ConvLayer, self).__init__()
 
         self.conv = nn.Sequential(
-            nn.Conv2d(in_channels, 128, kernel_size=9, stride=1, padding=0),
+            nn.Conv2d(in_channels, 64, kernel_size=9, stride=1, padding=0),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=(2, 2), stride=2, padding=1),
         )
@@ -22,7 +22,7 @@ class ConvLayer(nn.Module):
 
 class PrimaryCaps(nn.Module):
 
-    def __init__(self, num_capsules=8, in_channels=128, out_channels=16, kernel_size=9, num_routes=16 * 7 * 7):
+    def __init__(self, num_capsules=8, in_channels=64, out_channels=16, kernel_size=9, num_routes=16 * 7 * 7):
         super(PrimaryCaps, self).__init__()
 
         self.num_capsules = num_capsules

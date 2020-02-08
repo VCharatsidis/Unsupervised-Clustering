@@ -29,36 +29,53 @@ class OneNet(nn.Module):
         super(OneNet, self).__init__()
 
         self.conv = nn.Sequential(
-            nn.Conv2d(n_channels, 64, kernel_size=(3, 3), stride=1, padding=1),
-            nn.BatchNorm2d(64),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1),
+            nn.Conv2d(n_channels, 64, kernel_size=3, stride=1, padding=1),
+            nn.Tanh(),
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
+            #
+            nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
+            nn.Tanh(),
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
+            #
+            nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
+            nn.Tanh(),
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
 
-            nn.Conv2d(64, 128, kernel_size=(3, 3), stride=1, padding=1),
-            nn.BatchNorm2d(128),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1),
+            nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1),
+            nn.Tanh(),
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
 
-            nn.Conv2d(128, 256, kernel_size=(3, 3), stride=1, padding=1),
-            nn.BatchNorm2d(256),
-            nn.ReLU(),
 
+            # nn.Conv2d(n_channels, 64, kernel_size=(3, 3), stride=1, padding=1),
+            # nn.BatchNorm2d(64),
+            # nn.ReLU(),
+            # nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1),
+            #
+            # nn.Conv2d(64, 128, kernel_size=(3, 3), stride=1, padding=1),
+            # nn.BatchNorm2d(128),
+            # nn.ReLU(),
+            # nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1),
+            #
+            # nn.Conv2d(128, 256, kernel_size=(3, 3), stride=1, padding=1),
+            # nn.BatchNorm2d(256),
+            # nn.ReLU(),
+            #
             # nn.Conv2d(256, 256, kernel_size=(3, 3), stride=1, padding=1),
             # nn.BatchNorm2d(256),
             # nn.ReLU(),
-
-            nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1),
-
-            nn.Conv2d(256, 512, kernel_size=(3, 3), stride=1, padding=1),
-            nn.BatchNorm2d(512),
-            nn.ReLU(),
-
+            #
+            # nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1),
+            #
+            # nn.Conv2d(256, 512, kernel_size=(3, 3), stride=1, padding=1),
+            # nn.BatchNorm2d(512),
+            # nn.ReLU(),
+            #
             # nn.Conv2d(512, 512, kernel_size=(3, 3), stride=1, padding=1),
             # nn.BatchNorm2d(512),
             # nn.ReLU(),
-
-            nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1),
-
+            #
+            # nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1),
+            #
             # nn.Conv2d(512, 512, kernel_size=(3, 3), stride=1, padding=1),
             # nn.BatchNorm2d(512),
             # nn.ReLU(),
@@ -72,17 +89,18 @@ class OneNet(nn.Module):
         )
 
         self.linear = nn.Sequential(
+
             nn.Linear(n_inputs, 1000),
             nn.Tanh(),
 
-            # nn.Dropout(0.5),
+
             nn.Linear(1000, 10),
             nn.Softmax(dim=1)
         )
 
 
 
-    def forward(self, x):
+    def forward(self, x, p1, p2, p3):
         """
         Performs forward pass of the input. Here an input tensor x is transformed through
         several layer transformations.
@@ -95,6 +113,8 @@ class OneNet(nn.Module):
         conv = self.conv(x)
         conv = torch.flatten(conv, 1)
 
-        preds = self.linear(conv)
+        linear_input = torch.cat([conv, p1, p2, p3], 1)
+
+        preds = self.linear(linear_input)
 
         return preds

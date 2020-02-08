@@ -17,7 +17,7 @@ import random
 # Default constants
 LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 30000
-BATCH_SIZE_DEFAULT = 150
+BATCH_SIZE_DEFAULT = 110
 EVAL_FREQ_DEFAULT = 200
 
 FLAGS = None
@@ -31,12 +31,7 @@ def multi_filter_flatten(out):
     return out.view(out.shape[0], out.shape[1], -1)
 
 
-def encode_4_patches(image,
-                     colons,
-                     p1=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
-                     p2=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
-                     p3=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
-                     p4=torch.zeros([BATCH_SIZE_DEFAULT, 10])):
+def encode_4_patches(image, colons, p1, p2, p3, p4):
 
     replace = True
     if random.uniform(0, 1) > 0.5:
@@ -49,7 +44,7 @@ def encode_4_patches(image,
     p3 = p3.to('cuda')
     p4 = p4.to('cuda')
 
-    ids = np.random.choice(len(colons), size=4, replace=not replace)
+    ids = np.random.choice(len(colons), size=4, replace=False)
 
     pred_1 = colons[ids[0]](i_1, p2, p3, p4)
     pred_2 = colons[ids[1]](i_2, p1, p3, p4)
@@ -64,31 +59,27 @@ def encode_4_patches(image,
     return pred_1, pred_2, pred_3, pred_4, i_4
 
 
-def forward_block(X, ids, colons, optimizers, train, to_tensor_size):
+def forward_block(X, ids, colons, optimizers, train, to_tensor_size, mean,
+                     p1=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
+                     p2=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
+                     p3=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
+                     p4=torch.zeros([BATCH_SIZE_DEFAULT, 10])):
+
     x_train = X[ids, :]
 
     x_tensor = to_Tensor(x_train, to_tensor_size)
 
     images = x_tensor/255
 
-    pred_1, pred_2, pred_3, pred_4, i_4 = encode_4_patches(images, colons)
+    pred_1, pred_2, pred_3, pred_4, i_4 = encode_4_patches(images, colons, p1, p2, p3, p4)
 
     product = pred_1 * pred_2 * pred_3 * pred_4
-    product = product.mean(dim=0)
-    log_product = torch.log(product)
+    product_batch_mean = product.mean(dim=0)
 
-    # mean_probs = (pred_1.mean(dim=0) + pred_2.mean(dim=0) + pred_3.mean(dim=0) + pred_4.mean(dim=0)) / 4
-    #
-    # # momentum_mean_prob = betta * momentum_mean_prob.detach() + (1 - betta) * mean_probs
-    #
-    # if not train:
-    #     print("mean probs", mean_probs)
-    #     print("product", product)
-    #     print("poduct/mean", product / mean_probs)
-    #     print("prod - mean", torch.log(product) - torch.log(mean_probs))
-    #
-    # log_product = torch.log(product) - torch.log(mean_probs)
-
+    # coeff = 0.95
+    # mean = coeff * mean.detach() + (1 - coeff) * product_batch_mean.detach()
+    # product_batch_mean[(mean > 0.12).data] = 1
+    log_product = torch.log(product_batch_mean)
     loss = - log_product.mean(dim=0)
 
     if train:
@@ -100,7 +91,7 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size):
         for i in optimizers:
             i.step()
 
-    return pred_1, pred_2, pred_3, pred_4, loss, i_4
+    return pred_1, pred_2, pred_3, pred_4, loss, mean
 
 
 def split_image_to_4(image, vae_enc, vae_dec, replace):
@@ -113,13 +104,13 @@ def split_image_to_4(image, vae_enc, vae_dec, replace):
         0: rotate(image, 20, BATCH_SIZE_DEFAULT),
         1: rotate(image, -20, BATCH_SIZE_DEFAULT),
         2: scale(image, BATCH_SIZE_DEFAULT),
-        3: vertical_flip(image, BATCH_SIZE_DEFAULT),
-        4: scale(image, BATCH_SIZE_DEFAULT),
-        5: random_erease(image, BATCH_SIZE_DEFAULT),
-        6: image,
+
+        3: scale(image, BATCH_SIZE_DEFAULT),
+        4: random_erease(image, BATCH_SIZE_DEFAULT),
+        5: image
     }
 
-    ids = np.random.choice(len(augments), size=4, replace=replace)
+    ids = np.random.choice(len(augments), size=4, replace=False)
 
     image_1 = augments[ids[0]]
     image_2 = augments[ids[1]]
@@ -163,36 +154,6 @@ def print_params(model):
     for param in model.parameters():
         print(param.data)
 
-
-def second_guess(X, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, p1, p2, p3, p4):
-    x_train = X[ids, :]
-
-    x_tensor = to_Tensor(x_train, BATCH_SIZE_DEFAULT)
-
-    images = x_tensor / 255
-
-    # pred_1, pred_2, pred_3 = encode_3_patches(images, colons)
-    # loss = three_variate_IID_loss(pred_1, pred_2, pred_3)
-
-    pred_1, pred_2, pred_3, pred_4, i_4 = encode_4_patches(images, colons, p1, p2, p3, p4)
-
-    product = pred_1 * pred_2 * pred_3 * pred_4
-    product = product.mean(dim=0)
-    log_product = torch.log(product)
-    loss = - log_product.mean(dim=0)
-
-    if train:
-        for i in optimizers:
-            i.zero_grad()
-
-        loss.backward(retain_graph=True)
-
-        for i in optimizers:
-            i.step()
-
-    return pred_1, pred_2, pred_3, pred_4, loss, i_4
-
-
 def train():
     mnist = fetch_openml('mnist_784', version=1, cache=True)
     targets = mnist.target[60000:]
@@ -217,7 +178,7 @@ def train():
 
     #four_split = 3200
     preds = 30
-    two_split = 8222
+    two_split = 6430
 
     #two_split_3_conv = 3840
 
@@ -266,21 +227,24 @@ def train():
 
     max_loss = 1999
     max_loss_iter = 0
+    mean = torch.zeros(10)
 
     for iteration in range(MAX_STEPS_DEFAULT):
 
         ids = np.random.choice(len(X_train), size=BATCH_SIZE_DEFAULT, replace=False)
 
         train = True
-        p1, p2, p3, p4, mim, i_4 = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT)
-        p1, p2, p3, p4, mim, i_4 = second_guess(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, p1, p2, p3, p4)
+        p1, p2, p3, p4, mim, mean = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, mean)
+        p1, p2, p3, p4, mim, mean = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, mean , p1, p2, p3, p4)
         # p1, p2, p3, p4, mim, i_4 = second_guess(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, p1, p2, p3, p4)
 
         if iteration % EVAL_FREQ_DEFAULT == 0:
             test_ids = np.random.choice(len(X_test), size=BATCH_SIZE_DEFAULT, replace=False)
-            p1, p2, p3, p4, mim, i_4 = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT)
+            p1, p2, p3, p4, mim, mean = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, mean)
+            print("mean: ", mean)
             print("loss 1", mim.item())
-            p1, p2, p3, p4, mim, i_4 = second_guess(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, p1, p2, p3, p4)
+            p1, p2, p3, p4, mim, mean = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, mean, p1, p2, p3, p4)
+            print("mean: ", mean)
             print("loss 2", mim.item())
             # p1, p2, p3, p4, mim, i_4 = second_guess(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, p1, p2, p3, p4)
 
@@ -350,7 +314,7 @@ def train():
             if max_loss > test_loss:
                 max_loss_iter = iteration
                 max_loss = test_loss
-                measure_accuracy(X_test, colons, targets)
+                #measure_accuracy(X_test, colons, targets)
                 measure_acc_augments(X_test, colons, targets)
                 print("models saved iter: " + str(iteration))
                 # for i in range(number_colons):
@@ -405,14 +369,18 @@ def measure_acc_block(X_test, test_ids, colons, BATCH_SIZE_DEFAULT,
 
 def measure_acc_augments(X_test, colons, targets):
     print_dict = {"0": [], "1": [], "2": [], "3": [], "4": [], "5": [], "6": [], "7": [], "8": [], "9": []}
-    runs = 10000//BATCH_SIZE_DEFAULT - 1
+    runs = 10000//BATCH_SIZE_DEFAULT
     avg_loss = 0
+
+    mean = torch.zeros(10)
+    mean = mean / 10
+    #mean = mean.to('cuda')
 
     for j in range(runs):
         test_ids = range(j * BATCH_SIZE_DEFAULT, (j + 1) * BATCH_SIZE_DEFAULT)
         optimizers = []
-        p1, p2, p3, p4, mim, _ = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT)
-        p1, p2, p3, p4, mim, _ = second_guess(X_test, test_ids, colons,  optimizers, False, BATCH_SIZE_DEFAULT, p1, p2, p3, p4)
+        p1, p2, p3, p4, mim, mean = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, mean)
+        p1, p2, p3, p4, mim, mean = forward_block(X_test, test_ids, colons,  optimizers, False, BATCH_SIZE_DEFAULT, mean, p1, p2, p3, p4)
         avg_loss += mim.item()
         for i in range(p1.shape[0]):
             val, index = torch.max(p1[i], 0)

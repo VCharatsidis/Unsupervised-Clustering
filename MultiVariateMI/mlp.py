@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch
 
 
-class ColonMVMI(nn.Module):
+class ColonMLP(nn.Module):
     """
     This class implements a Multi-layer Perceptron in PyTorch.
     It handles the different layers and parameters of the model.
@@ -25,32 +25,18 @@ class ColonMVMI(nn.Module):
                      This number is required in order to specify the
                      output dimensions of the MLP
         """
-        super(ColonMVMI, self).__init__()
+        super(ColonMLP, self).__init__()
 
-        self.conv = nn.Sequential(
-            nn.Conv2d(n_channels, 64, kernel_size=3, stride=1, padding=1),
+        self.linear = nn.Sequential(
+
+            nn.Linear(n_inputs, 500),
             nn.Tanh(),
-            #nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
-            #
-            nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
-            nn.Tanh(),
-            # nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
-            # #
-            # nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
-            # nn.Tanh(),
-            # nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
+
+
+            nn.Linear(500, 10)
         )
 
-        # self.linear = nn.Sequential(
-        #     nn.Dropout(0.5),
-        #     nn.Linear(n_inputs, 500),
-        #     nn.Tanh(),
-        #
-        #     nn.Dropout(0.5),
-        #     nn.Linear(500, 10)
-        # )
-        #
-        # self.softmax = nn.Softmax(dim=1)
+        self.softmax = nn.Softmax(dim=1)
 
     def forward(self, x):
         """
@@ -62,10 +48,7 @@ class ColonMVMI(nn.Module):
           out: outputs of the network
         """
 
-        conv = self.conv(x)
-        conv = torch.flatten(conv, 1)
+        logits = self.linear(x)
+        out = self.softmax(logits)
 
-        # logits = self.linear(conv)
-        # out = self.softmax(logits)
-
-        return conv
+        return out

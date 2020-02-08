@@ -5,15 +5,16 @@ import numpy as np
 from torch.autograd import Variable
 import torch
 from RandomErase import RandomErasing
-BATCH_SIZE_DEFAULT = 300
 
-def to_Tensor(X, batch_size=BATCH_SIZE_DEFAULT):
+
+def to_Tensor(X, batch_size):
     X = np.reshape(X, (batch_size, 1, 28, 28))
     X = Variable(torch.FloatTensor(X))
 
     return X
 
-def rotate(X, degrees, batch_size=BATCH_SIZE_DEFAULT):
+
+def rotate(X, degrees, batch_size):
     X_copy = copy.deepcopy(X)
     X_copy = to_Tensor(X_copy, batch_size)
 
@@ -27,7 +28,7 @@ def rotate(X, degrees, batch_size=BATCH_SIZE_DEFAULT):
     return X_copy
 
 
-def scale(X, batch_size=BATCH_SIZE_DEFAULT):
+def scale(X, batch_size):
     X_copy = copy.deepcopy(X)
     X_copy = to_Tensor(X_copy, batch_size)
     size = 20
@@ -47,7 +48,7 @@ def scale(X, batch_size=BATCH_SIZE_DEFAULT):
     return X_copy
 
 
-def random_erease(X, batch_size=BATCH_SIZE_DEFAULT):
+def random_erease(X, batch_size):
     X_copy = copy.deepcopy(X)
     X_copy = to_Tensor(X_copy, batch_size)
 
@@ -61,7 +62,7 @@ def random_erease(X, batch_size=BATCH_SIZE_DEFAULT):
     return X_copy
 
 
-def vertical_flip(X, batch_size=BATCH_SIZE_DEFAULT):
+def vertical_flip(X):
     X_copy = copy.deepcopy(X)
     X_copy = Variable(torch.FloatTensor(X_copy))
 

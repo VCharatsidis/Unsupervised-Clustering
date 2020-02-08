@@ -20,7 +20,7 @@ import torchvision
 # Default constants
 LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 300000
-BATCH_SIZE_DEFAULT = 120
+BATCH_SIZE_DEFAULT = 140
 EVAL_FREQ_DEFAULT = 100
 NUMBER_CLASSES = 1
 FLAGS = None
@@ -38,7 +38,12 @@ def kl_divergence(p, q):
     return torch.nn.functional.kl_div(p, q)
 
 
-def encode_4_patches(image, colons, replace):
+def encode_4_patches(image, colons, replace,
+                     p1=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
+                     p2=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
+                     p3=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
+                     p4=torch.zeros([BATCH_SIZE_DEFAULT, 10])):
+
     original_image = scale(image, 30, 33, BATCH_SIZE_DEFAULT)
     original_image = original_image[:, :, 33:63, 33:63]
 
@@ -82,10 +87,10 @@ def encode_4_patches(image, colons, replace):
     # show_mnist(image_5[0], image_5[0].shape[1], image_5[0].shape[2])
     # image_5 = torch.transpose(image_5, 1, 3)
 
-    # p1 = p1.cuda()
-    # p2 = p2.cuda()
-    # p3 = p3.cuda()
-    # p4 = p4.cuda()
+    p1 = p1.cuda()
+    p2 = p2.cuda()
+    p3 = p3.cuda()
+    p4 = p4.cuda()
     # p5 = p5.cuda()
     # p6 = p6.cuda()
     # p7 = p7.cuda()
@@ -95,22 +100,22 @@ def encode_4_patches(image, colons, replace):
     c_i = np.random.choice(len(colons), size=4, replace=not replace)
 
     image_1 = image_1.to('cuda')
-    preds_1 = colons[c_i[0]](image_1)
+    preds_1 = colons[c_i[0]](image_1, p2, p3, p4)
     del image_1
     torch.cuda.empty_cache()
 
     image_2 = image_2.to('cuda')
-    preds_2 = colons[c_i[1]](image_2)
+    preds_2 = colons[c_i[1]](image_2, p1, p3, p4)
     del image_2
     torch.cuda.empty_cache()
 
     image_3 = image_3.to('cuda')
-    preds_3 = colons[c_i[2]](image_3)
+    preds_3 = colons[c_i[2]](image_3, p1, p2, p4)
     del image_3
     torch.cuda.empty_cache()
 
     image_4 = image_4.to('cuda')
-    preds_4 = colons[c_i[3]](image_4)
+    preds_4 = colons[c_i[3]](image_4, p1, p2, p3)
     del image_4
     torch.cuda.empty_cache()
 
@@ -134,7 +139,13 @@ def encode_4_patches(image, colons, replace):
     return preds_1, preds_2, preds_3, preds_4
 
 
-def forward_block(X, ids, colons, optimizers, train, to_tensor_size):
+def forward_block(X, ids, colons, optimizers, train, to_tensor_size,
+                p1 = torch.zeros([BATCH_SIZE_DEFAULT, 10]),
+                     p2 = torch.zeros([BATCH_SIZE_DEFAULT, 10]),
+                          p3 = torch.zeros([BATCH_SIZE_DEFAULT, 10]),
+                               p4 = torch.zeros([BATCH_SIZE_DEFAULT, 10])
+
+                            ):
 
     x_train = X[ids, :]
     x_tensor = to_tensor(x_train, to_tensor_size)
@@ -145,7 +156,7 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size):
     if random.uniform(0, 1) > 0.5:
         replace = False
 
-    preds_1, preds_2, preds_3, preds_4 = encode_4_patches(images, colons, replace)
+    preds_1, preds_2, preds_3, preds_4 = encode_4_patches(images, colons, replace, p1, p2, p3, p4)
     product = preds_1 * preds_2 * preds_3 * preds_4
     product = product.mean(dim=0)
     log_product = torch.log(product)
@@ -252,11 +263,12 @@ def measure_acc_augments(X_test, colons, targets):
               ", miss percentage: ",
               misses / length)
 
+
     print()
-    print("avg loss: ", avg_loss / runs)
-    print("AUGMENTS miss: ", total_miss)
-    print("AUGMENTS datapoints: ", runs * BATCH_SIZE_DEFAULT)
-    print("AUGMENTS miss percentage: ", total_miss / (runs * BATCH_SIZE_DEFAULT))
+    print("AUGMENTS avg loss: ", avg_loss / runs,
+          " miss: ", total_miss,
+          " data: ", runs * BATCH_SIZE_DEFAULT,
+          " miss percent: ", total_miss / (runs * BATCH_SIZE_DEFAULT))
     print()
 
 
@@ -360,7 +372,7 @@ def train():
     predictor_model = os.path.join(script_directory, filepath)
     colons_paths.append(predictor_model)
 
-    input = 2048
+    input = 4638
     #input = 1152
 
     c = OneNet(3, input)
@@ -393,6 +405,7 @@ def train():
 
     max_loss = 1999
     max_loss_iter = 0
+    description = ""
 
     for iteration in range(MAX_STEPS_DEFAULT):
 
@@ -400,19 +413,24 @@ def train():
 
         train = True
         p1, p2, p3, p4, mim = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT)
+        p1, p2, p3, p4, mim = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, p1, p2, p3, p4)
 
         if iteration % EVAL_FREQ_DEFAULT == 0:
             test_ids = np.random.choice(len(X_test), size=BATCH_SIZE_DEFAULT, replace=False)
-
+            print()
             p1, p2, p3, p4, mim = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT)
             print("loss 1: ", mim.item())
+            p1, p2, p3, p4, mim = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, p1, p2, p3, p4)
+            print("loss 2: ", mim.item())
 
-            print()
+
             print("iteration: ", iteration,
                   ", batch size: ", BATCH_SIZE_DEFAULT,
                   ", lr: ", LEARNING_RATE_DEFAULT,
                   ", best loss: ", max_loss_iter,
                   ": ", max_loss)
+            print("description: ", description)
+
 
             print_info(p1, p2, p3, p4, targets, test_ids)
 
@@ -422,7 +440,9 @@ def train():
                 max_loss = test_loss
                 max_loss_iter = iteration
                 #measure_accuracy(X_test, colons, targets)
+
                 measure_acc_augments(X_test, colons, targets)
+                print(colons[0])
 
                 print("models saved iter: " + str(iteration))
                 # for i in range(number_colons):

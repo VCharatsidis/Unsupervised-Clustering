@@ -15,15 +15,16 @@ from multi_variate_mi import three_variate_IID_loss
 from ensemble import Ensemble
 from four_variate_mi import four_variate_IID_loss
 from mutual_info import IID_loss
-
+from mlp import ColonMLP
+import sys
 from colon_mvmi import ColonMVMI
 
 # Default constants
-LEARNING_RATE_DEFAULT = 1e-5
+LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 300000
-BATCH_SIZE_DEFAULT = 400
-EVAL_FREQ_DEFAULT = 400
-
+BATCH_SIZE_DEFAULT = 100
+EVAL_FREQ_DEFAULT = 200
+EPS = sys.float_info.epsilon
 FLAGS = None
 
 
@@ -81,6 +82,13 @@ def encode_3_patches(image, colons):
     return pred_1, pred_2, pred_3, pred_4
 
 
+def squash(input_tensor, dim=1):
+    squared_norm = (input_tensor ** 2).sum(dim, keepdim=True)
+    output_tensor = squared_norm * input_tensor / ((1. + squared_norm) * torch.sqrt(squared_norm))
+
+    return output_tensor
+
+
 def forward_block(X, ids, colons, optimizers, train, to_tensor_size):
     x_train = X[ids, :]
 
@@ -93,9 +101,67 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size):
 
     # pred_1, pred_2, pred_3, pred_4 = encode_4_patches(images, colons)
 
-    pred_1, pred_2, pred_3, pred_4 = encode_4_patches(images, colons)
 
-    loss = four_variate_IID_loss(pred_1, pred_2, pred_3, pred_4)
+    pred_1, pred_2, pred_3, pred_4 = encode_4_patches(images, colons)
+    #
+    # s1 = squash(pred_1)
+    # s2 = squash(pred_2)
+    # s3 = squash(pred_3)
+    # s4 = squash(pred_4)
+
+    # s1 = pred_1
+    # s2 = pred_2
+    # s3 = pred_3
+    # s4 = pred_4
+
+    # print(s1.shape)
+    # print(s2.shape)
+    #
+
+    # z2 = torch.matmul(s3, s4.transpose(0, 1))
+    #
+    # print(z.shape)
+    # input()
+
+    # prod = s1 * s2 * s3 * s4
+    # prod = prod.mean(dim=0)
+    # prod[(prod < EPS).data] = EPS
+    #
+    # log_prod = torch.log(prod)
+    # log_prod[(log_prod < EPS).data] = EPS
+    # #p = torch.sqrt((prod ** 2).sum(1, keepdim=True))
+    # #print(log_prod)
+    # p = - log_prod.mean(dim=0)
+
+
+    # if train:
+    #     optimizers[0].zero_grad()
+    #     p.backward(retain_graph=True)
+    #     optimizers[0].step()
+
+    # dim = 1
+    # pred_1 = torch.sqrt((pred_1 ** 2).sum(dim, keepdim=True))
+
+    prediction_1 = colons[1](pred_1)
+    prediction_2 = colons[1](pred_2)
+    prediction_3 = colons[1](pred_3)
+    prediction_4 = colons[1](pred_4)
+
+    predictions = prediction_1 * prediction_2 * prediction_3 * prediction_4
+    product = predictions.mean(dim=0)
+    log_product = torch.log(product)
+    loss = -log_product.mean(dim=0)
+
+    if train:
+        optimizers[0].zero_grad()
+        optimizers[1].zero_grad()
+
+        loss.backward(retain_graph=True)
+
+        optimizers[0].step()
+        optimizers[1].step()
+
+    #loss = four_variate_IID_loss(pred_1, pred_2, pred_3, pred_4)
 
     # loss_1 = IID_loss(pred_1, pred_2)
     # loss_2 = IID_loss(pred_3, pred_4)
@@ -109,16 +175,16 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size):
     # loss_a = loss_1  #+ loss_3 + loss_4 + loss_5 + loss_6
     # loss_b = loss_2  #+ loss_3 + loss_4 + loss_5 + loss_6
 
-    if train:
-        for i in optimizers:
-            i.zero_grad()
+    # if train:
+    #     for i in optimizers:
+    #         i.zero_grad()
+    #
+    #     loss.backward(retain_graph=True)
+    #
+    #     for i in optimizers:
+    #         i.step()
 
-        loss.backward(retain_graph=True)
-
-        for i in optimizers:
-            i.step()
-
-    return pred_1, pred_2, pred_3, pred_4, loss
+    return prediction_1, prediction_2, prediction_3, prediction_4, loss, loss
 
 
 def split_image_to_3(images):
@@ -141,7 +207,7 @@ def split_image_to_3(images):
 
 
 def split_image_to_4(image):
-    split_at_pixel = 15
+    split_at_pixel = 20
     width = image.shape[2]
     height = image.shape[3]
     #
@@ -206,7 +272,7 @@ def train():
     colons_paths.append(predictor_model)
 
     input = 5120
-    #input = 3840
+    input = 3840
 
     # c = Ensemble()
     # c.cuda()
@@ -215,17 +281,17 @@ def train():
     c.cuda()
     colons.append(c)
 
-    c2 = ColonMVMI(1, input)
+    c2 = ColonMLP(1, 71680)
     c2.cuda()
     colons.append(c2)
     #
-    c3 = ColonMVMI(1, input)
-    c3.cuda()
-    colons.append(c3)
-
-    c4 = ColonMVMI(1, input)
-    c4.cuda()
-    colons.append(c4)
+    # c3 = ColonMVMI(1, input)
+    # c3.cuda()
+    # colons.append(c3)
+    #
+    # c4 = ColonMVMI(1, input)
+    # c4.cuda()
+    # colons.append(c4)
 
     optimizer = torch.optim.Adam(c.parameters(), lr=LEARNING_RATE_DEFAULT)
     optimizers.append(optimizer)
@@ -233,11 +299,11 @@ def train():
     optimizer2 = torch.optim.Adam(c2.parameters(), lr=LEARNING_RATE_DEFAULT)
     optimizers.append(optimizer2)
     #
-    optimizer3 = torch.optim.Adam(c3.parameters(), lr=LEARNING_RATE_DEFAULT)
-    optimizers.append(optimizer3)
-
-    optimizer4 = torch.optim.Adam(c4.parameters(), lr=LEARNING_RATE_DEFAULT)
-    optimizers.append(optimizer4)
+    # optimizer3 = torch.optim.Adam(c3.parameters(), lr=LEARNING_RATE_DEFAULT)
+    # optimizers.append(optimizer3)
+    #
+    # optimizer4 = torch.optim.Adam(c4.parameters(), lr=LEARNING_RATE_DEFAULT)
+    # optimizers.append(optimizer4)
 
     max_loss = 1999
 
@@ -246,17 +312,18 @@ def train():
         ids = np.random.choice(len(X_train), size=BATCH_SIZE_DEFAULT, replace=False)
 
         train = True
-        p1, p2, p3, p4, mim = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT)
+        prediction_1, prediction_2, prediction_3, prediction_4, p, loss = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT)
 
         if iteration % EVAL_FREQ_DEFAULT == 0:
             test_ids = np.random.choice(len(X_test), size=BATCH_SIZE_DEFAULT, replace=False)
-            p1, p2, p3, p4, mim = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT)
+            prediction_1, prediction_2, prediction_3, prediction_4, p, loss = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT)
             print()
             print("iteration: ", iteration)
+            print("p loss: ", p.item())
 
-            print_info(p1, p2, p3, p4, 150, targets, test_ids)
+            print_info(prediction_1, prediction_2, prediction_3, prediction_4, targets, test_ids)
 
-            test_loss = mim.item()
+            test_loss = loss.item()
 
             if max_loss > test_loss:
                 max_loss = test_loss
@@ -281,9 +348,9 @@ def show_mnist(first_image, w ,h):
     plt.show()
 
 
-def print_info(p1, p2, p3, p4, number, targets, test_ids):
+def print_info(p1, p2, p3, p4, targets, test_ids):
     print_dict = {"0": "", "1": "", "2": "", "3": "", "4": "", "5": "", "6": "", "7": "", "8": "", "9": ""}
-    for i in range(number):
+    for i in range(BATCH_SIZE_DEFAULT):
         if i == 10:
             print("")
 
@@ -293,7 +360,7 @@ def print_info(p1, p2, p3, p4, number, targets, test_ids):
         val, index4 = torch.max(p4[i], 0)
 
         string = str(index.data.cpu().numpy()) + " " + str(index2.data.cpu().numpy()) + " " + \
-                 str(index3.data.cpu().numpy()) + " " + str(index4.data.cpu().numpy()) + " , "
+                 str(index3.data.cpu().numpy()) + " " + str(index4.data.cpu().numpy()) + ", "
 
         label = targets[test_ids[i]]
         print_dict[label] += string

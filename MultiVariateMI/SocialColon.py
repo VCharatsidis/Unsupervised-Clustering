@@ -29,20 +29,20 @@ class SocialColon(nn.Module):
         two =2
         self.conv = nn.Sequential(
             nn.Conv2d(n_channels, 64, kernel_size=3, stride=1, padding=1),
-            nn.Tanh(),
+            nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
             #
             nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
-            nn.Tanh(),
+            nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
             #
             nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
-            nn.Tanh(),
+            nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
         )
 
         self.linear = nn.Sequential(
-            #nn.Dropout(0.6),
+
             nn.Linear(n_inputs, 1000),
             nn.Tanh(),
 

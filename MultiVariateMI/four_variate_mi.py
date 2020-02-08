@@ -4,21 +4,10 @@ import random
 
 
 def four_variate_IID_loss(x_1, x_2, x_3, x_4, EPS=sys.float_info.epsilon):
-  k = 10  # had softmax applied
 
-  #joint_probability_1_2_3_4 = joint_probability_8(x_1, x_2, x_3, x_4, x_5, x_6)
   joint_probability_1_2_3_4 = joint_probability(x_1, x_2, x_3, x_4)
 
-  # assert (joint_probability_1_2_3_4.size() == (k, k, k, k, k, k))
-
-  # mvmi = multi_variate_mutual_info(joint_probability_1_2_3_4)
-  total_corr = total_correlation(joint_probability_1_2_3_4)
-  loss = my_loss(joint_probability_1_2_3_4)
-
-  if random.uniform(0,1)>0.995:
-      print("total corr: ", total_corr)
-
-  loss = loss.sum() + total_corr
+  loss = total_correlation(joint_probability_1_2_3_4)
 
   return loss
 
@@ -107,13 +96,14 @@ def diag_element(joint_probability_1_2_3_4, p_1, p_2, p_3, p_4, num):
     # print()
     return - torch.log(joint_probability_1_2_3_4[num, num, num, num]) #* torch.log(normalised_prob)
 
+
 def total_correlation(joint_probability_1_2_3_4):
     p_1, p_2, p_3, p_4 = one_variate_marginals(joint_probability_1_2_3_4)
 
     numerator = torch.log(joint_probability_1_2_3_4)
     denominator = torch.log(p_1) + torch.log(p_2) + torch.log(p_3) + torch.log(p_4)
 
-    total_corr = - joint_probability_1_2_3_4 * (numerator - denominator) #* (-denominator)
+    total_corr = - joint_probability_1_2_3_4 * (numerator - denominator)
     total_corr = total_corr.sum()
 
     return total_corr
