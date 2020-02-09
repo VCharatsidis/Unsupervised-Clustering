@@ -26,6 +26,7 @@ def rotate(X, degrees, batch_size=BATCH_SIZE_DEFAULT):
 
 def scale(X, size, pad, batch_size=BATCH_SIZE_DEFAULT):
     X_copy = copy.deepcopy(X)
+
     # X_copy = to_Tensor(X_copy, batch_size)
     X_copy = Variable(torch.FloatTensor(X_copy))
 
@@ -56,14 +57,16 @@ def vertical_flip(X, batch_size=BATCH_SIZE_DEFAULT):
     return X_copy
 
 
-def to_gray(X, channels, batch_size=BATCH_SIZE_DEFAULT):
+def to_grayscale(X, channels, batch_size=BATCH_SIZE_DEFAULT):
     X_copy = copy.deepcopy(X)
     X_copy = Variable(torch.FloatTensor(X_copy))
 
     for i in range(X_copy.shape[0]):
         transformation = transforms.Grayscale(num_output_channels=channels)
-        trans = transforms.Compose([transformation, transforms.ToTensor(), transforms.Normalize(mean=[0.5], std=[0.5])])
+        trans = transforms.Compose([transformation, transforms.ToTensor()])
+
         a = F.to_pil_image(X_copy[i])
+
         trans_image = trans(a)
         X_copy[i] = trans_image
 

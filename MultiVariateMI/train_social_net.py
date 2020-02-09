@@ -472,6 +472,7 @@ def measure_accuracy(X_test, colons, targets):
     print("TOTAL miss percentage: ", total_miss/(runs*BATCH_SIZE_DEFAULT))
     print()
 
+
 def miss_classifications(cluster):
     mfe = most_frequent(cluster)
     missclassifications = 0
@@ -481,8 +482,10 @@ def miss_classifications(cluster):
 
     return missclassifications
 
+
 def most_frequent(List):
     return max(set(List), key=List.count)
+
 
 def to_Tensor(X, batch_size=BATCH_SIZE_DEFAULT):
     X = np.reshape(X, (batch_size, 1, 28, 28))

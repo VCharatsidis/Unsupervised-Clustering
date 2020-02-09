@@ -10,9 +10,10 @@ import torch
 from torch.autograd import Variable
 import matplotlib.pyplot as plt
 from stl10_input import read_all_images, read_labels
-
+import torchvision.transforms.functional as F
+from PIL import Image
 from one_net_model import OneNet
-from stl_utils import rotate, scale, to_gray, random_erease, vertical_flip
+from stl_utils import rotate, scale, to_grayscale, random_erease, vertical_flip
 import random
 import torchvision
 
@@ -20,7 +21,7 @@ import torchvision
 # Default constants
 LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 300000
-BATCH_SIZE_DEFAULT = 140
+BATCH_SIZE_DEFAULT = 60
 EVAL_FREQ_DEFAULT = 100
 NUMBER_CLASSES = 1
 FLAGS = None
@@ -43,9 +44,14 @@ def encode_4_patches(image, colons, replace,
                      p2=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
                      p3=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
                      p4=torch.zeros([BATCH_SIZE_DEFAULT, 10])):
+    image /= 255
+    #show_gray(image)
 
-    original_image = scale(image, 30, 33, BATCH_SIZE_DEFAULT)
-    original_image = original_image[:, :, 33:63, 33:63]
+    original_image = scale(image, 40, 28, BATCH_SIZE_DEFAULT)
+    #show_gray(original_image)
+
+    original_image = original_image[:, :, 28:68, 28:68]
+    #show_gray(original_image)
 
     # image = torch.transpose(image, 1, 3)
     # show_mnist(image[0], image[0].shape[1], image[0].shape[2])
@@ -55,67 +61,53 @@ def encode_4_patches(image, colons, replace,
     # show_mnist(original_image[0], original_image[0].shape[1], original_image[0].shape[2])
     # original_image = torch.transpose(original_image, 1, 3)
 
-    augments = {0: to_gray(original_image, 3, BATCH_SIZE_DEFAULT),
-                1: rotate(original_image, 20, BATCH_SIZE_DEFAULT),
-                2: rotate(original_image, -20, BATCH_SIZE_DEFAULT),
-                3: scale(original_image, 20, 5, BATCH_SIZE_DEFAULT),
-                4: vertical_flip(original_image, BATCH_SIZE_DEFAULT),
-                5: random_erease(original_image, BATCH_SIZE_DEFAULT),
-                6: original_image}
+    augments = {0: rotate(original_image, 15, BATCH_SIZE_DEFAULT),
+                1: rotate(original_image, -15, BATCH_SIZE_DEFAULT),
+                2: scale(original_image, 30, 5, BATCH_SIZE_DEFAULT),
+                3: vertical_flip(original_image, BATCH_SIZE_DEFAULT),
+                4: original_image}
 
-    ids = np.random.choice(len(augments), size=4, replace=replace)
+    ids = np.random.choice(len(augments), size=4, replace=False)
 
     image_1 = augments[ids[0]]
     image_2 = augments[ids[1]]
     image_3 = augments[ids[2]]
     image_4 = augments[ids[3]]
 
+    # image_1 = show_image(image_1)
+    # image_2 = show_image(image_2)
+    # image_3 = show_image(image_3)
+    # image_4 = show_image(image_4)
 
-    # image_2 = torch.transpose(image_2, 1, 3)
-    # show_mnist(image_2[0], image_2[0].shape[1], image_2[0].shape[2])
-    # image_2 = torch.transpose(image_2, 1, 3)
-    #
-    # image_3 = torch.transpose(image_3, 1, 3)
-    # show_mnist(image_3[0], image_3[0].shape[1], image_3[0].shape[2])
-    # image_3 = torch.transpose(image_3, 1, 3)
-    #
-    # image_4 = torch.transpose(image_4, 1, 3)
-    # show_mnist(image_4[0], image_4[0].shape[1], image_4[0].shape[2])
-    # image_4 = torch.transpose(image_4, 1, 3)
-
-    # image_5 = torch.transpose(image_5, 1, 3)
-    # show_mnist(image_5[0], image_5[0].shape[1], image_5[0].shape[2])
-    # image_5 = torch.transpose(image_5, 1, 3)
+    image_1 = show_gray(image_1)
+    image_2 = show_gray(image_2)
+    image_3 = show_gray(image_3)
+    image_4 = show_gray(image_4)
 
     p1 = p1.cuda()
     p2 = p2.cuda()
     p3 = p3.cuda()
     p4 = p4.cuda()
-    # p5 = p5.cuda()
-    # p6 = p6.cuda()
-    # p7 = p7.cuda()
-    # p8 = p8.cuda()
-    # p9 = p9.cuda()
-    # p0 = p0.cuda()
-    c_i = np.random.choice(len(colons), size=4, replace=not replace)
+
+    net_id = np.random.choice(len(colons), size=4, replace=False)
 
     image_1 = image_1.to('cuda')
-    preds_1 = colons[c_i[0]](image_1, p2, p3, p4)
+    preds_1 = colons[net_id[0]](image_1, p2, p3, p4)
     del image_1
     torch.cuda.empty_cache()
 
     image_2 = image_2.to('cuda')
-    preds_2 = colons[c_i[1]](image_2, p1, p3, p4)
+    preds_2 = colons[net_id[1]](image_2, p1, p3, p4)
     del image_2
     torch.cuda.empty_cache()
 
     image_3 = image_3.to('cuda')
-    preds_3 = colons[c_i[2]](image_3, p1, p2, p4)
+    preds_3 = colons[net_id[2]](image_3, p1, p2, p4)
     del image_3
     torch.cuda.empty_cache()
 
     image_4 = image_4.to('cuda')
-    preds_4 = colons[c_i[3]](image_4, p1, p2, p3)
+    preds_4 = colons[net_id[3]](image_4, p1, p2, p3)
     del image_4
     torch.cuda.empty_cache()
 
@@ -139,6 +131,33 @@ def encode_4_patches(image, colons, replace,
     return preds_1, preds_2, preds_3, preds_4
 
 
+def rgb2gray(rgb):
+
+    r, g, b = rgb[:, 0, :, :], rgb[:, 1, :, :], rgb[:, 2, :, :]
+    gray = 0.2989 * r + 0.5870 * g + 0.1140 * b
+
+    return gray
+
+
+def show_gray(image_1):
+    z = image_1
+    print(z.shape)
+    if len(list(z.size())) == 4:
+        z = image_1.squeeze(1)
+
+    pixels = z[0]
+    plt.imshow(pixels, cmap='gray')
+    plt.show()
+
+
+def show_image(image_1):
+    image_1 = torch.transpose(image_1, 1, 3)
+    show_mnist(image_1[0], image_1[0].shape[1], image_1[0].shape[2])
+    image_1 = torch.transpose(image_1, 1, 3)
+
+    return image_1
+
+
 def forward_block(X, ids, colons, optimizers, train, to_tensor_size,
                 p1 = torch.zeros([BATCH_SIZE_DEFAULT, 10]),
                      p2 = torch.zeros([BATCH_SIZE_DEFAULT, 10]),
@@ -148,15 +167,21 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size,
                             ):
 
     x_train = X[ids, :]
-    x_tensor = to_tensor(x_train, to_tensor_size)
+    x_train = rgb2gray(x_train)
 
-    images = x_tensor/255.0
+    x_tensor = to_tensor(x_train, to_tensor_size)
+    x_tensor = x_tensor.unsqueeze(0)
+    images = x_tensor.transpose(0, 1)
+    images = images.transpose(2, 3)
+
+    #images = x_tensor/255.0
 
     replace = True
     if random.uniform(0, 1) > 0.5:
         replace = False
 
     preds_1, preds_2, preds_3, preds_4 = encode_4_patches(images, colons, replace, p1, p2, p3, p4)
+
     product = preds_1 * preds_2 * preds_3 * preds_4
     product = product.mean(dim=0)
     log_product = torch.log(product)
@@ -372,22 +397,22 @@ def train():
     predictor_model = os.path.join(script_directory, filepath)
     colons_paths.append(predictor_model)
 
-    input = 4638
+    input = 8222
     #input = 1152
 
-    c = OneNet(3, input)
+    c = OneNet(1, input)
     c = c.cuda()
     colons.append(c)
 
-    c1 = OneNet(3, input)
+    c1 = OneNet(1, input)
     c1 = c1.cuda()
     colons.append(c1)
 
-    c2 = OneNet(3, input)
+    c2 = OneNet(1, input)
     c2 = c2.cuda()
     colons.append(c2)
 
-    c3 = OneNet(3, input)
+    c3 = OneNet(1, input)
     c3 = c3.cuda()
     colons.append(c3)
 
@@ -405,7 +430,7 @@ def train():
 
     max_loss = 1999
     max_loss_iter = 0
-    description = ""
+    description = "6 augments"
 
     for iteration in range(MAX_STEPS_DEFAULT):
 
@@ -458,6 +483,7 @@ def to_tensor(X, batch_size=BATCH_SIZE_DEFAULT):
         X = Variable(torch.FloatTensor(X))
 
     return X
+
 
 
 def show_mnist(first_image, w, h):
