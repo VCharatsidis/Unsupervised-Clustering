@@ -41,10 +41,9 @@ class OneNet(nn.Module):
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
 
-            nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
-
 
             # nn.Conv2d(n_channels, 64, kernel_size=(3, 3), stride=1, padding=1),
             # nn.BatchNorm2d(64),
@@ -97,7 +96,6 @@ class OneNet(nn.Module):
             nn.Linear(1000, 10),
             nn.Softmax(dim=1)
         )
-
 
 
     def forward(self, x, p1, p2, p3):

@@ -17,7 +17,7 @@ import random
 # Default constants
 LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 30000
-BATCH_SIZE_DEFAULT = 110
+BATCH_SIZE_DEFAULT = 100
 EVAL_FREQ_DEFAULT = 200
 
 FLAGS = None
@@ -46,15 +46,15 @@ def encode_4_patches(image, colons, p1, p2, p3, p4):
 
     ids = np.random.choice(len(colons), size=4, replace=False)
 
-    pred_1 = colons[ids[0]](i_1, p2, p3, p4)
-    pred_2 = colons[ids[1]](i_2, p1, p3, p4)
-    pred_3 = colons[ids[2]](i_3, p1, p2, p4)
-    pred_4 = colons[ids[3]](i_4, p1, p2, p3)
+    # pred_1 = colons[ids[0]](i_1, p2, p3, p4)
+    # pred_2 = colons[ids[1]](i_2, p1, p3, p4)
+    # pred_3 = colons[ids[2]](i_3, p1, p2, p4)
+    # pred_4 = colons[ids[3]](i_4, p1, p2, p3)
 
-    # pred_5 = colons[ids[3]](i_1, p2, p3, p4)
-    # pred_6 = colons[ids[2]](i_2, p1, p3, p4)
-    # pred_7 = colons[ids[1]](i_3, p1, p2, p4)
-    # pred_8 = colons[ids[0]](i_4, p1, p2, p3)
+    pred_1 = colons[0](i_1, p2, p3, p4)
+    pred_2 = colons[0](i_2, p1, p3, p4)
+    pred_3 = colons[0](i_3, p1, p2, p4)
+    pred_4 = colons[0](i_4, p1, p2, p3)
 
     return pred_1, pred_2, pred_3, pred_4, i_4
 
@@ -73,14 +73,29 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size, mean,
 
     pred_1, pred_2, pred_3, pred_4, i_4 = encode_4_patches(images, colons, p1, p2, p3, p4)
 
-    product = pred_1 * pred_2 * pred_3 * pred_4
-    product_batch_mean = product.mean(dim=0)
+    #product = pred_1 * pred_2 * pred_3 * pred_4
+    mean_preds = (pred_1 + pred_2 + pred_3 + pred_4)/4
 
+    H = - (mean_preds * torch.log(mean_preds)).sum(dim=1).mean(dim=0)
+
+    batch_mean_preds = mean_preds.mean(dim=0)
+    H_batch = - (batch_mean_preds * torch.log(batch_mean_preds)).sum()
+
+    loss = H - H_batch
+    # print("H", H)
+    # print("H_batch", H_batch)
+    # input()
+    #
+    # product = mean_preds * mean_preds
+    #
+    # product_batch_mean = product.mean(dim=0)
+    #
     # coeff = 0.95
-    # mean = coeff * mean.detach() + (1 - coeff) * product_batch_mean.detach()
-    # product_batch_mean[(mean > 0.12).data] = 1
-    log_product = torch.log(product_batch_mean)
-    loss = - log_product.mean(dim=0)
+    # mean = coeff * mean.detach() + (1 - coeff) * product_batch_mean.cpu().detach()
+    # # product_batch_mean[(mean > 0.11).data] = 1
+    #
+    # log_product = torch.log(product_batch_mean)
+    # loss = -log_product.mean(dim=0)
 
     if train:
         for i in optimizers:
@@ -104,10 +119,7 @@ def split_image_to_4(image, vae_enc, vae_dec, replace):
         0: rotate(image, 20, BATCH_SIZE_DEFAULT),
         1: rotate(image, -20, BATCH_SIZE_DEFAULT),
         2: scale(image, BATCH_SIZE_DEFAULT),
-
-        3: scale(image, BATCH_SIZE_DEFAULT),
-        4: random_erease(image, BATCH_SIZE_DEFAULT),
-        5: image
+        3: image
     }
 
     ids = np.random.choice(len(augments), size=4, replace=False)
@@ -241,6 +253,7 @@ def train():
         if iteration % EVAL_FREQ_DEFAULT == 0:
             test_ids = np.random.choice(len(X_test), size=BATCH_SIZE_DEFAULT, replace=False)
             p1, p2, p3, p4, mim, mean = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, mean)
+
             print("mean: ", mean)
             print("loss 1", mim.item())
             p1, p2, p3, p4, mim, mean = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, mean, p1, p2, p3, p4)
@@ -424,7 +437,7 @@ def measure_acc_augments(X_test, colons, targets):
 
 def measure_accuracy(X_test, colons, targets):
     print_dict = {"0": [], "1": [], "2": [], "3": [], "4": [], "5": [], "6": [], "7": [], "8": [], "9": []}
-    runs = 10000//BATCH_SIZE_DEFAULT - 1
+    runs = 10000//BATCH_SIZE_DEFAULT
     avg_loss = 0
     for j in range(runs):
         test_ids = range(j*BATCH_SIZE_DEFAULT, (j+1)*BATCH_SIZE_DEFAULT)

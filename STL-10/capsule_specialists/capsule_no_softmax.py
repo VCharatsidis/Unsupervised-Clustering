@@ -11,7 +11,7 @@ class ConvLayer(nn.Module):
         super(ConvLayer, self).__init__()
 
         self.conv = nn.Sequential(
-            nn.Conv2d(in_channels, 128, kernel_size=9, stride=1, padding=0),
+            nn.Conv2d(in_channels, 64, kernel_size=9, stride=1, padding=0),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=(2, 2), stride=2, padding=1),
         )
@@ -22,7 +22,7 @@ class ConvLayer(nn.Module):
 
 class PrimaryCaps(nn.Module):
 
-    def __init__(self, num_capsules=8, in_channels=128, out_channels=16, kernel_size=9, num_routes=16 * 7 * 7):
+    def __init__(self, num_capsules=8, in_channels=64, out_channels=16, kernel_size=9, num_routes=16 * 7 * 7):
         super(PrimaryCaps, self).__init__()
 
         self.num_capsules = num_capsules
@@ -52,7 +52,7 @@ class PrimaryCaps(nn.Module):
 
 class DigitCaps(nn.Module):
 
-    def __init__(self, num_capsules=10, num_routes=16 * 8 * 8, in_channels=8, out_channels=16):
+    def __init__(self, num_capsules=10, num_routes=16 * 5 * 5, in_channels=8, out_channels=16):
         super(DigitCaps, self).__init__()
 
         self.in_channels = in_channels
@@ -119,13 +119,16 @@ class BareCapsNet(nn.Module):
         primary = self.primary_capsules(conv)
         output = self.digit_capsules(primary)
 
+        ### squash ###
+        # dim = 2
+        # squared_norm = (output ** 2).sum(dim, keepdim=True)
+        # output_tensor = squared_norm * output / ((1. + squared_norm) * torch.sqrt(squared_norm))
+        ##############
+
         output = output.squeeze()
-
         squared_norm = (output ** 2).sum(dim=2, keepdim=True)
-
         magnitude = torch.sqrt(squared_norm)
-        magnitude = magnitude.squeeze()
 
-        classification = self.softmax(magnitude)
+        preds = self.softmax(magnitude.squeeze(2))
 
-        return classification
+        return preds

@@ -11,14 +11,15 @@ from torch.autograd import Variable
 import matplotlib.pyplot as plt
 from stl10_input import read_all_images, read_labels
 
-from stl_utils import rotate, scale, to_gray, random_erease, vertical_flip
+from stl_utils import rotate, scale, to_grayscale, random_erease, vertical_flip
 from capsule_net import CapsNet
+from capsule_no_softmax import BareCapsNet
 import random
 
 # Default constants
-LEARNING_RATE_DEFAULT = 1e-4
+LEARNING_RATE_DEFAULT = 1e-3
 MAX_STEPS_DEFAULT = 300000
-BATCH_SIZE_DEFAULT = 32
+BATCH_SIZE_DEFAULT = 80
 EVAL_FREQ_DEFAULT = 100
 NUMBER_CLASSES = 1
 FLAGS = None
@@ -37,27 +38,25 @@ def kl_divergence(p, q):
 
 
 def encode_4_patches(image, colons):
-    orig_image = scale(image, 50, 23, BATCH_SIZE_DEFAULT)
+    orig_image = scale(image, 40, 28, BATCH_SIZE_DEFAULT)
 
     # orig_image = torch.transpose(orig_image, 1, 3)
     # show_mnist(orig_image[0], orig_image[0].shape[1], orig_image[0].shape[2])
     # orig_image = torch.transpose(orig_image, 1, 3)
 
-    scaled_orig_image = orig_image[:, :, 23:73, 23:73]
+    scaled_orig_image = orig_image[:, :, 28:68, 28:68]
 
     # orig_image = torch.transpose(orig_image, 1, 3)
     # show_mnist(orig_image[0], orig_image[0].shape[1], orig_image[0].shape[2])
     # orig_image = torch.transpose(orig_image, 1, 3)
 
 
-    augments = {0: to_gray(scaled_orig_image, 3, BATCH_SIZE_DEFAULT),
-                1: rotate(scaled_orig_image, 20, BATCH_SIZE_DEFAULT),
-                2: rotate(scaled_orig_image, -20, BATCH_SIZE_DEFAULT),
-                3: scale(scaled_orig_image, 40, 5, BATCH_SIZE_DEFAULT),
+    augments = {0: to_grayscale(scaled_orig_image, 3, BATCH_SIZE_DEFAULT),
+                1: rotate(scaled_orig_image, 15, BATCH_SIZE_DEFAULT),
+                2: rotate(scaled_orig_image, -15, BATCH_SIZE_DEFAULT),
+                3: scale(scaled_orig_image, 30, 5, BATCH_SIZE_DEFAULT),
                 4: vertical_flip(scaled_orig_image, BATCH_SIZE_DEFAULT),
-                5: scale(scaled_orig_image, 30, 10, BATCH_SIZE_DEFAULT),
-                6: random_erease(scaled_orig_image, BATCH_SIZE_DEFAULT),
-                7: scaled_orig_image}
+                5: scaled_orig_image}
 
     ids = np.random.choice(len(augments), size=3, replace=False)
 
@@ -179,9 +178,11 @@ def train():
     predictor_model = os.path.join(script_directory, filepath)
     colons_paths.append(predictor_model)
 
-    c = CapsNet()
+    c = BareCapsNet()
     c = c.to('cuda')
     colons.append(c)
+
+    print(c)
 
     optimizer = torch.optim.Adam(c.parameters(), lr=LEARNING_RATE_DEFAULT)
     optimizers.append(optimizer)
@@ -231,7 +232,7 @@ def train():
                 max_loss_iter = iteration
                 max_loss = test_loss
                 measure_acc_augments(X_test, colons, targets)
-                print(colons[0])
+
                 print("models saved iter: " + str(iteration))
                 # for i in range(number_colons):
                 #     torch.save(colons[i], colons_paths[i])
