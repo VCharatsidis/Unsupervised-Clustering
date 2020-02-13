@@ -21,7 +21,7 @@ import torchvision
 # Default constants
 LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 300000
-BATCH_SIZE_DEFAULT = 50
+BATCH_SIZE_DEFAULT = 64
 EVAL_FREQ_DEFAULT = 100
 NUMBER_CLASSES = 1
 FLAGS = None
@@ -47,10 +47,10 @@ def encode_4_patches(image, colons, replace,
     image /= 255
     #show_gray(image)
 
-    original_image = scale(image, 50, 23, BATCH_SIZE_DEFAULT)
+    original_image = scale(image, 40, 28, BATCH_SIZE_DEFAULT)
     #show_gray(original_image)
 
-    original_image = original_image[:, :, 23:73, 23:73]
+    original_image = original_image[:, :, 28:68, 28:68]
     #show_gray(original_image)
 
     # augments = {0: rotate(original_image, 15, BATCH_SIZE_DEFAULT),
@@ -59,10 +59,10 @@ def encode_4_patches(image, colons, replace,
     #             3: vertical_flip(original_image, BATCH_SIZE_DEFAULT),
     #             4: original_image}
 
-    augments = {0: scale(original_image, 40, 5, BATCH_SIZE_DEFAULT),
+    augments = {0: scale(original_image, 30, 5, BATCH_SIZE_DEFAULT),
                 1: horizontal_flip(original_image, BATCH_SIZE_DEFAULT),
                 2: original_image,
-                3: horizontal_flip(scale(original_image, 40, 5, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT)}
+                3: horizontal_flip(scale(original_image, 30, 5, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT)}
 
     ids = np.random.choice(len(augments), size=4, replace=True)
 
@@ -94,9 +94,9 @@ def encode_4_patches(image, colons, replace,
     image_4 = image_4.to('cuda')
 
     preds_1 = colons[0](image_1, p2, p3, p4)
-    preds_2 = colons[0](image_2, p1, p3, p4)
-    preds_3 = colons[0](image_3, p1, p2, p4)
-    preds_4 = colons[0](image_4, p1, p2, p3)
+    preds_2 = colons[1](image_2, p1, p3, p4)
+    preds_3 = colons[2](image_3, p1, p2, p4)
+    preds_4 = colons[3](image_4, p1, p2, p3)
 
     # image_1 = image_1.to('cuda')
     # preds_1 = colons[0](image_1, p2, p3, p4)
@@ -195,11 +195,18 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size,
     #product = preds_1 * preds_2 * preds_3 * preds_4
     mean_preds = (preds_1 + preds_2 + preds_3 + preds_4) / 4
 
-    product = mean_preds * mean_preds
+    H = - (mean_preds * torch.log(mean_preds)).sum(dim=1).mean(dim=0)
 
-    product = product.mean(dim=0)
-    log_product = torch.log(product)
-    total_loss = - log_product.mean(dim=0)
+    batch_mean_preds = mean_preds.mean(dim=0)
+    H_batch = - (batch_mean_preds * torch.log(batch_mean_preds)).sum()
+
+    total_loss = H - H_batch
+
+    # product = mean_preds * mean_preds
+    #
+    # product = product.mean(dim=0)
+    # log_product = torch.log(product)
+    # total_loss = - log_product.mean(dim=0)
 
     if train:
         torch.autograd.set_detect_anomaly(True)
@@ -414,36 +421,36 @@ def train():
     predictor_model = os.path.join(script_directory, filepath)
     colons_paths.append(predictor_model)
 
-    input = 6430
+    input = 4126
     #input = 1152
 
     c = OneNet(1, input)
     c = c.cuda()
     colons.append(c)
 
-    # c1 = OneNet(1, input)
-    # c1 = c1.cuda()
-    # colons.append(c1)
-    #
-    # c2 = OneNet(1, input)
-    # c2 = c2.cuda()
-    # colons.append(c2)
-    #
-    # c3 = OneNet(1, input)
-    # c3 = c3.cuda()
-    # colons.append(c3)
+    c1 = OneNet(1, input)
+    c1 = c1.cuda()
+    colons.append(c1)
+
+    c2 = OneNet(1, input)
+    c2 = c2.cuda()
+    colons.append(c2)
+
+    c3 = OneNet(1, input)
+    c3 = c3.cuda()
+    colons.append(c3)
 
     optimizer = torch.optim.Adam(c.parameters(), lr=LEARNING_RATE_DEFAULT)
     optimizers.append(optimizer)
 
-    # optimizer1 = torch.optim.Adam(c1.parameters(), lr=LEARNING_RATE_DEFAULT)
-    # optimizers.append(optimizer1)
-    #
-    # optimizer2 = torch.optim.Adam(c2.parameters(), lr=LEARNING_RATE_DEFAULT)
-    # optimizers.append(optimizer2)
-    #
-    # optimizer3 = torch.optim.Adam(c3.parameters(), lr=LEARNING_RATE_DEFAULT)
-    # optimizers.append(optimizer3)
+    optimizer1 = torch.optim.Adam(c1.parameters(), lr=LEARNING_RATE_DEFAULT)
+    optimizers.append(optimizer1)
+
+    optimizer2 = torch.optim.Adam(c2.parameters(), lr=LEARNING_RATE_DEFAULT)
+    optimizers.append(optimizer2)
+
+    optimizer3 = torch.optim.Adam(c3.parameters(), lr=LEARNING_RATE_DEFAULT)
+    optimizers.append(optimizer3)
 
     max_loss = 1999
     max_loss_iter = 0

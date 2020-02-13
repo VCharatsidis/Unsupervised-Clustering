@@ -117,13 +117,13 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size,
 
     images = x_tensor/255.0
 
-    images = scale(images, 60, 18, BATCH_SIZE_DEFAULT)
+    images = scale(images, 40, 28, BATCH_SIZE_DEFAULT)
 
     # orig_image = torch.transpose(images, 1, 3)
     # show_mnist(orig_image[0], orig_image[0].shape[1], orig_image[0].shape[2])
     # orig_image = torch.transpose(orig_image, 1, 3)
 
-    images = images[:, :, 18:78, 18:78]
+    images = images[:, :, 28:68, 28:68]
 
     # orig_image = torch.transpose(images, 1, 3)
     # show_mnist(orig_image[0], orig_image[0].shape[1], orig_image[0].shape[2])
@@ -131,10 +131,18 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size,
 
     images = images.to('cuda')
 
-    product_predictions, preds = colons[0](images, train, optimizers)
-    product = product_predictions.mean(dim=0)
-    log_product = torch.log(product)
-    loss = - log_product.mean(dim=0)
+    mean_preds, preds = colons[0](images, train, optimizers)
+
+    # product = product_predictions.mean(dim=0)
+    # log_product = torch.log(product)
+    # loss = - log_product.mean(dim=0)
+
+    H = - (mean_preds * torch.log(mean_preds)).sum(dim=1).mean(dim=0)
+
+    batch_mean_preds = mean_preds.mean(dim=0)
+    H_batch = - (batch_mean_preds * torch.log(batch_mean_preds)).sum()
+
+    loss = H - H_batch
 
     if train:
         torch.autograd.set_detect_anomaly(True)
@@ -147,7 +155,7 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size,
         for i in optimizers:
             i.step()
 
-    return product_predictions, loss, preds
+    return mean_preds, loss, preds
 
 
 def print_params(model):
@@ -199,6 +207,7 @@ def train():
 
 
     max_loss = 1999
+    max_loss_iter = 0
 
     for iteration in range(MAX_STEPS_DEFAULT):
 
@@ -215,7 +224,15 @@ def train():
             print(mim.item())
 
             print()
-            print("iteration: ", iteration)
+            print("iteration: ", iteration,
+                  ", batch size: ", BATCH_SIZE_DEFAULT,
+                  ", lr: ", LEARNING_RATE_DEFAULT,
+                  ", best loss: ", max_loss_iter,
+                  ": ", max_loss)
+
+            print(preds[0])
+            print(preds[8])
+            print(preds[20])
 
             print_info(product_preds, targets, test_ids)
 
@@ -223,6 +240,7 @@ def train():
 
             if max_loss > test_loss:
                 max_loss = test_loss
+                max_loss_iter = iteration
                 measure_acc_augments(X_test, colons, targets)
                 print("models saved iter: " + str(iteration))
                 # for i in range(number_colons):

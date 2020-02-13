@@ -12,14 +12,14 @@ import matplotlib.pyplot as plt
 from stl10_input import read_all_images, read_labels
 
 from combined_specialisation.combined_specialists import CombinedSpecialists
-from stl_utils import rotate, scale, to_gray, random_erease, vertical_flip
-
+from stl_utils import rotate, scale, to_grayscale, random_erease, vertical_flip
+import torch.nn as nn
 
 # Default constants
 LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 300000
 BATCH_SIZE_DEFAULT = 32
-EVAL_FREQ_DEFAULT = 50
+EVAL_FREQ_DEFAULT = 200
 NUMBER_CLASSES = 1
 FLAGS = None
 
@@ -62,6 +62,7 @@ def encode_4_patches(image, colons,
     height = image.shape[3]
 
     split_at_pixel = 50
+    image = scale(image, 50, 23, BATCH_SIZE_DEFAULT)
 
     image = image[:, :, 20:70, 20:70]
     # image_1 = image[:, :, 0: split_at_pixel, 0: split_at_pixel]
@@ -76,14 +77,13 @@ def encode_4_patches(image, colons,
     #
     # patch_ids = np.random.choice(len(patches), size=4, replace=False)
     #
-    augments = {0: to_gray(image, 1, BATCH_SIZE_DEFAULT),
+    augments = {0: to_grayscale(image, 1, BATCH_SIZE_DEFAULT),
                 1: rotate(image, 20, BATCH_SIZE_DEFAULT),
                 2: rotate(image, -20, BATCH_SIZE_DEFAULT),
                 3: scale(image, 40, 5, BATCH_SIZE_DEFAULT),
                 4: vertical_flip(image, BATCH_SIZE_DEFAULT),
                 5: scale(image, 30, 10, BATCH_SIZE_DEFAULT),
-                6: random_erease(image, BATCH_SIZE_DEFAULT),
-                7: vertical_flip(image, BATCH_SIZE_DEFAULT)}
+                6: image}
 
     # augments = {0: to_gray(image, 3, BATCH_SIZE_DEFAULT),
     #             1: rotate(image, 20, BATCH_SIZE_DEFAULT),
@@ -96,8 +96,9 @@ def encode_4_patches(image, colons,
     #
     ids = np.random.choice(len(augments), size=2, replace=False)
 
-    image_2 = augments[ids[0]]
-    image_3 = augments[ids[1]]
+    image = augments[ids[0]]
+    image_2 = augments[ids[1]]
+    #image_3 = augments[ids[1]]
 
     # image = torch.transpose(image, 1, 3)
     # show_mnist(image[0], image[0].shape[1], image[0].shape[2])
@@ -151,6 +152,20 @@ def encode_4_patches(image, colons,
 
         total_preds.append(total_pred.to('cpu'))
 
+    tensor_products = torch.zeros([BATCH_SIZE_DEFAULT, len(total_preds)])
+    for idx, i in enumerate(total_preds):
+        tensor_products[:, idx] = i.squeeze(1)
+
+    softmaxed = nn.Softmax(dim=1)
+    sof_products = softmaxed(tensor_products)
+
+    H = - (sof_products * torch.log(sof_products)).sum(dim=1).mean(dim=0)
+
+    batch_mean_preds = sof_products.mean(dim=0)
+    H_batch = - (batch_mean_preds * torch.log(batch_mean_preds)).sum()
+
+    total_loss = H - H_batch
+
     products = []
     for prod in range(10):
         product = torch.ones([BATCH_SIZE_DEFAULT, 1])
@@ -189,7 +204,7 @@ def encode_4_patches(image, colons,
     # image_4 = random_erease(image, BATCH_SIZE_DEFAULT)
     # show_mnist(image_4[0], image_4.shape[1], image_4.shape[2])
 
-    return products, total_preds
+    return products, total_preds, total_loss, sof_products
 
 
 def forward_block(X, ids, colons, optimizers, train, to_tensor_size,
@@ -211,16 +226,16 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size,
 
     images = x_tensor/255.0
 
-    products, new_preds = encode_4_patches(images, colons, p1, p2, p3, p4, p5, p6, p7, p8, p9, p0)
+    products, new_preds, total_loss, tensor_products = encode_4_patches(images, colons, p1, p2, p3, p4, p5, p6, p7, p8, p9, p0)
 
-    total_loss = torch.zeros([1])
-
-    for p in products:
-        mean = p.mean(dim=0)
-        log_p = -torch.log(mean)
-        total_loss += log_p
-
-    total_loss /= 10
+    # total_loss = torch.zeros([1])
+    #
+    # for p in products:
+    #     mean = p.mean(dim=0)
+    #     log_p = -torch.log(mean)
+    #     total_loss += log_p
+    #
+    # total_loss /= 10
 
     if train:
         torch.autograd.set_detect_anomaly(True)
@@ -233,7 +248,7 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size,
         for idx, i in enumerate(optimizers):
             i.step()
 
-    return products, total_loss, new_preds
+    return products, total_loss, new_preds, tensor_products
 
 
 def print_params(model):
@@ -287,25 +302,20 @@ def train():
         ids = np.random.choice(len(X_train), size=BATCH_SIZE_DEFAULT, replace=False)
 
         train = True
-        products, mim, new_preds = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT)
+        products, mim, new_preds, tensor_products = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT)
         p1, p2, p3, p4, p5, p6, p7, p8, p9, p0 = new_preds
-        products, mim, new_preds = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, p1, p2, p3, p4, p5, p6, p7, p8, p9, p0)
-        p1, p2, p3, p4, p5, p6, p7, p8, p9, p0 = new_preds
-        products, mim, new_preds = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, p1, p2, p3, p4, p5, p6, p7, p8, p9, p0)
+        products, mim, new_preds, tensor_products = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, p1, p2, p3, p4, p5, p6, p7, p8, p9, p0)
 
         if iteration % EVAL_FREQ_DEFAULT == 0:
             test_ids = np.random.choice(len(X_test), size=BATCH_SIZE_DEFAULT, replace=False)
 
-            products, mim, new_preds = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT)
+            products, mim, new_preds, tensor_products = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT)
             print("loss 1: ", mim.item())
 
             p1, p2, p3, p4, p5, p6, p7, p8, p9, p0 = new_preds
-            products, mim, new_preds = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, p1, p2, p3, p4, p5, p6, p7, p8, p9, p0)
+            products, mim, new_preds, tensor_products = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, p1, p2, p3, p4, p5, p6, p7, p8, p9, p0)
             print("loss 2: ", mim.item())
-
-            p1, p2, p3, p4, p5, p6, p7, p8, p9, p0 = new_preds
-            products, mim, new_preds = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, p1, p2, p3, p4, p5, p6, p7, p8, p9, p0)
-            print("loss 3: ", mim.item())
+            print("softmax: ", tensor_products[0])
 
             print()
             print("iteration: ", iteration,

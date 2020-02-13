@@ -42,28 +42,28 @@ class Brain(nn.Module):
             nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1),
 
             nn.Conv2d(128, 256, kernel_size=(3, 3), stride=1, padding=1),
-            #nn.BatchNorm2d(256),
+            nn.BatchNorm2d(256),
             nn.ReLU(),
 
             nn.Conv2d(256, 256, kernel_size=(3, 3), stride=1, padding=1),
-            #nn.BatchNorm2d(256),
+            nn.BatchNorm2d(256),
             nn.ReLU(),
 
             nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1),
 
             nn.Conv2d(256, 512, kernel_size=(3, 3), stride=1, padding=1),
-            #nn.BatchNorm2d(512),
+            nn.BatchNorm2d(512),
             nn.ReLU(),
 
             nn.Conv2d(512, 512, kernel_size=(3, 3), stride=1, padding=1),
-            #nn.BatchNorm2d(512),
+            nn.BatchNorm2d(512),
             nn.ReLU(),
 
-            nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1),
+            #nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1),
 
-            nn.Conv2d(512, 512, kernel_size=(3, 3), stride=1, padding=1),
-            #nn.BatchNorm2d(512),
-            nn.ReLU(),
+            # nn.Conv2d(512, 512, kernel_size=(3, 3), stride=1, padding=1),
+            # nn.BatchNorm2d(512),
+            # nn.ReLU(),
 
             # nn.Conv2d(512, 512, kernel_size=(3, 3), stride=1, padding=1),
             # nn.BatchNorm2d(512),
@@ -77,14 +77,17 @@ class Brain(nn.Module):
 
         self.colons = nn.ModuleList([
             nn.Sequential(
-                nn.Linear(592, 600),
+                nn.Linear(592, 1000),
+                nn.Tanh(),
+
+                nn.Linear(1000, 600),
                 nn.Tanh(),
 
                 nn.Linear(600, 10),
                 nn.Softmax(dim=1)
             )
 
-            for _ in range(16)])
+            for _ in range(25)])
 
 
     def neighbors(slef, i, w, h, mode=8):
@@ -142,7 +145,7 @@ class Brain(nn.Module):
         """
 
         conv = self.conv(x)
-        #print(conv.shape)
+        #print("conv shape", conv.shape)
 
         conv = torch.flatten(conv, 2)
         #print(conv.shape)
@@ -166,19 +169,27 @@ class Brain(nn.Module):
         p8 = p8.to('cuda')
 
         dim = conv.shape[2]
+        #print("dim", dim)
         predictions = [self.colons[i](torch.cat([p1, p2, p3, p4, p5, p6, p7, p8, conv[:, :, i]], 1)) for i in range(dim)]
 
-        first_predictions = torch.zeros(predictions[0].shape)
-        first_predictions = first_predictions.to('cuda')
+        mean_preds = torch.zeros(predictions[0].shape)
+        mean_preds = mean_preds.to('cuda')
 
         for p in predictions:
-            first_predictions += p
+            mean_preds += p
 
-        first_predictions /= len(predictions)
+        mean_preds /= len(predictions)
 
-        product = first_predictions.mean(dim=0)
-        log_product = torch.log(product)
-        loss = - log_product.mean(dim=0)
+        # product = first_predictions.mean(dim=0)
+        # log_product = torch.log(product)
+        # loss = - log_product.mean(dim=0)
+
+        H = - (mean_preds * torch.log(mean_preds)).sum(dim=1).mean(dim=0)
+
+        batch_mean_preds = mean_preds.mean(dim=0)
+        H_batch = - (batch_mean_preds * torch.log(batch_mean_preds)).sum()
+
+        loss = H - H_batch
 
         if train:
             torch.autograd.set_detect_anomaly(True)
@@ -191,12 +202,11 @@ class Brain(nn.Module):
             for i in optimizers:
                 i.step()
 
-
         number_neighbours = 8
         second_guess = []
         for i in range(dim):
-            n = self.neighbors(i, 4, 4, number_neighbours)
-
+            n = self.neighbors(i, 5, 5, number_neighbours)
+            #print("i", i, "n", n)
             neighbs = [predictions[nei] for nei in n]
 
             while len(neighbs) < number_neighbours:
@@ -210,16 +220,12 @@ class Brain(nn.Module):
         # print(predictions[0].shape)
         # print("predictions", len(predictions))
 
-        sum_predictions = torch.zeros(second_guess[0].shape)
-        sum_predictions = sum_predictions.to('cuda')
+        mean_predictions = torch.zeros(second_guess[0].shape)
+        mean_predictions = mean_predictions.to('cuda')
 
         for p in second_guess:
+            mean_predictions += p
 
-            sum_predictions += p
+        mean_predictions /= len(second_guess)
 
-        sum_predictions /= len(second_guess)
-        squared_sum_preds = sum_predictions * sum_predictions
-
-        #product_predictions[(product_predictions < self.eps).data] = self.eps
-
-        return squared_sum_preds, second_guess
+        return mean_predictions, second_guess
