@@ -20,12 +20,13 @@ import copy
 import numpy as np
 from torch.autograd import Variable
 import torch
+from entropy_balance_loss import entropy_balance_loss
 from stl_utils import vertical_flip
 
 # Default constants
 LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 300000
-BATCH_SIZE_DEFAULT = 64
+BATCH_SIZE_DEFAULT = 128
 EVAL_FREQ_DEFAULT = 200
 NUMBER_CLASSES = 10
 FLAGS = None
@@ -103,13 +104,7 @@ def to_gray(X, batch_size=BATCH_SIZE_DEFAULT):
     return X_copy
 
 
-def forward_block(X, ids, colons, optimizers, train, to_tensor_size,
-                     p1=torch.zeros([BATCH_SIZE_DEFAULT, NUMBER_CLASSES]),
-                     p2=torch.zeros([BATCH_SIZE_DEFAULT, NUMBER_CLASSES]),
-                     p3=torch.zeros([BATCH_SIZE_DEFAULT, NUMBER_CLASSES]),
-                     p4=torch.zeros([BATCH_SIZE_DEFAULT, NUMBER_CLASSES]),
-                     p5=torch.zeros([BATCH_SIZE_DEFAULT, NUMBER_CLASSES]),
-                     p6=torch.zeros([BATCH_SIZE_DEFAULT, NUMBER_CLASSES])):
+def forward_block(X, ids, colons, optimizers, train, to_tensor_size):
 
     x_train = X[ids, :]
 
@@ -131,18 +126,14 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size,
 
     images = images.to('cuda')
 
-    mean_preds, preds = colons[0](images, train, optimizers)
+    balance_coeff = 3
+    mean_preds, preds = colons[0](images, train, optimizers, balance_coeff)
 
     # product = product_predictions.mean(dim=0)
     # log_product = torch.log(product)
     # loss = - log_product.mean(dim=0)
 
-    H = - (mean_preds * torch.log(mean_preds)).sum(dim=1).mean(dim=0)
-
-    batch_mean_preds = mean_preds.mean(dim=0)
-    H_batch = - (batch_mean_preds * torch.log(batch_mean_preds)).sum()
-
-    loss = H - H_batch
+    loss = entropy_balance_loss(mean_preds, balance_coeff)
 
     if train:
         torch.autograd.set_detect_anomaly(True)
@@ -191,13 +182,6 @@ def train():
     predictor_model = os.path.join(script_directory, filepath)
     colons_paths.append(predictor_model)
 
-    preds = 50
-    input = 6450
-    #input = 1152
-
-    # c = Ensemble()
-    # c.cuda()
-
     c = Brain(3)
     c.cuda()
     colons.append(c)
@@ -208,6 +192,7 @@ def train():
 
     max_loss = 1999
     max_loss_iter = 0
+    np.set_printoptions(formatter={'float': lambda x: "{0:0.2f}".format(x)})
 
     for iteration in range(MAX_STEPS_DEFAULT):
 
@@ -230,9 +215,37 @@ def train():
                   ", best loss: ", max_loss_iter,
                   ": ", max_loss)
 
-            print(preds[0])
-            print(preds[8])
-            print(preds[20])
+
+            print("preds 00", preds[0][0].cpu().detach().numpy())
+            print("preds 01", preds[1][0].cpu().detach().numpy())
+            print("preds 02", preds[2][0].cpu().detach().numpy())
+            print("preds 03", preds[3][0].cpu().detach().numpy())
+            print("preds 04", preds[4][0].cpu().detach().numpy())
+            print("preds 05", preds[5][0].cpu().detach().numpy())
+            print("preds 06", preds[6][0].cpu().detach().numpy())
+            print("preds 07", preds[7][0].cpu().detach().numpy())
+            print("preds 08", preds[8][0].cpu().detach().numpy())
+            print("preds 09", preds[9][0].cpu().detach().numpy())
+            print("preds 10", preds[10][0].cpu().detach().numpy())
+            print("preds 11", preds[11][0].cpu().detach().numpy())
+            print("preds 12", preds[12][0].cpu().detach().numpy())
+            print("preds 13", preds[13][0].cpu().detach().numpy())
+            print("preds 14", preds[14][0].cpu().detach().numpy())
+            print("preds 15", preds[15][0].cpu().detach().numpy())
+            print("preds 16", preds[16][0].cpu().detach().numpy())
+            print("preds 17", preds[17][0].cpu().detach().numpy())
+            print("preds 18", preds[18][0].cpu().detach().numpy())
+            print("preds 19", preds[19][0].cpu().detach().numpy())
+            print("preds 20", preds[20][0].cpu().detach().numpy())
+            print("preds 21", preds[21][0].cpu().detach().numpy())
+            print("preds 22", preds[22][0].cpu().detach().numpy())
+            print("preds 23", preds[23][0].cpu().detach().numpy())
+            print("preds 24", preds[24][0].cpu().detach().numpy())
+
+            print()
+            print("mean pre", product_preds[0].cpu().detach().numpy())
+            print()
+            print("batch me", product_preds.mean(dim=0).cpu().detach().numpy())
 
             print_info(product_preds, targets, test_ids)
 

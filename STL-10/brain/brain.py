@@ -6,6 +6,7 @@ import torch
 import numpy as np
 from operator import mul
 import sys
+from entropy_balance_loss import entropy_balance_loss
 
 
 class Brain(nn.Module):
@@ -49,15 +50,15 @@ class Brain(nn.Module):
             nn.BatchNorm2d(256),
             nn.ReLU(),
 
-            nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1),
-
-            nn.Conv2d(256, 512, kernel_size=(3, 3), stride=1, padding=1),
-            nn.BatchNorm2d(512),
-            nn.ReLU(),
-
-            nn.Conv2d(512, 512, kernel_size=(3, 3), stride=1, padding=1),
-            nn.BatchNorm2d(512),
-            nn.ReLU(),
+            # nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1),
+            #
+            # nn.Conv2d(256, 512, kernel_size=(3, 3), stride=1, padding=1),
+            # nn.BatchNorm2d(512),
+            # nn.ReLU(),
+            #
+            # nn.Conv2d(512, 512, kernel_size=(3, 3), stride=1, padding=1),
+            # nn.BatchNorm2d(512),
+            # nn.ReLU(),
 
             #nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1),
 
@@ -77,17 +78,17 @@ class Brain(nn.Module):
 
         self.colons = nn.ModuleList([
             nn.Sequential(
-                nn.Linear(592, 1000),
+                nn.Linear(336, 600),
                 nn.Tanh(),
 
-                nn.Linear(1000, 600),
-                nn.Tanh(),
+                # nn.Linear(1000, 600),
+                # nn.Tanh(),
 
                 nn.Linear(600, 10),
                 nn.Softmax(dim=1)
             )
 
-            for _ in range(25)])
+            for _ in range(100)])
 
 
     def neighbors(slef, i, w, h, mode=8):
@@ -134,7 +135,7 @@ class Brain(nn.Module):
         return neighbors
 
 
-    def forward(self, x, train, optimizers):
+    def forward(self, x, train, optimizers, balance_coeff):
         """
         Performs forward pass of the input. Here an input tensor x is transformed through
         several layer transformations.
@@ -184,12 +185,7 @@ class Brain(nn.Module):
         # log_product = torch.log(product)
         # loss = - log_product.mean(dim=0)
 
-        H = - (mean_preds * torch.log(mean_preds)).sum(dim=1).mean(dim=0)
-
-        batch_mean_preds = mean_preds.mean(dim=0)
-        H_batch = - (batch_mean_preds * torch.log(batch_mean_preds)).sum()
-
-        loss = H - H_batch
+        loss = entropy_balance_loss(mean_preds, balance_coeff)
 
         if train:
             torch.autograd.set_detect_anomaly(True)
@@ -223,9 +219,14 @@ class Brain(nn.Module):
         mean_predictions = torch.zeros(second_guess[0].shape)
         mean_predictions = mean_predictions.to('cuda')
 
+        #print(mean_predictions.shape)
+
         for p in second_guess:
+            # print(p.shape)
+            # print(p[0])
             mean_predictions += p
 
         mean_predictions /= len(second_guess)
-
+        # print(mean_predictions[0])
+        # input()
         return mean_predictions, second_guess

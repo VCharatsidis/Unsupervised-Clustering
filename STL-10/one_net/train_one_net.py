@@ -45,12 +45,13 @@ def encode_4_patches(image, colons, replace,
                      p3=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
                      p4=torch.zeros([BATCH_SIZE_DEFAULT, 10])):
     image /= 255
-    #show_gray(image)
 
-    original_image = scale(image, 40, 28, BATCH_SIZE_DEFAULT)
+    size = 32
+    pad = (96-size)//2
+    original_image = scale(image, size, pad, BATCH_SIZE_DEFAULT)
     #show_gray(original_image)
 
-    original_image = original_image[:, :, 28:68, 28:68]
+    original_image = original_image[:, :, pad:96-pad, pad:96-pad]
     #show_gray(original_image)
 
     # augments = {0: rotate(original_image, 15, BATCH_SIZE_DEFAULT),
@@ -59,10 +60,12 @@ def encode_4_patches(image, colons, replace,
     #             3: vertical_flip(original_image, BATCH_SIZE_DEFAULT),
     #             4: original_image}
 
-    augments = {0: scale(original_image, 30, 5, BATCH_SIZE_DEFAULT),
+    augments = {0: scale(original_image, size-10, 5, BATCH_SIZE_DEFAULT),
                 1: horizontal_flip(original_image, BATCH_SIZE_DEFAULT),
                 2: original_image,
-                3: horizontal_flip(scale(original_image, 30, 5, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT)}
+                3: horizontal_flip(scale(original_image, size-10, 5, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT),
+                4: rotate(original_image, 20, BATCH_SIZE_DEFAULT),
+                5: rotate(original_image, -20, BATCH_SIZE_DEFAULT)}
 
     ids = np.random.choice(len(augments), size=4, replace=True)
 
@@ -70,11 +73,6 @@ def encode_4_patches(image, colons, replace,
     image_2 = augments[ids[1]]
     image_3 = augments[ids[2]]
     image_4 = augments[ids[3]]
-
-    # image_1 = show_image(image_1)
-    # image_2 = show_image(image_2)
-    # image_3 = show_image(image_3)
-    # image_4 = show_image(image_4)
 
     # show_gray(image_1)
     # show_gray(image_2)
@@ -421,7 +419,7 @@ def train():
     predictor_model = os.path.join(script_directory, filepath)
     colons_paths.append(predictor_model)
 
-    input = 4126
+    input = 542
     #input = 1152
 
     c = OneNet(1, input)
