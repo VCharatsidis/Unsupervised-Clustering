@@ -132,8 +132,8 @@ class OneNet(nn.Module):
         conv = self.conv(x)
         conv = torch.flatten(conv, 1)
 
-        linear_input = torch.cat([conv, p1, p2, p3], 1)
+        #linear_input = torch.cat([conv, p1, p2, p3], 1)
 
-        preds = self.linear(linear_input)
+        preds = self.linear(conv)
 
         return preds

@@ -93,11 +93,11 @@ class IIDNet(nn.Module):
 
         self.linear = nn.Sequential(
 
-            nn.Linear(n_inputs, 600),
-            nn.Tanh(),
+            # nn.Linear(n_inputs, 600),
+            # nn.Tanh(),
 
 
-            nn.Linear(600, 10),
+            nn.Linear(n_inputs, 10),
             nn.Softmax(dim=1)
         )
 

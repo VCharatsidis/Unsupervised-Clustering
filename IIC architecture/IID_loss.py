@@ -34,6 +34,7 @@ def compute_joint(x_out, x_tf_out):
 
   p_i_j = x_out.unsqueeze(2) * x_tf_out.unsqueeze(1)  # bn, k, k
   p_i_j = p_i_j.sum(dim=0)  # k, k
+  p_i_j = (p_i_j + p_i_j.t()) / 2.  # symmetrise
   p_i_j = p_i_j / p_i_j.sum()  # normalise
 
   return p_i_j

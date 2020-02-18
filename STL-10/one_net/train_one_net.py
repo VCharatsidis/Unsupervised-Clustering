@@ -15,13 +15,17 @@ from PIL import Image
 from one_net_model import OneNet
 from stl_utils import rotate, scale, to_grayscale, random_erease, vertical_flip, horizontal_flip
 import random
+import sys
+import torch.nn as nn
+from torchvision import transforms
 import torchvision
 
 
 # Default constants
+EPS=sys.float_info.epsilon
 LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 300000
-BATCH_SIZE_DEFAULT = 50
+BATCH_SIZE_DEFAULT = 48
 EVAL_FREQ_DEFAULT = 100
 NUMBER_CLASSES = 1
 FLAGS = None
@@ -46,13 +50,13 @@ def encode_4_patches(image, colons, replace,
                      p4=torch.zeros([BATCH_SIZE_DEFAULT, 10])):
     image /= 255
 
-    size = 40
+    size = 50
     pad = (96-size)//2
     original_image = scale(image, size, pad, BATCH_SIZE_DEFAULT)
-    #show_gray(original_image)
+    show_gray(original_image)
 
     original_image = original_image[:, :, pad:96-pad, pad:96-pad]
-    #show_gray(original_image)
+    show_gray(original_image)
 
     # augments = {0: rotate(original_image, 15, BATCH_SIZE_DEFAULT),
     #             1: rotate(original_image, -15, BATCH_SIZE_DEFAULT),
@@ -75,10 +79,10 @@ def encode_4_patches(image, colons, replace,
     image_3 = augments[ids[2]]
     image_4 = augments[ids[3]]
 
-    # show_gray(image_1)
-    # show_gray(image_2)
-    # show_gray(image_3)
-    # show_gray(image_4)
+    show_gray(image_1)
+    show_gray(image_2)
+    show_gray(image_3)
+    show_gray(image_4)
 
     p1 = p1.cuda()
     p2 = p2.cuda()
@@ -183,6 +187,49 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size,
     images = x_tensor.transpose(0, 1)
     images = images.transpose(2, 3)
 
+    show_gray(images[0])
+
+
+    x = images
+    print("x shape", x.shape)
+
+    ##### x derivative ####
+    a = torch.Tensor([[1, 0, -1],
+                      [2, 0, -2],
+                      [1, 0, -1]])
+
+    a = a.view((1, 1, 3, 3))
+
+    conv1 = nn.Conv2d(1, 1, kernel_size=3, stride=1, padding=1, bias=False)
+    conv1.weight = nn.Parameter(a)
+
+    G_x = conv1(Variable(x)).data.view(BATCH_SIZE_DEFAULT, 1, 96, 96)
+
+    ##### y derivative ####
+
+    b = torch.Tensor([[1, 2, 1],
+                      [0, 0, 0],
+                      [-1, -2, -1]])
+
+    b = b.view((1, 1, 3, 3))
+
+    conv2 = nn.Conv2d(1, 1, kernel_size=3, stride=1, padding=1, bias=False)
+    conv2.weight = nn.Parameter(b)
+    G_y = conv2(Variable(x)).data.view(BATCH_SIZE_DEFAULT, 1, 96, 96)
+
+    G = torch.sqrt(torch.pow(G_x, 2) + torch.pow(G_y, 2))
+
+    images = G_x
+    show_gray(images[0])
+
+    # print("G shape", G.shape)
+    show_gray(G_y[0])
+    # show_gray(G_x[4])
+    # show_gray(G[5])
+    #
+    # input()
+    #######
+
     #images = x_tensor/255.0
 
     replace = True
@@ -197,13 +244,15 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size,
     coeff = 1
     total_loss = entropies_loss(m_preds, coeff)
 
-    # l1 = entropies_loss(preds_1, coeff)
-    # l2 = entropies_loss(preds_2, coeff)
-    # l3 = entropies_loss(preds_3, coeff)
-    # l4 = entropies_loss(preds_4, coeff)
-    #
-    # #TODO
-    # total_loss = l1 + l2 + l3 + l4
+    l1 = entropies_loss(preds_1, coeff)
+    l2 = entropies_loss(preds_2, coeff)
+    l3 = entropies_loss(preds_3, coeff)
+    l4 = entropies_loss(preds_4, coeff)
+
+    #TODO
+    total_loss = l1 + l2 + l3 + l4 + total_loss
+
+
 
     # product = mean_preds * mean_preds
     #
@@ -229,7 +278,8 @@ def entropies_loss(pred, coeff):
     return pred_entropy(pred) - coeff * batch_entropy(pred)
 
 
-def pred_entropy(pred):
+def pred_entropy(prediction):
+    pred = prediction + EPS
     H = - (pred * torch.log(pred)).sum(dim=1).mean(dim=0)
     return H
 
@@ -439,7 +489,7 @@ def train():
     predictor_model = os.path.join(script_directory, filepath)
     colons_paths.append(predictor_model)
 
-    input = 8222
+    input = 12800
     #input = 1152
 
     c = OneNet(1, input)
