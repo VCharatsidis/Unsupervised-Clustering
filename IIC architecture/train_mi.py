@@ -11,15 +11,16 @@ from torch.autograd import Variable
 import matplotlib.pyplot as plt
 
 from sklearn.datasets import fetch_openml
-from mutual_info import IID_loss
+from IID_loss import IID_loss
 from four_variate_mi import four_variate_IID_loss
+from transform_utils import scale, rotate, random_erease, vertical_flip
 
-from colon import Colon
+from iid_net import IIDNet
 
 # Default constants
-LEARNING_RATE_DEFAULT = 1e-3
+LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 30000
-BATCH_SIZE_DEFAULT = 1024
+BATCH_SIZE_DEFAULT = 256
 EVAL_FREQ_DEFAULT = 400
 
 FLAGS = None
@@ -59,15 +60,6 @@ def kl_divergence(p, q):
     return torch.nn.functional.kl_div(p, q)
 
 
-def encode_patches(image, colons):
-    i_1, i_2 = split_image(image)
-
-    pred_1 = colons[0](i_1)
-    pred_2 = colons[0](i_2)
-
-    return pred_1, pred_2
-
-
 def forward_block(X, ids, colons, optimizers, train, to_tensor_size):
     x_train = X[ids, :]
 
@@ -75,7 +67,24 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size):
 
     images = x_tensor/255
 
-    pred_1, pred_2, = encode_patches(images, colons)
+    augments = {
+        0: rotate(images, 20, BATCH_SIZE_DEFAULT),
+        1: rotate(images, -20, BATCH_SIZE_DEFAULT),
+        2: scale(images, BATCH_SIZE_DEFAULT),
+        3: images
+    }
+
+    ids = np.random.choice(len(augments), size=4, replace=False)
+
+    image_1 = augments[ids[0]]
+    image_2 = augments[ids[1]]
+
+    image_1 = image_1.to('cuda')
+    image_2 = image_2.to('cuda')
+
+    pred_1 = colons[0](image_1)
+    pred_2 = colons[0](image_2)
+
     loss = IID_loss(pred_1, pred_2)
 
     if train:
@@ -88,19 +97,6 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size):
         # optimizers[1].step()
 
     return pred_1, pred_2, loss
-
-def split_image(image):
-    image_shape = image.shape
-
-    image_1, image_2 = torch.split(image, image_shape[2]//2, dim=3)
-
-    image_1 = image_1.to('cuda')
-    image_2 = image_2.to('cuda')
-
-    # print(image_1.shape)
-    # print(image_2.shape)
-
-    return image_1, image_2
 
 
 def print_params(model):
@@ -129,12 +125,12 @@ def train():
     colons_paths.append(predictor_model)
 
     #input = 5120
-    input = 3840
+    input = 4608
 
     # c = Ensemble()
     # c.cuda()
 
-    c = Colon(1, input)
+    c = IIDNet(1, input)
     c.cuda()
     colons.append(c)
 
@@ -163,7 +159,7 @@ def train():
             print()
             print("iteration: ", iteration)
 
-            print_info(p1, p2, 150, targets, test_ids)
+            print_info(p1, p2, targets, test_ids)
 
             test_loss = mim.item()
 
@@ -190,9 +186,9 @@ def show_mnist(first_image):
     plt.show()
 
 
-def print_info(p1, p2, number, targets, test_ids):
+def print_info(p1, p2, targets, test_ids):
     print_dict = {"0": "", "1": "", "2": "", "3": "", "4": "", "5": "", "6": "", "7": "", "8": "", "9": ""}
-    for i in range(number):
+    for i in range(p1.shape[0]):
         if i == 10:
             print("")
 

@@ -93,16 +93,13 @@ class Brain(nn.Module):
 
     def neighbors(slef, i, w, h, mode=8):
         """Return a list of neighbors.
-
         Works as like a 2d graph of 'w' width and 'h' height with boundaries.
-
         Args:
             i(int): 1d index
             w(int): width of the graph.
             h(int): height of the graph.
             mode(int): 8 for eight directions (includes diagonals); else for
                 4 directions (top, down, left, right).
-
         Returns:
             list
         """
@@ -176,16 +173,18 @@ class Brain(nn.Module):
         mean_preds = torch.zeros(predictions[0].shape)
         mean_preds = mean_preds.to('cuda')
 
-        for p in predictions:
-            mean_preds += p
+        loss = 0
 
-        mean_preds /= len(predictions)
+        for p in predictions:
+            loss += entropy_balance_loss(p, balance_coeff)
+
+        loss /= len(predictions)
 
         # product = first_predictions.mean(dim=0)
         # log_product = torch.log(product)
         # loss = - log_product.mean(dim=0)
 
-        loss = entropy_balance_loss(mean_preds, balance_coeff)
+        #loss = entropy_balance_loss(mean_preds, balance_coeff)
 
         if train:
             torch.autograd.set_detect_anomaly(True)

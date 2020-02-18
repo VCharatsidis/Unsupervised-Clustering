@@ -126,14 +126,22 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size):
 
     images = images.to('cuda')
 
-    balance_coeff = 3
+    balance_coeff = 2
     mean_preds, preds = colons[0](images, train, optimizers, balance_coeff)
 
     # product = product_predictions.mean(dim=0)
     # log_product = torch.log(product)
     # loss = - log_product.mean(dim=0)
 
-    loss = entropy_balance_loss(mean_preds, balance_coeff)
+    loss = 0
+    for p in preds:
+        # print(p.shape)
+        # print(p[0])
+        loss += entropy_balance_loss(p, balance_coeff)
+
+    loss /= len(preds)
+
+    #loss = entropy_balance_loss(mean_preds, balance_coeff)
 
     if train:
         torch.autograd.set_detect_anomaly(True)

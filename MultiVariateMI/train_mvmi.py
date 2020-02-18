@@ -11,10 +11,6 @@ from torch.autograd import Variable
 import matplotlib.pyplot as plt
 
 from sklearn.datasets import fetch_openml
-from multi_variate_mi import three_variate_IID_loss
-from ensemble import Ensemble
-from four_variate_mi import four_variate_IID_loss
-from mutual_info import IID_loss
 from mlp import ColonMLP
 import sys
 from colon_mvmi import ColonMVMI
