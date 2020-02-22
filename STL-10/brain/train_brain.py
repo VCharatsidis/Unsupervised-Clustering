@@ -21,6 +21,7 @@ import numpy as np
 from torch.autograd import Variable
 import torch
 from entropy_balance_loss import entropy_balance_loss
+from meta_brain import MetaBrain
 from stl_utils import vertical_flip
 
 # Default constants
@@ -126,12 +127,17 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size):
 
     images = images.to('cuda')
 
-    balance_coeff = 2
+    balance_coeff = 1
     mean_preds, preds = colons[0](images, train, optimizers, balance_coeff)
 
-    # product = product_predictions.mean(dim=0)
-    # log_product = torch.log(product)
-    # loss = - log_product.mean(dim=0)
+    predictions = torch.cat(preds, 1)
+    meta_pred = colons[1](predictions.detach())
+
+    #meta_loss = entropy_balance_loss(meta_pred)
+    meta_squared = meta_pred * meta_pred
+    product = meta_squared.mean(dim=0)
+    log_product = torch.log(product)
+    meta_loss = - log_product.mean(dim=0)
 
     loss = 0
     for p in preds:
@@ -139,22 +145,20 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size):
         # print(p[0])
         loss += entropy_balance_loss(p, balance_coeff)
 
-    loss /= len(preds)
-
     #loss = entropy_balance_loss(mean_preds, balance_coeff)
 
     if train:
         torch.autograd.set_detect_anomaly(True)
 
-        for i in optimizers:
-            i.zero_grad()
-
+        optimizers[0].zero_grad()
         loss.backward(retain_graph=True)
+        optimizers[0].step()
 
-        for i in optimizers:
-            i.step()
+        optimizers[1].zero_grad()
+        meta_loss.backward()
+        optimizers[1].step()
 
-    return mean_preds, loss, preds
+    return meta_pred, loss, preds
 
 
 def print_params(model):
@@ -197,6 +201,12 @@ def train():
     optimizer = torch.optim.Adam(c.parameters(), lr=LEARNING_RATE_DEFAULT)
     optimizers.append(optimizer)
 
+    meta = MetaBrain(1000)
+    meta.cuda()
+    colons.append(meta)
+
+    meta_optimizer = torch.optim.Adam(meta.parameters(), lr=LEARNING_RATE_DEFAULT)
+    optimizers.append(meta_optimizer)
 
     max_loss = 1999
     max_loss_iter = 0

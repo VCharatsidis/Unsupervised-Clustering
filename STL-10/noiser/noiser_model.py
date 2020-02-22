@@ -6,14 +6,14 @@ import torch
 
 
 
-class OneNet(nn.Module):
+class NoiserNet(nn.Module):
     """
     This class implements a Multi-layer Perceptron in PyTorch.
     It handles the different layers and parameters of the model.
     Once initialized an MLP object can perform forward.
     """
 
-    def __init__(self, n_channels, n_inputs):
+    def __init__(self, n_channels, n_inputs, h, w):
         """
         Initializes MLP object.
         Args:
@@ -26,7 +26,10 @@ class OneNet(nn.Module):
                      This number is required in order to specify the
                      output dimensions of the MLP
         """
-        super(OneNet, self).__init__()
+        super(NoiserNet, self).__init__()
+
+        self.h = h
+        self.w = w
 
         self.conv = nn.Sequential(
             nn.Conv2d(n_channels, 64, kernel_size=3, stride=1, padding=1),
@@ -96,13 +99,14 @@ class OneNet(nn.Module):
             nn.Linear(n_inputs, 600),
             nn.Tanh(),
 
+            nn.Linear(600, 600),
+            nn.Tanh(),
 
-            nn.Linear(600, 10),
-            nn.Softmax(dim=1)
+            nn.Linear(600, self.w * self.h),
+            nn.Sigmoid()
         )
 
-
-    def forward(self, x, p1, p2, p3):
+    def forward(self, x):
         """
         Performs forward pass of the input. Here an input tensor x is transformed through
         several layer transformations.
@@ -114,9 +118,12 @@ class OneNet(nn.Module):
 
         conv = self.conv(x)
         conv = torch.flatten(conv, 1)
+        # noised_image = self.linear(conv)
 
-        linear_input = torch.cat([conv, p1, p2, p3], 1)
+        flatten_image = torch.flatten(x, 1)
 
-        preds = self.linear(linear_input)
+        concat = torch.cat([conv, flatten_image], 1)
 
-        return preds
+        noised_image = self.linear(concat)
+
+        return noised_image

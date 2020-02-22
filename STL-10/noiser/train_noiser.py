@@ -10,15 +10,15 @@ import torch
 from torch.autograd import Variable
 import matplotlib.pyplot as plt
 from stl10_input import read_all_images, read_labels
-import torchvision.transforms.functional as F
-from PIL import Image
-from one_net_model import OneNet
+
+from encoder_model import EncoderNet
+from noiser_model import NoiserNet
+from metaModel import MetaModel
+from loss import entropy_balance_loss
 from stl_utils import rotate, scale, to_grayscale, random_erease, vertical_flip, horizontal_flip, sobel_filter_y, sobel_filter_x, sobel_total
 import random
 import sys
-import torch.nn as nn
-from torchvision import transforms
-import torchvision
+
 
 
 # Default constants
@@ -26,8 +26,8 @@ EPS=sys.float_info.epsilon
 LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 300000
 
-BATCH_SIZE_DEFAULT = 44
-INPUT_NET = 8222
+BATCH_SIZE_DEFAULT = 128
+INPUT_NET = 8192
 
 EVAL_FREQ_DEFAULT = 100
 NUMBER_CLASSES = 1
@@ -47,150 +47,6 @@ def kl_divergence(p, q):
     return torch.nn.functional.kl_div(p, q)
 
 
-def encode_4_patches(image, colons, replace,
-                     p1=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
-                     p2=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
-                     p3=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
-                     p4=torch.zeros([BATCH_SIZE_DEFAULT, 10])):
-    image /= 255
-
-    # size = 40
-    # pad = (96 - size) // 2
-    # lydia = image[:, :, pad:96 - pad, pad:96 - pad]
-    # show_gray(lydia)
-
-    #show_gray(image)
-
-    size = 40
-    pad = (96-size)//2
-    original_image = scale(image, size, pad, BATCH_SIZE_DEFAULT)
-    #show_gray(original_image)
-
-    original_image = original_image[:, :, pad:96-pad, pad:96-pad]
-    #show_gray(original_image)
-
-    # s_image = sobel_filter_x(original_image, BATCH_SIZE_DEFAULT)
-    # show_gray(s_image)
-    #
-    # s_image = sobel_filter_y(original_image, BATCH_SIZE_DEFAULT)
-    # show_gray(s_image)
-    #
-    # s_image = sobel_total(original_image, BATCH_SIZE_DEFAULT)
-    # show_gray(s_image)
-    #
-    # o = horizontal_flip(original_image, BATCH_SIZE_DEFAULT)
-    # o = sobel_filter_x(o, BATCH_SIZE_DEFAULT)
-    # show_gray(o)
-    #
-    # o = vertical_flip(original_image, BATCH_SIZE_DEFAULT)
-    # o = sobel_filter_x(o, BATCH_SIZE_DEFAULT)
-    # show_gray(o)
-    #
-    # o = scale(original_image, size - 10, 5, BATCH_SIZE_DEFAULT)
-    # o = sobel_filter_x(o, BATCH_SIZE_DEFAULT)
-    # show_gray(o)
-    #
-    # o = rotate(original_image, 20, BATCH_SIZE_DEFAULT)
-    # o = sobel_filter_x(o, BATCH_SIZE_DEFAULT)
-    # show_gray(o)
-
-    # augments = {0: scale(original_image, size-10, 5, BATCH_SIZE_DEFAULT),
-    #             1: horizontal_flip(original_image, BATCH_SIZE_DEFAULT),
-    #             2: original_image,
-    #             3: horizontal_flip(scale(original_image, size-10, 5, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT),
-    #             4: rotate(original_image, 20, BATCH_SIZE_DEFAULT),
-    #             5: rotate(original_image, -20, BATCH_SIZE_DEFAULT),
-    #             6: vertical_flip(original_image, BATCH_SIZE_DEFAULT)}
-
-    augments = {0: horizontal_flip(original_image, BATCH_SIZE_DEFAULT),
-                1: original_image,
-                2: vertical_flip(original_image, BATCH_SIZE_DEFAULT),
-                3: scale(original_image, size-4, 2, BATCH_SIZE_DEFAULT)}
-
-    ids = np.random.choice(len(augments), size=4, replace=False)
-
-    sobels = {0: augments[ids[0]],
-              1: sobel_total(augments[ids[1]], BATCH_SIZE_DEFAULT),
-              2: sobel_filter_x(augments[ids[2]], BATCH_SIZE_DEFAULT),
-              3: sobel_filter_y(augments[ids[3]], BATCH_SIZE_DEFAULT)}
-
-    sobel_id = np.random.choice(len(sobels), size=4, replace=False)
-
-    image_1 = sobels[sobel_id[0]]
-    image_2 = sobels[sobel_id[1]]
-    image_3 = sobels[sobel_id[2]]
-    image_4 = sobels[sobel_id[3]]
-
-    # show_gray(image_1)
-    # show_gray(image_2)
-    # show_gray(image_3)
-    # show_gray(image_4)
-
-    p1 = p1.cuda()
-    p2 = p2.cuda()
-    p3 = p3.cuda()
-    p4 = p4.cuda()
-
-    net_id = np.random.choice(len(colons), size=4, replace=False)
-
-    image_1 = image_1.to('cuda')
-    image_2 = image_2.to('cuda')
-    image_3 = image_3.to('cuda')
-    image_4 = image_4.to('cuda')
-
-    # preds_1 = colons[net_id[0]](image_1, p2, p3, p4)
-    # preds_2 = colons[net_id[1]](image_2, p1, p3, p4)
-    # preds_3 = colons[net_id[2]](image_3, p1, p2, p4)
-    # preds_4 = colons[net_id[3]](image_4, p1, p2, p3)
-
-    preds_1 = colons[0](image_1, p2, p3, p4)
-    preds_2 = colons[0](image_2, p1, p3, p4)
-    preds_3 = colons[0](image_3, p1, p2, p4)
-    preds_4 = colons[0](image_4, p1, p2, p3)
-
-    # image_1 = image_1.to('cuda')
-    # preds_1 = colons[0](image_1, p2, p3, p4)
-    # del image_1
-    # torch.cuda.empty_cache()
-    #
-    # image_2 = image_2.to('cuda')
-    # preds_2 = colons[0](image_2, p1, p3, p4)
-    # del image_2
-    # torch.cuda.empty_cache()
-    #
-    # image_3 = image_3.to('cuda')
-    # preds_3 = colons[0](image_3, p1, p2, p4)
-    # del image_3
-    # torch.cuda.empty_cache()
-    #
-    # image_4 = image_4.to('cuda')
-    # preds_4 = colons[0](image_4, p1, p2, p3)
-    # del image_4
-    # torch.cuda.empty_cache()
-
-    # image_1 = image_1.to('cuda')
-    # preds_1 = colons[net_id[0]](image_1, p2, p3, p4)
-    # del image_1
-    # torch.cuda.empty_cache()
-    #
-    # image_2 = image_2.to('cuda')
-    # preds_2 = colons[net_id[1]](image_2, p1, p3, p4)
-    # del image_2
-    # torch.cuda.empty_cache()
-    #
-    # image_3 = image_3.to('cuda')
-    # preds_3 = colons[net_id[2]](image_3, p1, p2, p4)
-    # del image_3
-    # torch.cuda.empty_cache()
-    #
-    # image_4 = image_4.to('cuda')
-    # preds_4 = colons[net_id[3]](image_4, p1, p2, p3)
-    # del image_4
-    # torch.cuda.empty_cache()
-
-    return preds_1, preds_2, preds_3, preds_4
-
-
 def rgb2gray(rgb):
 
     r, g, b = rgb[:, 0, :, :], rgb[:, 1, :, :], rgb[:, 2, :, :]
@@ -198,6 +54,11 @@ def rgb2gray(rgb):
 
     return gray
 
+def show_gray_numpy(image_1):
+    z = image_1.squeeze(1)
+    pixels = z[0]
+    plt.imshow(pixels, cmap='gray')
+    plt.show()
 
 def show_gray(image_1):
     z = image_1
@@ -218,13 +79,7 @@ def show_image(image_1):
     return image_1
 
 
-def forward_block(X, ids, colons, optimizers, train, to_tensor_size,
-                p1 = torch.zeros([BATCH_SIZE_DEFAULT, 10]),
-                     p2 = torch.zeros([BATCH_SIZE_DEFAULT, 10]),
-                          p3 = torch.zeros([BATCH_SIZE_DEFAULT, 10]),
-                               p4 = torch.zeros([BATCH_SIZE_DEFAULT, 10])
-
-                            ):
+def forward_block(X, ids, colons, optimizers, train, to_tensor_size, measure):
 
     x_train = X[ids, :]
     x_train = rgb2gray(x_train)
@@ -236,43 +91,77 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size,
 
     #show_gray(images[0])
 
-    replace = True
-    if random.uniform(0, 1) > 0.5:
-        replace = False
+    images /= 255
 
-    preds_1, preds_2, preds_3, preds_4 = encode_4_patches(images, colons, replace, p1, p2, p3, p4)
+    size = 40
+    pad = (96 - size) // 2
+    original_image = scale(images, size, pad, BATCH_SIZE_DEFAULT)
+    # show_gray(original_image)
 
-    #mean_preds = preds_1 * preds_2 * preds_3 * preds_4
-    # m_preds = (preds_1 + preds_2 + preds_3 + preds_4) / 4
-    #
-    # coeff = 1
-    # total_loss = entropies_loss(m_preds, coeff)
+    original_image = original_image[:, :, pad:96 - pad, pad:96 - pad]
+    # show_gray(original_image)
 
-    # l1 = entropies_loss(preds_1, coeff)
-    # l2 = entropies_loss(preds_2, coeff)
-    # l3 = entropies_loss(preds_3, coeff)
-    # l4 = entropies_loss(preds_4, coeff)
-    #
-    # #TODO
-    # total_loss = l1 + l2 + l3 + l4 + total_loss
+    augments = {0: horizontal_flip(original_image, BATCH_SIZE_DEFAULT),
+                1: original_image,
+                2: vertical_flip(original_image, BATCH_SIZE_DEFAULT),
+                3: scale(original_image, size - 6, 3, BATCH_SIZE_DEFAULT)}
 
-    product = preds_1 * preds_2 * preds_3 * preds_4
-    product = product.mean(dim=0)
+    ids = np.random.choice(len(augments), size=4, replace=False)
+
+    image_1 = colons["noiser"](augments[ids[0]]).view(BATCH_SIZE_DEFAULT, 1, size, size) * augments[ids[0]]
+    # print(original_image[0].sum())
+    # print(original_image[0][0])
+    image_2 = colons["noiser"](augments[ids[1]]).view(BATCH_SIZE_DEFAULT, 1, size, size) * augments[ids[1]]
+    # print(image_2[0].sum())
+    # print(image_2[0][0])
+    #input()
+
+    image_1 = image_1.to('cuda')
+    image_2 = image_2.to('cuda')
+
+    preds_1 = colons["encoder 1"](image_1)
+    preds_2 = colons["encoder 2"](image_2)
+
+    # product = preds_1 * preds_2
+    # product = product.mean(dim=0)
+    # log_product = torch.log(product)
+    # diversion_loss = - log_product.mean(dim=0)
+
+    entropy_loss_1 = entropy_balance_loss(preds_1)
+    entropy_loss_2 = entropy_balance_loss(preds_2)
+
+    noise_loss = image_1.sum(dim=3).sum(dim=2).sum(dim=1).mean() + image_2.sum(dim=3).sum(dim=2).sum(dim=1).mean()
+    noiser_loss = noise_loss + entropy_loss_1 + entropy_loss_2
+
+    predictions = torch.cat([preds_1, preds_2], 1)
+    meta_prediction = colons["meta"](predictions.detach())
+    squared = meta_prediction * meta_prediction
+    product = squared.mean(dim=0)
     log_product = torch.log(product)
-    total_loss = - log_product.mean(dim=0)
+    meta_loss = - log_product.mean(dim=0)
+
+    #meta_loss = entropy_balance_loss(meta_prediction)
 
     if train:
         torch.autograd.set_detect_anomaly(True)
 
-        for idx, i in enumerate(optimizers):
-            i.zero_grad()
+        optimizers["encoder 1"].zero_grad()
+        entropy_loss_1.backward(retain_graph=True)
+        optimizers["encoder 1"].step()
 
-        total_loss.backward(retain_graph=True)
+        optimizers["encoder 2"].zero_grad()
+        entropy_loss_2.backward(retain_graph=True)
+        optimizers["encoder 2"].step()
 
-        for idx, i in enumerate(optimizers):
-            i.step()
+        optimizers["meta"].zero_grad()
+        meta_loss.backward()
+        optimizers["meta"].step()
 
-    return preds_1, preds_2, preds_3, preds_4, total_loss
+        optimizers["noiser"].zero_grad()
+        noiser_loss.backward()
+        optimizers["noiser"].step()
+
+    return preds_1, preds_2, meta_loss, original_image, image_1, image_2, meta_prediction
 
 
 def entropies_loss(pred, coeff):
@@ -338,7 +227,7 @@ def batch_entropy(pred):
 #     return pred_1, pred_2, pred_3, pred_4, loss
 
 
-def measure_acc_augments(X_test, colons, targets):
+def measure_acc_augments(X_test, colons, targets, noiser):
     print_dict = {1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 0: []}
     runs = len(X_test)//BATCH_SIZE_DEFAULT
     avg_loss = 0
@@ -346,18 +235,14 @@ def measure_acc_augments(X_test, colons, targets):
     for j in range(runs):
         test_ids = range(j * BATCH_SIZE_DEFAULT, (j + 1) * BATCH_SIZE_DEFAULT)
         optimizers = []
-        p1, p2, p3, p4, mim = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT)
-        p1, p2, p3, p4, mim = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, p1, p2, p3, p4)
+        p1, p2, mim, original_image, image_1, image_2, meta_prediction = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, True)
 
         avg_loss += mim.item()
         for i in range(p1.shape[0]):
             val, index = torch.max(p1[i], 0)
             val, index2 = torch.max(p2[i], 0)
-            val, index3 = torch.max(p3[i], 0)
-            val, index4 = torch.max(p4[i], 0)
 
-            preds = [index.data.cpu().numpy(), index2.data.cpu().numpy(), index3.data.cpu().numpy(),
-                     index4.data.cpu().numpy()]
+            preds = [index.data.cpu().numpy(), index2.data.cpu().numpy()]
             preds = list(preds)
             preds = [int(x) for x in preds]
             # print(preds)
@@ -487,64 +372,60 @@ def train():
 
     script_directory = os.path.split(os.path.abspath(__file__))[0]
 
-    colons = []
+    colons = {}
 
-    optimizers = []
+    optimizers = {}
     colons_paths = []
 
     filepath = 'encoders\\encoder_' + str(0) + '.model'
     predictor_model = os.path.join(script_directory, filepath)
     colons_paths.append(predictor_model)
 
-    c = OneNet(1, INPUT_NET)
-    c = c.cuda()
-    colons.append(c)
-
-    c1 = OneNet(1, INPUT_NET)
+    c1 = EncoderNet(1, INPUT_NET)
     c1 = c1.cuda()
-    colons.append(c1)
+    colons["encoder 1"] = c1
+    optimizers["encoder 1"] = torch.optim.Adam(c1.parameters(), lr=LEARNING_RATE_DEFAULT)
 
-    c2 = OneNet(1, INPUT_NET)
+    c2 = EncoderNet(1, INPUT_NET)
     c2 = c2.cuda()
-    colons.append(c2)
+    colons["encoder 2"] = c2
+    optimizers["encoder 2"] = torch.optim.Adam(c2.parameters(), lr=LEARNING_RATE_DEFAULT)
 
-    c3 = OneNet(1, INPUT_NET)
-    c3 = c3.cuda()
-    colons.append(c3)
+    # c3 = EncoderNet(1, INPUT_NET)
+    # c3 = c3.cuda()
+    # colons.append(c3)
+    # optimizers["encoder 3"] = torch.optim.Adam(c3.parameters(), lr=LEARNING_RATE_DEFAULT)
+    #
+    # c4 = EncoderNet(1, INPUT_NET)
+    # c4 = c4.cuda()
+    # colons.append(c4)
+    # optimizers["encoder 4"] = torch.optim.Adam(c4.parameters(), lr=LEARNING_RATE_DEFAULT)
 
-    optimizer = torch.optim.Adam(c.parameters(), lr=LEARNING_RATE_DEFAULT)
-    optimizers.append(optimizer)
+    meta_model = MetaModel(20)
+    meta_model = meta_model.cuda()
+    colons["meta"] = meta_model
+    optimizers["meta"] = torch.optim.Adam(meta_model.parameters(), lr=LEARNING_RATE_DEFAULT)
 
-    optimizer1 = torch.optim.Adam(c1.parameters(), lr=LEARNING_RATE_DEFAULT)
-    optimizers.append(optimizer1)
+    noiser = NoiserNet(1, 9792, 40, 40)
+    colons["noiser"] = noiser
+    optimizers["noiser"] = torch.optim.Adam(noiser.parameters(), lr=LEARNING_RATE_DEFAULT)
 
-    optimizer2 = torch.optim.Adam(c2.parameters(), lr=LEARNING_RATE_DEFAULT)
-    optimizers.append(optimizer2)
-
-    optimizer3 = torch.optim.Adam(c3.parameters(), lr=LEARNING_RATE_DEFAULT)
-    optimizers.append(optimizer3)
-
-    max_loss = 1999
+    max_loss = 1000000000
     max_loss_iter = 0
     description = "4 augments"
-    print(colons[0])
 
     for iteration in range(MAX_STEPS_DEFAULT):
 
         ids = np.random.choice(len(X_train), size=BATCH_SIZE_DEFAULT, replace=False)
 
         train = True
-        p1, p2, p3, p4, mim = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT)
-        p1, p2, p3, p4, mim = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, p1, p2, p3, p4)
+        p1, p2, mim, original_image, image_1, image_2, meta_prediction = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, False)
 
         if iteration % EVAL_FREQ_DEFAULT == 0:
             test_ids = np.random.choice(len(X_test), size=BATCH_SIZE_DEFAULT, replace=False)
             print()
-            p1, p2, p3, p4, mim = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT)
+            p1, p2, mim, original_image, image_1, image_2, meta_prediction = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, False)
             print("loss 1: ", mim.item())
-            p1, p2, p3, p4, mim = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, p1, p2, p3, p4)
-            print("loss 2: ", mim.item())
-
 
             print("iteration: ", iteration,
                   ", batch size: ", BATCH_SIZE_DEFAULT,
@@ -554,16 +435,22 @@ def train():
             print("description: ", description)
 
 
-            print_info(p1, p2, p3, p4, targets, test_ids)
+            print_info(meta_prediction, targets, test_ids)
 
             test_loss = mim.item()
 
             if max_loss > test_loss:
+
+                if iteration > 3000:
+                    show_gray(original_image)
+                    show_gray_numpy(image_1.cpu().detach().numpy())
+                    show_gray_numpy(image_2.cpu().detach().numpy())
+
                 max_loss = test_loss
                 max_loss_iter = iteration
                 #measure_accuracy(X_test, colons, targets)
 
-                measure_acc_augments(X_test, colons, targets)
+                measure_acc_augments(X_test, colons, targets, noiser)
 
 
                 print("models saved iter: " + str(iteration))
@@ -589,16 +476,13 @@ def show_mnist(first_image, w, h):
     plt.show()
 
 
-def print_info(p1, p2, p3, p4, targets, test_ids):
+def print_info(p1, targets, test_ids):
     print_dict = {1: "", 2: "", 3: "", 4: "", 5: "", 6: "", 7: "", 8: "", 9: "", 0: ""}
     for i in range(p1.shape[0]):
         val, index = torch.max(p1[i], 0)
-        val, index2 = torch.max(p2[i], 0)
-        val, index3 = torch.max(p3[i], 0)
-        val, index4 = torch.max(p4[i], 0)
+        #val, index2 = torch.max(p2[i], 0)
 
-        string = str(index.data.cpu().numpy()) + " " + str(index2.data.cpu().numpy()) + " " + str(
-            index3.data.cpu().numpy())+ " "  + str(index4.data.cpu().numpy()) + ", "
+        string = str(index.data.cpu().numpy()) + ", " #+ str(index2.data.cpu().numpy()) + ", "
 
         label = targets[test_ids[i]]
         if label == 10:

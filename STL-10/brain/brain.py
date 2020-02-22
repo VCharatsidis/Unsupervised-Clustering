@@ -146,7 +146,8 @@ class Brain(nn.Module):
         #print("conv shape", conv.shape)
 
         conv = torch.flatten(conv, 2)
-        #print(conv.shape)
+        # print(conv.shape)
+        # input()
 
         p1 = torch.zeros([conv.shape[0], 10])
         p2 = torch.zeros([conv.shape[0], 10])
@@ -170,15 +171,10 @@ class Brain(nn.Module):
         #print("dim", dim)
         predictions = [self.colons[i](torch.cat([p1, p2, p3, p4, p5, p6, p7, p8, conv[:, :, i]], 1)) for i in range(dim)]
 
-        mean_preds = torch.zeros(predictions[0].shape)
-        mean_preds = mean_preds.to('cuda')
-
         loss = 0
 
         for p in predictions:
             loss += entropy_balance_loss(p, balance_coeff)
-
-        loss /= len(predictions)
 
         # product = first_predictions.mean(dim=0)
         # log_product = torch.log(product)
@@ -189,13 +185,9 @@ class Brain(nn.Module):
         if train:
             torch.autograd.set_detect_anomaly(True)
 
-            for i in optimizers:
-                i.zero_grad()
-
+            optimizers[0].zero_grad()
             loss.backward(retain_graph=True)
-
-            for i in optimizers:
-                i.step()
+            optimizers[0].step()
 
         number_neighbours = 8
         second_guess = []
