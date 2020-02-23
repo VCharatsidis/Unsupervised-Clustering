@@ -7,6 +7,7 @@ from torch.autograd import Variable
 import torch
 from Mutual_Information.RandomErase import RandomErasing
 import torch.nn as nn
+import matplotlib.pyplot as plt
 BATCH_SIZE_DEFAULT = 100
 
 
@@ -23,6 +24,14 @@ def rotate(X, degrees, batch_size=BATCH_SIZE_DEFAULT):
         X_copy[i] = trans_image
 
     return X_copy
+
+
+def rgb2gray(rgb):
+
+    r, g, b = rgb[:, 0, :, :], rgb[:, 1, :, :], rgb[:, 2, :, :]
+    gray = 0.2989 * r + 0.5870 * g + 0.1140 * b
+
+    return gray
 
 
 def scale(X, size, pad, batch_size=BATCH_SIZE_DEFAULT):
@@ -111,6 +120,7 @@ def horizontal_flip(X, batch_size=BATCH_SIZE_DEFAULT):
 
     return X_copy
 
+
 def vertical_flip(X, batch_size=BATCH_SIZE_DEFAULT):
     X_copy = copy.deepcopy(X)
     X_copy = Variable(torch.FloatTensor(X_copy))
@@ -153,3 +163,52 @@ def random_erease(X, batch_size=BATCH_SIZE_DEFAULT):
         X_copy[i] = trans_image
 
     return X_copy
+
+
+def center_crop(X, size, batch_size):
+    X_copy = copy.deepcopy(X)
+    X_copy = Variable(torch.FloatTensor(X_copy))
+
+    X_res = torch.zeros([batch_size, 1, size, size])
+
+    for i in range(X_copy.shape[0]):
+        transformation = transforms.CenterCrop(size=size)
+        trans = transforms.Compose([transformation, transforms.ToTensor()])
+        a = F.to_pil_image(X_copy[i])
+        trans_image = trans(a)
+        X_res[i] = trans_image
+
+    return X_res
+
+
+def show_gray_numpy(image_1):
+    z = image_1.squeeze(1)
+    pixels = z[0]
+    plt.imshow(pixels, cmap='gray')
+    plt.show()
+
+
+def show_gray(image_1):
+    z = image_1
+    print(z.shape)
+    if len(list(z.size())) == 4:
+        z = image_1.squeeze(1)
+
+    pixels = z[0]
+    plt.imshow(pixels, cmap='gray')
+    plt.show()
+
+
+def show_image(image_1):
+    image_1 = torch.transpose(image_1, 1, 3)
+    show_mnist(image_1[0], image_1[0].shape[1], image_1[0].shape[2])
+    image_1 = torch.transpose(image_1, 1, 3)
+
+    return image_1
+
+
+def show_mnist(first_image, w, h):
+    #pixels = first_image.reshape((w, h))
+    pixels = first_image
+    plt.imshow(pixels)
+    plt.show()

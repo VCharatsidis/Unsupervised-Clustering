@@ -132,7 +132,7 @@ class Brain(nn.Module):
         return neighbors
 
 
-    def forward(self, x, train, optimizers, balance_coeff):
+    def forward(self, x, train, optimizers, balance_coeff=1):
         """
         Performs forward pass of the input. Here an input tensor x is transformed through
         several layer transformations.

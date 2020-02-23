@@ -13,7 +13,7 @@ from stl10_input import read_all_images, read_labels
 import torchvision.transforms.functional as F
 from PIL import Image
 from one_net_model import OneNet
-from stl_utils import rotate, scale, to_grayscale, random_erease, vertical_flip, horizontal_flip, sobel_filter_y, sobel_filter_x, sobel_total
+from stl_utils import rotate, scale, to_grayscale, random_erease, vertical_flip, horizontal_flip, sobel_filter_y, sobel_filter_x, sobel_total,center_crop
 import random
 import sys
 import torch.nn as nn
@@ -26,7 +26,7 @@ EPS=sys.float_info.epsilon
 LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 300000
 
-BATCH_SIZE_DEFAULT = 44
+BATCH_SIZE_DEFAULT = 42
 INPUT_NET = 8222
 
 EVAL_FREQ_DEFAULT = 100
@@ -105,7 +105,11 @@ def encode_4_patches(image, colons, replace,
     augments = {0: horizontal_flip(original_image, BATCH_SIZE_DEFAULT),
                 1: original_image,
                 2: vertical_flip(original_image, BATCH_SIZE_DEFAULT),
-                3: scale(original_image, size-4, 2, BATCH_SIZE_DEFAULT)}
+                3: scale(original_image, size-4, 2, BATCH_SIZE_DEFAULT),
+                4: rotate(original_image, 20, BATCH_SIZE_DEFAULT),
+                5: rotate(original_image, -20, BATCH_SIZE_DEFAULT),
+                6: center_crop(image, 40, BATCH_SIZE_DEFAULT)
+                }
 
     ids = np.random.choice(len(augments), size=4, replace=False)
 

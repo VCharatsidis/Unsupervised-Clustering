@@ -17,6 +17,8 @@ from metaModel import MetaModel
 from loss import entropy_balance_loss
 from stl_utils import rotate, scale, to_grayscale, random_erease, vertical_flip, horizontal_flip, sobel_filter_y, sobel_filter_x, sobel_total
 import random
+import matplotlib
+from torchvision.utils import make_grid
 import sys
 
 
@@ -104,7 +106,7 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size, measure):
     augments = {0: horizontal_flip(original_image, BATCH_SIZE_DEFAULT),
                 1: original_image,
                 2: vertical_flip(original_image, BATCH_SIZE_DEFAULT),
-                3: scale(original_image, size - 6, 3, BATCH_SIZE_DEFAULT)}
+                3: scale(original_image, size - 8, 4, BATCH_SIZE_DEFAULT)}
 
     ids = np.random.choice(len(augments), size=4, replace=False)
 
@@ -122,46 +124,62 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size, measure):
     preds_1 = colons["encoder 1"](image_1)
     preds_2 = colons["encoder 2"](image_2)
 
+    # entropy_loss_1 = entropy_balance_loss(preds_1)
+    # entropy_loss_2 = entropy_balance_loss(preds_2)
+
+    mean_prediction = (preds_1 + preds_2)/2
+    H = - (mean_prediction * torch.log(mean_prediction)).sum(dim=1).mean(dim=0)
+
+    batch_mean_preds = mean_prediction.mean(dim=0)
+    H_batch = (torch.log(batch_mean_preds)).sum()
+
+    mean_entropy_loss = H - H_batch
+
+    #mean_entropy_loss = entropy_balance_loss(mean_prediction)
+
     # product = preds_1 * preds_2
     # product = product.mean(dim=0)
     # log_product = torch.log(product)
-    # diversion_loss = - log_product.mean(dim=0)
-
-    entropy_loss_1 = entropy_balance_loss(preds_1)
-    entropy_loss_2 = entropy_balance_loss(preds_2)
+    # diversion_loss = - log_product.sum(dim=0)
 
     noise_loss = image_1.sum(dim=3).sum(dim=2).sum(dim=1).mean() + image_2.sum(dim=3).sum(dim=2).sum(dim=1).mean()
-    noiser_loss = noise_loss + entropy_loss_1 + entropy_loss_2
+    noiser_loss = noise_loss + mean_entropy_loss
 
-    predictions = torch.cat([preds_1, preds_2], 1)
-    meta_prediction = colons["meta"](predictions.detach())
-    squared = meta_prediction * meta_prediction
-    product = squared.mean(dim=0)
-    log_product = torch.log(product)
-    meta_loss = - log_product.mean(dim=0)
+    # predictions = torch.cat([preds_1, preds_2], 1)
+    # meta_prediction = colons["meta"](predictions.detach())
+    # squared = meta_prediction * meta_prediction
+    # product = squared.mean(dim=0)
+    # log_product = torch.log(product)
+    # meta_loss = - log_product.mean(dim=0)
 
     #meta_loss = entropy_balance_loss(meta_prediction)
 
     if train:
         torch.autograd.set_detect_anomaly(True)
 
+        # optimizers["encoder 1"].zero_grad()
+        # entropy_loss_1.backward(retain_graph=True)
+        # optimizers["encoder 1"].step()
+        #
+        # optimizers["encoder 2"].zero_grad()
+        # entropy_loss_2.backward(retain_graph=True)
+        # optimizers["encoder 2"].step()
+        #
+        # optimizers["meta"].zero_grad()
+        # meta_loss.backward()
+        # optimizers["meta"].step()
+
         optimizers["encoder 1"].zero_grad()
-        entropy_loss_1.backward(retain_graph=True)
-        optimizers["encoder 1"].step()
-
         optimizers["encoder 2"].zero_grad()
-        entropy_loss_2.backward(retain_graph=True)
+        mean_entropy_loss.backward(retain_graph=True)
+        optimizers["encoder 1"].step()
         optimizers["encoder 2"].step()
-
-        optimizers["meta"].zero_grad()
-        meta_loss.backward()
-        optimizers["meta"].step()
 
         optimizers["noiser"].zero_grad()
         noiser_loss.backward()
         optimizers["noiser"].step()
 
-    return preds_1, preds_2, meta_loss, original_image, image_1, image_2, meta_prediction
+    return preds_1, preds_2, noiser_loss, original_image, image_1, image_2, mean_prediction
 
 
 def entropies_loss(pred, coeff):
@@ -441,10 +459,10 @@ def train():
 
             if max_loss > test_loss:
 
-                if iteration > 3000:
-                    show_gray(original_image)
-                    show_gray_numpy(image_1.cpu().detach().numpy())
-                    show_gray_numpy(image_2.cpu().detach().numpy())
+                if iteration > -1:
+                    save_image(original_image[0], iteration, "original")
+                    save_image(image_1.cpu().detach()[0], iteration, "image_1")
+                    save_image(image_2.cpu().detach()[0], iteration, "image_2")
 
                 max_loss = test_loss
                 max_loss_iter = iteration
@@ -459,6 +477,12 @@ def train():
 
             print("test loss " + str(test_loss))
             print("")
+
+
+def save_image(original_image, iteration, name):
+    sample = original_image.view(-1, 1, original_image.shape[2], original_image.shape[2])
+    sample = make_grid(sample, nrow=8).detach().numpy().astype(np.float).transpose(1, 2, 0)
+    matplotlib.image.imsave(f"noised_images/{name}_iter_{iteration}.png", sample)
 
 
 def to_tensor(X, batch_size=BATCH_SIZE_DEFAULT):

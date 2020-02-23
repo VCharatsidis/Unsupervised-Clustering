@@ -22,7 +22,7 @@ from torch.autograd import Variable
 import torch
 from entropy_balance_loss import entropy_balance_loss
 from meta_brain import MetaBrain
-from stl_utils import vertical_flip
+from stl_utils import sobel_total, rgb2gray, show_gray, show_image
 
 # Default constants
 LEARNING_RATE_DEFAULT = 1e-4
@@ -78,6 +78,7 @@ def scale(X, size, pad, batch_size=BATCH_SIZE_DEFAULT):
 
     return X_copy
 
+
 def random_erease(X, batch_size=BATCH_SIZE_DEFAULT):
     X_copy = copy.deepcopy(X)
     X_copy = Variable(torch.FloatTensor(X_copy))
@@ -90,6 +91,7 @@ def random_erease(X, batch_size=BATCH_SIZE_DEFAULT):
         X_copy[i] = trans_image
 
     return X_copy
+
 
 def to_gray(X, batch_size=BATCH_SIZE_DEFAULT):
     X_copy = copy.deepcopy(X)
@@ -107,13 +109,26 @@ def to_gray(X, batch_size=BATCH_SIZE_DEFAULT):
 
 def forward_block(X, ids, colons, optimizers, train, to_tensor_size):
 
+    # x_train = X[ids, :]
+    #
+    # x_tensor = to_tensor(x_train, to_tensor_size)
+    #
+    # images = x_tensor/255.0
+
     x_train = X[ids, :]
+    x_train = rgb2gray(x_train)
 
     x_tensor = to_tensor(x_train, to_tensor_size)
+    x_tensor = x_tensor.unsqueeze(0)
+    images = x_tensor.transpose(0, 1)
+    images = images.transpose(2, 3)
 
-    images = x_tensor/255.0
+    images /= 255
+
+    #show_gray(images[0])
 
     images = scale(images, 40, 28, BATCH_SIZE_DEFAULT)
+    images = sobel_total(images, BATCH_SIZE_DEFAULT)
 
     # orig_image = torch.transpose(images, 1, 3)
     # show_mnist(orig_image[0], orig_image[0].shape[1], orig_image[0].shape[2])
@@ -121,9 +136,9 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size):
 
     images = images[:, :, 28:68, 28:68]
 
-    # orig_image = torch.transpose(images, 1, 3)
-    # show_mnist(orig_image[0], orig_image[0].shape[1], orig_image[0].shape[2])
-    # orig_image = torch.transpose(orig_image, 1, 3)
+    #images = torch.transpose(images, 1, 3)
+    #show_gray(images)
+    #images = torch.transpose(images, 1, 3)
 
     images = images.to('cuda')
 
@@ -194,7 +209,7 @@ def train():
     predictor_model = os.path.join(script_directory, filepath)
     colons_paths.append(predictor_model)
 
-    c = Brain(3)
+    c = Brain(1)
     c.cuda()
     colons.append(c)
 
