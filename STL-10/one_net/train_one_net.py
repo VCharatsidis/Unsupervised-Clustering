@@ -26,10 +26,12 @@ EPS=sys.float_info.epsilon
 LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 300000
 
-BATCH_SIZE_DEFAULT = 42
-INPUT_NET = 8222
+BATCH_SIZE_DEFAULT = 60
+INPUT_NET = 8212
+SIZE = 40
+DESCRIPTION = "Augments: 3 augments then 3 sobels x,y,total. Nets: 1 net. Loss: mean of preds then entropy loss. Image size: " + str(SIZE)
 
-EVAL_FREQ_DEFAULT = 100
+EVAL_FREQ_DEFAULT = 250
 NUMBER_CLASSES = 1
 
 FLAGS = None
@@ -51,7 +53,7 @@ def encode_4_patches(image, colons, replace,
                      p1=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
                      p2=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
                      p3=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
-                     p4=torch.zeros([BATCH_SIZE_DEFAULT, 10])):
+                     ):
     image /= 255
 
     # size = 40
@@ -61,12 +63,12 @@ def encode_4_patches(image, colons, replace,
 
     #show_gray(image)
 
-    size = 40
-    pad = (96-size)//2
-    original_image = scale(image, size, pad, BATCH_SIZE_DEFAULT)
+    pad = (96-SIZE)//2
+    original_image = scale(image, SIZE, pad, BATCH_SIZE_DEFAULT)
     #show_gray(original_image)
 
     original_image = original_image[:, :, pad:96-pad, pad:96-pad]
+
     #show_gray(original_image)
 
     # s_image = sobel_filter_x(original_image, BATCH_SIZE_DEFAULT)
@@ -105,52 +107,59 @@ def encode_4_patches(image, colons, replace,
     augments = {0: horizontal_flip(original_image, BATCH_SIZE_DEFAULT),
                 1: original_image,
                 2: vertical_flip(original_image, BATCH_SIZE_DEFAULT),
-                3: scale(original_image, size-4, 2, BATCH_SIZE_DEFAULT),
+                3: scale(original_image, SIZE-6, 3, BATCH_SIZE_DEFAULT),
                 4: rotate(original_image, 20, BATCH_SIZE_DEFAULT),
                 5: rotate(original_image, -20, BATCH_SIZE_DEFAULT),
-                6: center_crop(image, 40, BATCH_SIZE_DEFAULT)
+                6: center_crop(image, SIZE, BATCH_SIZE_DEFAULT),
+                # 7: sobel_total(original_image, BATCH_SIZE_DEFAULT)
                 }
 
-    ids = np.random.choice(len(augments), size=4, replace=False)
+    ids = np.random.choice(len(augments), size=3, replace=False)
 
-    sobels = {0: augments[ids[0]],
+    sobels = {0: sobel_filter_x(augments[ids[0]], BATCH_SIZE_DEFAULT),
               1: sobel_total(augments[ids[1]], BATCH_SIZE_DEFAULT),
-              2: sobel_filter_x(augments[ids[2]], BATCH_SIZE_DEFAULT),
-              3: sobel_filter_y(augments[ids[3]], BATCH_SIZE_DEFAULT)}
+              2: sobel_filter_y(augments[ids[2]], BATCH_SIZE_DEFAULT)}
 
-    sobel_id = np.random.choice(len(sobels), size=4, replace=False)
+    sobel_id = np.random.choice(len(sobels), size=3, replace=False)
 
     image_1 = sobels[sobel_id[0]]
     image_2 = sobels[sobel_id[1]]
     image_3 = sobels[sobel_id[2]]
-    image_4 = sobels[sobel_id[3]]
 
+
+    # image_4 = sobels[sobel_id[3]]
+
+    # image_1 = augments[ids[0]]
+    # image_2 = augments[ids[1]]
+    # image_3 = augments[ids[2]]
+    # image_4 = torch.round(image_4)
+    #
     # show_gray(image_1)
     # show_gray(image_2)
     # show_gray(image_3)
-    # show_gray(image_4)
+    #show_gray(image_4)
 
     p1 = p1.cuda()
     p2 = p2.cuda()
     p3 = p3.cuda()
-    p4 = p4.cuda()
+    #p4 = p4.cuda()
 
-    net_id = np.random.choice(len(colons), size=4, replace=False)
+    #net_id = np.random.choice(len(colons), size=4, replace=False)
 
     image_1 = image_1.to('cuda')
     image_2 = image_2.to('cuda')
     image_3 = image_3.to('cuda')
-    image_4 = image_4.to('cuda')
+    #image_4 = image_4.to('cuda')
 
     # preds_1 = colons[net_id[0]](image_1, p2, p3, p4)
     # preds_2 = colons[net_id[1]](image_2, p1, p3, p4)
     # preds_3 = colons[net_id[2]](image_3, p1, p2, p4)
     # preds_4 = colons[net_id[3]](image_4, p1, p2, p3)
 
-    preds_1 = colons[0](image_1, p2, p3, p4)
-    preds_2 = colons[0](image_2, p1, p3, p4)
-    preds_3 = colons[0](image_3, p1, p2, p4)
-    preds_4 = colons[0](image_4, p1, p2, p3)
+    preds_1 = colons[0](image_1, p2, p3)
+    preds_2 = colons[0](image_2, p1, p3)
+    preds_3 = colons[0](image_3, p1, p2)
+    #preds_4 = colons[3](image_4, p1, p2, p3)
 
     # image_1 = image_1.to('cuda')
     # preds_1 = colons[0](image_1, p2, p3, p4)
@@ -192,7 +201,7 @@ def encode_4_patches(image, colons, replace,
     # del image_4
     # torch.cuda.empty_cache()
 
-    return preds_1, preds_2, preds_3, preds_4
+    return preds_1, preds_2, preds_3 #, preds_4
 
 
 def rgb2gray(rgb):
@@ -225,10 +234,7 @@ def show_image(image_1):
 def forward_block(X, ids, colons, optimizers, train, to_tensor_size,
                 p1 = torch.zeros([BATCH_SIZE_DEFAULT, 10]),
                      p2 = torch.zeros([BATCH_SIZE_DEFAULT, 10]),
-                          p3 = torch.zeros([BATCH_SIZE_DEFAULT, 10]),
-                               p4 = torch.zeros([BATCH_SIZE_DEFAULT, 10])
-
-                            ):
+                          p3 = torch.zeros([BATCH_SIZE_DEFAULT, 10])):
 
     x_train = X[ids, :]
     x_train = rgb2gray(x_train)
@@ -244,26 +250,27 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size,
     if random.uniform(0, 1) > 0.5:
         replace = False
 
-    preds_1, preds_2, preds_3, preds_4 = encode_4_patches(images, colons, replace, p1, p2, p3, p4)
+    preds_1, preds_2, preds_3 = encode_4_patches(images, colons, replace, p1, p2, p3)
 
     #mean_preds = preds_1 * preds_2 * preds_3 * preds_4
-    # m_preds = (preds_1 + preds_2 + preds_3 + preds_4) / 4
+    m_preds = (preds_1 + preds_2 + preds_3) / 3
     #
-    # coeff = 1
-    # total_loss = entropies_loss(m_preds, coeff)
-
+    coeff = 1
+    total_loss = entropies_loss(m_preds, coeff)
+    #
     # l1 = entropies_loss(preds_1, coeff)
     # l2 = entropies_loss(preds_2, coeff)
     # l3 = entropies_loss(preds_3, coeff)
     # l4 = entropies_loss(preds_4, coeff)
-    #
-    # #TODO
-    # total_loss = l1 + l2 + l3 + l4 + total_loss
+    # #
+    # # #TODO
+    # total_loss = l1 + l2 + l3 + l4
 
-    product = preds_1 * preds_2 * preds_3 * preds_4
-    product = product.mean(dim=0)
-    log_product = torch.log(product)
-    total_loss = - log_product.mean(dim=0)
+    # product = preds_1 * preds_2 * preds_3
+    # product = product.mean(dim=0)
+    # squared = product * product * product
+    # log_product = torch.log(squared)
+    # total_loss = - log_product.mean(dim=0)
 
     if train:
         torch.autograd.set_detect_anomaly(True)
@@ -271,12 +278,16 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size,
         for idx, i in enumerate(optimizers):
             i.zero_grad()
 
+        # l1.backward(retain_graph=True)
+        # l2.backward(retain_graph=True)
+        # l3.backward(retain_graph=True)
+        # l4.backward(retain_graph=True)
         total_loss.backward(retain_graph=True)
 
         for idx, i in enumerate(optimizers):
             i.step()
 
-    return preds_1, preds_2, preds_3, preds_4, total_loss
+    return preds_1, preds_2, preds_3, total_loss
 
 
 def entropies_loss(pred, coeff):
@@ -284,7 +295,7 @@ def entropies_loss(pred, coeff):
 
 
 def pred_entropy(prediction):
-    prediction[(prediction < EPS).data] = EPS
+    #prediction[(prediction < EPS).data] = EPS
     pred = prediction
     H = - (pred * torch.log(pred)).sum(dim=1).mean(dim=0)
     return H
@@ -350,18 +361,17 @@ def measure_acc_augments(X_test, colons, targets):
     for j in range(runs):
         test_ids = range(j * BATCH_SIZE_DEFAULT, (j + 1) * BATCH_SIZE_DEFAULT)
         optimizers = []
-        p1, p2, p3, p4, mim = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT)
-        p1, p2, p3, p4, mim = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, p1, p2, p3, p4)
+        p1, p2, p3,  mim = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT)
+        p1, p2, p3,  mim = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, p1, p2, p3)
 
         avg_loss += mim.item()
         for i in range(p1.shape[0]):
             val, index = torch.max(p1[i], 0)
             val, index2 = torch.max(p2[i], 0)
             val, index3 = torch.max(p3[i], 0)
-            val, index4 = torch.max(p4[i], 0)
+            # val, index4 = torch.max(p4[i], 0)
 
-            preds = [index.data.cpu().numpy(), index2.data.cpu().numpy(), index3.data.cpu().numpy(),
-                     index4.data.cpu().numpy()]
+            preds = [index.data.cpu().numpy(), index2.data.cpu().numpy(), index3.data.cpu().numpy()]
             preds = list(preds)
             preds = [int(x) for x in preds]
             # print(preds)
@@ -377,27 +387,32 @@ def measure_acc_augments(X_test, colons, targets):
             print_dict[label].append(verdict)
 
     total_miss = 0
+    clusters = set()
     for element in print_dict.keys():
         length = len(print_dict[element])
         misses = miss_classifications(print_dict[element])
         total_miss += misses
 
+        mfe = most_frequent(print_dict[element])
+        clusters.add(mfe)
         print("cluster: ",
               element,
               ", most frequent: ",
-              most_frequent(print_dict[element]),
+              mfe,
               ", miss-classifications: ",
               misses,
               ", miss percentage: ",
               misses / length)
-
 
     print()
     print("AUGMENTS avg loss: ", avg_loss / runs,
           " miss: ", total_miss,
           " data: ", runs * BATCH_SIZE_DEFAULT,
           " miss percent: ", total_miss / (runs * BATCH_SIZE_DEFAULT))
+    print("Clusters found: " + str(len(clusters)) + " " + str(clusters))
     print()
+
+    return avg_loss
 #
 #
 # def measure_accuracy(X_test, colons, targets):
@@ -503,34 +518,31 @@ def train():
     c = OneNet(1, INPUT_NET)
     c = c.cuda()
     colons.append(c)
-
-    c1 = OneNet(1, INPUT_NET)
-    c1 = c1.cuda()
-    colons.append(c1)
-
-    c2 = OneNet(1, INPUT_NET)
-    c2 = c2.cuda()
-    colons.append(c2)
-
-    c3 = OneNet(1, INPUT_NET)
-    c3 = c3.cuda()
-    colons.append(c3)
-
     optimizer = torch.optim.Adam(c.parameters(), lr=LEARNING_RATE_DEFAULT)
     optimizers.append(optimizer)
 
-    optimizer1 = torch.optim.Adam(c1.parameters(), lr=LEARNING_RATE_DEFAULT)
-    optimizers.append(optimizer1)
+    # c1 = OneNet(1, INPUT_NET)
+    # c1 = c1.cuda()
+    # colons.append(c1)
+    # optimizer1 = torch.optim.Adam(c1.parameters(), lr=LEARNING_RATE_DEFAULT)
+    # optimizers.append(optimizer1)
+    #
+    # c2 = OneNet(1, INPUT_NET)
+    # c2 = c2.cuda()
+    # colons.append(c2)
+    # optimizer2 = torch.optim.Adam(c2.parameters(), lr=LEARNING_RATE_DEFAULT)
+    # optimizers.append(optimizer2)
 
-    optimizer2 = torch.optim.Adam(c2.parameters(), lr=LEARNING_RATE_DEFAULT)
-    optimizers.append(optimizer2)
+    # c3 = OneNet(1, INPUT_NET)
+    # c3 = c3.cuda()
+    # colons.append(c3)
+    # optimizer3 = torch.optim.Adam(c3.parameters(), lr=LEARNING_RATE_DEFAULT)
+    # optimizers.append(optimizer3)
 
-    optimizer3 = torch.optim.Adam(c3.parameters(), lr=LEARNING_RATE_DEFAULT)
-    optimizers.append(optimizer3)
 
     max_loss = 1999
     max_loss_iter = 0
-    description = "4 augments"
+
     print(colons[0])
 
     for iteration in range(MAX_STEPS_DEFAULT):
@@ -538,15 +550,15 @@ def train():
         ids = np.random.choice(len(X_train), size=BATCH_SIZE_DEFAULT, replace=False)
 
         train = True
-        p1, p2, p3, p4, mim = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT)
-        p1, p2, p3, p4, mim = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, p1, p2, p3, p4)
+        p1, p2, p3,  mim = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT)
+        p1, p2, p3,  mim = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, p1, p2, p3)
 
         if iteration % EVAL_FREQ_DEFAULT == 0:
             test_ids = np.random.choice(len(X_test), size=BATCH_SIZE_DEFAULT, replace=False)
             print()
-            p1, p2, p3, p4, mim = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT)
+            p1, p2, p3,  mim = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT)
             print("loss 1: ", mim.item())
-            p1, p2, p3, p4, mim = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, p1, p2, p3, p4)
+            p1, p2, p3,  mim = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, p1, p2, p3)
             print("loss 2: ", mim.item())
 
 
@@ -555,27 +567,22 @@ def train():
                   ", lr: ", LEARNING_RATE_DEFAULT,
                   ", best loss: ", max_loss_iter,
                   ": ", max_loss)
-            print("description: ", description)
+            print("description: ", DESCRIPTION)
 
+            loss = measure_acc_augments(X_test, colons, targets)
+            #print_info(p1, p2, p3, targets, test_ids)
 
-            print_info(p1, p2, p3, p4, targets, test_ids)
-
-            test_loss = mim.item()
-
-            if max_loss > test_loss:
-                max_loss = test_loss
+            if max_loss > loss:
+                max_loss = loss
                 max_loss_iter = iteration
                 #measure_accuracy(X_test, colons, targets)
-
-                measure_acc_augments(X_test, colons, targets)
-
 
                 print("models saved iter: " + str(iteration))
                 # for i in range(number_colons):
                 #     torch.save(colons[i], colons_paths[i])
 
-            print("test loss " + str(test_loss))
-            print("")
+            # print("test loss " + str(test_loss))
+            # print("")
 
 
 def to_tensor(X, batch_size=BATCH_SIZE_DEFAULT):
@@ -593,16 +600,15 @@ def show_mnist(first_image, w, h):
     plt.show()
 
 
-def print_info(p1, p2, p3, p4, targets, test_ids):
+def print_info(p1, p2, p3, targets, test_ids):
     print_dict = {1: "", 2: "", 3: "", 4: "", 5: "", 6: "", 7: "", 8: "", 9: "", 0: ""}
     for i in range(p1.shape[0]):
         val, index = torch.max(p1[i], 0)
         val, index2 = torch.max(p2[i], 0)
         val, index3 = torch.max(p3[i], 0)
-        val, index4 = torch.max(p4[i], 0)
 
         string = str(index.data.cpu().numpy()) + " " + str(index2.data.cpu().numpy()) + " " + str(
-            index3.data.cpu().numpy())+ " "  + str(index4.data.cpu().numpy()) + ", "
+            index3.data.cpu().numpy())+ ", "
 
         label = targets[test_ids[i]]
         if label == 10:

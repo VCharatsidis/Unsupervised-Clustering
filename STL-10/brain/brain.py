@@ -171,16 +171,22 @@ class Brain(nn.Module):
         #print("dim", dim)
         predictions = [self.colons[i](torch.cat([p1, p2, p3, p4, p5, p6, p7, p8, conv[:, :, i]], 1)) for i in range(dim)]
 
-        loss = 0
+        mean_predictions = torch.zeros(predictions[0].shape)
+        mean_predictions = mean_predictions.to('cuda')
+
+        # print(mean_predictions.shape)
 
         for p in predictions:
-            loss += entropy_balance_loss(p, balance_coeff)
+            # print(p.shape)
+            # print(p[0])
+            mean_predictions += p
 
-        # product = first_predictions.mean(dim=0)
-        # log_product = torch.log(product)
-        # loss = - log_product.mean(dim=0)
+        mean_predictions /= len(predictions)
 
-        #loss = entropy_balance_loss(mean_preds, balance_coeff)
+        product = mean_predictions * mean_predictions
+        mean = product.mean(dim=0)
+        log_product = torch.log(mean)
+        loss = - log_product.mean(dim=0)
 
         if train:
             torch.autograd.set_detect_anomaly(True)
@@ -191,6 +197,12 @@ class Brain(nn.Module):
 
         number_neighbours = 8
         second_guess = []
+
+        second_conv = self.conv(x)
+        # print("conv shape", conv.shape)
+
+        second_conv = torch.flatten(second_conv, 2)
+
         for i in range(dim):
             n = self.neighbors(i, 5, 5, number_neighbours)
             #print("i", i, "n", n)
@@ -199,7 +211,7 @@ class Brain(nn.Module):
             while len(neighbs) < number_neighbours:
                 neighbs.append(p1)
 
-            neighbs.append(conv[:, :, i])
+            neighbs.append(second_conv[:, :, i])
 
             conc = torch.cat(neighbs, 1)
             second_guess.append(self.colons[i](conc))

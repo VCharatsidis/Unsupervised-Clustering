@@ -28,7 +28,7 @@ EPS=sys.float_info.epsilon
 LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 300000
 
-BATCH_SIZE_DEFAULT = 128
+BATCH_SIZE_DEFAULT = 64
 INPUT_NET = 8192
 
 EVAL_FREQ_DEFAULT = 100
@@ -110,10 +110,16 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size, measure):
 
     ids = np.random.choice(len(augments), size=4, replace=False)
 
-    image_1 = colons["noiser"](augments[ids[0]]).view(BATCH_SIZE_DEFAULT, 1, size, size) * augments[ids[0]]
+    augments[ids[0]] = augments[ids[0]].to("cuda")
+    augments[ids[1]] = augments[ids[1]].to("cuda")
+
+    noise_1 = colons["noiser"](augments[ids[0]]).view(BATCH_SIZE_DEFAULT, 1, size, size)
+    noise_2 = colons["noiser"](augments[ids[1]]).view(BATCH_SIZE_DEFAULT, 1, size, size)
+
+    image_1 = torch.round(noise_1) * augments[ids[0]].cuda()
     # print(original_image[0].sum())
     # print(original_image[0][0])
-    image_2 = colons["noiser"](augments[ids[1]]).view(BATCH_SIZE_DEFAULT, 1, size, size) * augments[ids[1]]
+    image_2 = torch.round(noise_2) * augments[ids[1]].cuda()
     # print(image_2[0].sum())
     # print(image_2[0][0])
     #input()
@@ -127,23 +133,29 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size, measure):
     # entropy_loss_1 = entropy_balance_loss(preds_1)
     # entropy_loss_2 = entropy_balance_loss(preds_2)
 
-    mean_prediction = (preds_1 + preds_2)/2
-    H = - (mean_prediction * torch.log(mean_prediction)).sum(dim=1).mean(dim=0)
-
-    batch_mean_preds = mean_prediction.mean(dim=0)
-    H_batch = (torch.log(batch_mean_preds)).sum()
-
-    mean_entropy_loss = H - H_batch
+    # mean_prediction = (preds_1 + preds_2)/2
+    # H = - (mean_prediction * torch.log(mean_prediction)).sum(dim=1).mean(dim=0)
+    #
+    # batch_mean_preds = mean_prediction.mean(dim=0)
+    # H_batch = (torch.log(batch_mean_preds)).sum()
+    #
+    # mean_entropy_loss = H - H_batch
 
     #mean_entropy_loss = entropy_balance_loss(mean_prediction)
 
-    # product = preds_1 * preds_2
-    # product = product.mean(dim=0)
-    # log_product = torch.log(product)
-    # diversion_loss = - log_product.sum(dim=0)
+    product = preds_1 * preds_2
+    mean_product = product.mean(dim=0)
+    log_product = torch.log(mean_product)
+    diversion_loss = - log_product.sum(dim=0)
 
-    noise_loss = image_1.sum(dim=3).sum(dim=2).sum(dim=1).mean() + image_2.sum(dim=3).sum(dim=2).sum(dim=1).mean()
-    noiser_loss = noise_loss + mean_entropy_loss
+    noise_1 = torch.abs(noise_1 - 0.5)
+    noise_2 = torch.abs(noise_2 - 0.5)
+
+    image_prod = noise_1 * noise_1 + noise_2 * noise_2
+    polarization_loss = image_prod.mean(dim=0).sum()
+
+    noise_loss = 0#torch.abs(noise_1.mean(dim=0).sum()-20) + torch.abs(noise_2.mean(dim=0).sum() - 20)
+    noiser_loss = noise_loss + diversion_loss - polarization_loss
 
     # predictions = torch.cat([preds_1, preds_2], 1)
     # meta_prediction = colons["meta"](predictions.detach())
@@ -171,7 +183,7 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size, measure):
 
         optimizers["encoder 1"].zero_grad()
         optimizers["encoder 2"].zero_grad()
-        mean_entropy_loss.backward(retain_graph=True)
+        diversion_loss.backward(retain_graph=True)
         optimizers["encoder 1"].step()
         optimizers["encoder 2"].step()
 
@@ -179,7 +191,7 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size, measure):
         noiser_loss.backward()
         optimizers["noiser"].step()
 
-    return preds_1, preds_2, noiser_loss, original_image, image_1, image_2, mean_prediction
+    return preds_1, preds_2, noiser_loss, original_image, image_1, image_2, diversion_loss
 
 
 def entropies_loss(pred, coeff):
@@ -425,6 +437,7 @@ def train():
     optimizers["meta"] = torch.optim.Adam(meta_model.parameters(), lr=LEARNING_RATE_DEFAULT)
 
     noiser = NoiserNet(1, 9792, 40, 40)
+    noiser = noiser.cuda()
     colons["noiser"] = noiser
     optimizers["noiser"] = torch.optim.Adam(noiser.parameters(), lr=LEARNING_RATE_DEFAULT)
 
@@ -453,7 +466,7 @@ def train():
             print("description: ", description)
 
 
-            print_info(meta_prediction, targets, test_ids)
+            print_info(p1, p2, targets, test_ids)
 
             test_loss = mim.item()
 
@@ -500,13 +513,13 @@ def show_mnist(first_image, w, h):
     plt.show()
 
 
-def print_info(p1, targets, test_ids):
+def print_info(p1,p2, targets, test_ids):
     print_dict = {1: "", 2: "", 3: "", 4: "", 5: "", 6: "", 7: "", 8: "", 9: "", 0: ""}
     for i in range(p1.shape[0]):
         val, index = torch.max(p1[i], 0)
-        #val, index2 = torch.max(p2[i], 0)
+        val, index2 = torch.max(p2[i], 0)
 
-        string = str(index.data.cpu().numpy()) + ", " #+ str(index2.data.cpu().numpy()) + ", "
+        string = str(index.data.cpu().numpy()) +" "+ str(index2.data.cpu().numpy()) + ", "
 
         label = targets[test_ids[i]]
         if label == 10:

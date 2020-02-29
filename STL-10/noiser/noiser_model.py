@@ -98,9 +98,9 @@ class NoiserNet(nn.Module):
 
             nn.Linear(n_inputs, 600),
             nn.Tanh(),
-
-            nn.Linear(600, 600),
-            nn.Tanh(),
+            #
+            # nn.Linear(600, 600),
+            # nn.Tanh(),
 
             nn.Linear(600, self.w * self.h),
             nn.Sigmoid()

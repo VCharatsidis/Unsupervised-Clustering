@@ -22,12 +22,12 @@ from torch.autograd import Variable
 import torch
 from entropy_balance_loss import entropy_balance_loss
 from meta_brain import MetaBrain
-from stl_utils import sobel_total, rgb2gray, show_gray, show_image
+from stl_utils import sobel_total, rgb2gray, show_gray, show_image, vertical_flip, sobel_filter_x, sobel_filter_y
 
 # Default constants
 LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 300000
-BATCH_SIZE_DEFAULT = 128
+BATCH_SIZE_DEFAULT = 64
 EVAL_FREQ_DEFAULT = 200
 NUMBER_CLASSES = 10
 FLAGS = None
@@ -128,13 +128,29 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size):
     #show_gray(images[0])
 
     images = scale(images, 40, 28, BATCH_SIZE_DEFAULT)
+    images = images[:, :, 28:68, 28:68]
     images = sobel_total(images, BATCH_SIZE_DEFAULT)
+
+    # image_vert = vertical_flip(images, BATCH_SIZE_DEFAULT)
+    # image_scale = scale(images, 40 - 8, 4, BATCH_SIZE_DEFAULT)
+    #
+    # images_t = sobel_total(images, BATCH_SIZE_DEFAULT)
+    # image_vert_t = sobel_total(image_vert, BATCH_SIZE_DEFAULT)
+    # image_scale_t = sobel_total(image_scale, BATCH_SIZE_DEFAULT)
+    #
+    # images_x = sobel_filter_x(images, BATCH_SIZE_DEFAULT)
+    # image_vert_x = sobel_filter_x(image_vert, BATCH_SIZE_DEFAULT)
+    # image_scale_x = sobel_filter_x(image_scale, BATCH_SIZE_DEFAULT)
+    #
+    # images_y = sobel_filter_y(images, BATCH_SIZE_DEFAULT)
+    # image_vert_y = sobel_filter_y(image_vert, BATCH_SIZE_DEFAULT)
+    # image_scale_y = sobel_filter_y(image_scale, BATCH_SIZE_DEFAULT)
 
     # orig_image = torch.transpose(images, 1, 3)
     # show_mnist(orig_image[0], orig_image[0].shape[1], orig_image[0].shape[2])
     # orig_image = torch.transpose(orig_image, 1, 3)
 
-    images = images[:, :, 28:68, 28:68]
+
 
     #images = torch.transpose(images, 1, 3)
     #show_gray(images)
@@ -145,35 +161,19 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size):
     balance_coeff = 1
     mean_preds, preds = colons[0](images, train, optimizers, balance_coeff)
 
-    predictions = torch.cat(preds, 1)
-    meta_pred = colons[1](predictions.detach())
-
-    #meta_loss = entropy_balance_loss(meta_pred)
-    meta_squared = meta_pred * meta_pred
+    meta_squared = mean_preds * mean_preds
     product = meta_squared.mean(dim=0)
     log_product = torch.log(product)
     meta_loss = - log_product.mean(dim=0)
-
-    loss = 0
-    for p in preds:
-        # print(p.shape)
-        # print(p[0])
-        loss += entropy_balance_loss(p, balance_coeff)
-
-    #loss = entropy_balance_loss(mean_preds, balance_coeff)
 
     if train:
         torch.autograd.set_detect_anomaly(True)
 
         optimizers[0].zero_grad()
-        loss.backward(retain_graph=True)
+        meta_loss.backward(retain_graph=True)
         optimizers[0].step()
 
-        optimizers[1].zero_grad()
-        meta_loss.backward()
-        optimizers[1].step()
-
-    return meta_pred, loss, preds
+    return mean_preds, meta_loss, preds
 
 
 def print_params(model):
@@ -216,12 +216,12 @@ def train():
     optimizer = torch.optim.Adam(c.parameters(), lr=LEARNING_RATE_DEFAULT)
     optimizers.append(optimizer)
 
-    meta = MetaBrain(1000)
-    meta.cuda()
-    colons.append(meta)
-
-    meta_optimizer = torch.optim.Adam(meta.parameters(), lr=LEARNING_RATE_DEFAULT)
-    optimizers.append(meta_optimizer)
+    # meta = MetaBrain(1000)
+    # meta.cuda()
+    # colons.append(meta)
+    #
+    # meta_optimizer = torch.optim.Adam(meta.parameters(), lr=LEARNING_RATE_DEFAULT)
+    # optimizers.append(meta_optimizer)
 
     max_loss = 1999
     max_loss_iter = 0

@@ -49,6 +49,11 @@ class OneNet(nn.Module):
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
 
+            # nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1),
+            # nn.BatchNorm2d(512),
+            # nn.ReLU(),
+            # nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
+
             # nn.Conv2d(n_channels, 64, kernel_size=(3, 3), stride=1, padding=1),
             # nn.BatchNorm2d(64),
             # nn.ReLU(),
@@ -92,17 +97,15 @@ class OneNet(nn.Module):
         )
 
         self.linear = nn.Sequential(
-
-            nn.Linear(n_inputs, 600),
+            nn.Linear(n_inputs, 1000),
             nn.Tanh(),
 
-
-            nn.Linear(600, 10),
+            nn.Linear(1000, 10),
             nn.Softmax(dim=1)
         )
 
 
-    def forward(self, x, p1, p2, p3):
+    def forward(self, x, p1, p2):
         """
         Performs forward pass of the input. Here an input tensor x is transformed through
         several layer transformations.
@@ -115,7 +118,7 @@ class OneNet(nn.Module):
         conv = self.conv(x)
         conv = torch.flatten(conv, 1)
 
-        linear_input = torch.cat([conv, p1, p2, p3], 1)
+        linear_input = torch.cat([conv, p1, p2], 1)
 
         preds = self.linear(linear_input)
 
