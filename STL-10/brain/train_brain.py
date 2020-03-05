@@ -161,19 +161,33 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size):
     balance_coeff = 1
     mean_preds, preds = colons[0](images, train, optimizers, balance_coeff)
 
-    meta_squared = mean_preds * mean_preds
-    product = meta_squared.mean(dim=0)
-    log_product = torch.log(product)
-    meta_loss = - log_product.mean(dim=0)
+    mean_predictions = torch.zeros(preds[0].shape)
+    mean_predictions = mean_predictions.to('cuda')
+
+    H_batch_means = torch.zeros([])
+    H_batch_means = H_batch_means.to('cuda')
+
+    for p in preds:
+        # print(p.shape)
+        # print(p[0])
+        batch_mean_preds = p.mean(dim=0)
+        H_batch = - (batch_mean_preds * torch.log(batch_mean_preds)).sum()
+        H_batch_means += H_batch
+        mean_predictions += p
+
+    mean_predictions /= len(preds)
+
+    H = - (mean_predictions * torch.log(mean_predictions)).sum(dim=1).mean(dim=0)
+    loss = H - H_batch_means
 
     if train:
         torch.autograd.set_detect_anomaly(True)
 
         optimizers[0].zero_grad()
-        meta_loss.backward(retain_graph=True)
+        loss.backward(retain_graph=True)
         optimizers[0].step()
 
-    return mean_preds, meta_loss, preds
+    return mean_preds, loss, preds
 
 
 def print_params(model):

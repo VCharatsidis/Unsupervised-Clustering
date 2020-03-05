@@ -175,18 +175,21 @@ class Brain(nn.Module):
         mean_predictions = mean_predictions.to('cuda')
 
         # print(mean_predictions.shape)
+        H_batch_means = torch.zeros([])
+        H_batch_means = H_batch_means.to('cuda')
 
         for p in predictions:
             # print(p.shape)
             # print(p[0])
+            batch_mean_preds = p.mean(dim=0)
+            H_batch = - (batch_mean_preds * torch.log(batch_mean_preds)).sum()
+            H_batch_means += H_batch
             mean_predictions += p
 
         mean_predictions /= len(predictions)
 
-        product = mean_predictions * mean_predictions
-        mean = product.mean(dim=0)
-        log_product = torch.log(mean)
-        loss = - log_product.mean(dim=0)
+        H = - (mean_predictions * torch.log(mean_predictions)).sum(dim=1).mean(dim=0)
+        loss = H - H_batch_means
 
         if train:
             torch.autograd.set_detect_anomaly(True)

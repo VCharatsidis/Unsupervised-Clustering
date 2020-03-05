@@ -16,6 +16,8 @@ from one_net_model import OneNet
 from stl_utils import rotate, scale, to_grayscale, random_erease, vertical_flip, horizontal_flip, sobel_filter_y, sobel_filter_x, sobel_total,center_crop
 import random
 import sys
+from one_net_generator import OneNetGen
+from IID_loss import IID_loss
 import torch.nn as nn
 from torchvision import transforms
 import torchvision
@@ -26,14 +28,15 @@ EPS=sys.float_info.epsilon
 LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 300000
 
-BATCH_SIZE_DEFAULT = 60
-INPUT_NET = 8212
-SIZE = 40
-DESCRIPTION = "Augments: 3 augments then 3 sobels x,y,total. Nets: 1 net. Loss: mean of preds then entropy loss. Image size: " + str(SIZE)
+BATCH_SIZE_DEFAULT = 68
+INPUT_NET = 4608
+SIZE = 32
+NETS = 1
+DESCRIPTION = "Augments: 3 augments then 3 sobels x,y,total. Nets: "+str(NETS) +" net. Loss: total_loss = paired_losses - mean_probs_losses. Image size: " + str(SIZE)
 
-EVAL_FREQ_DEFAULT = 250
-NUMBER_CLASSES = 1
-
+EVAL_FREQ_DEFAULT = 200
+NUMBER_CLASSES = 11
+np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
 FLAGS = None
 
 
@@ -53,6 +56,9 @@ def encode_4_patches(image, colons, replace,
                      p1=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
                      p2=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
                      p3=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
+                     p4=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
+                     p5=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
+                     p6=torch.zeros([BATCH_SIZE_DEFAULT, 10])
                      ):
     image /= 255
 
@@ -68,41 +74,7 @@ def encode_4_patches(image, colons, replace,
     #show_gray(original_image)
 
     original_image = original_image[:, :, pad:96-pad, pad:96-pad]
-
-    #show_gray(original_image)
-
-    # s_image = sobel_filter_x(original_image, BATCH_SIZE_DEFAULT)
-    # show_gray(s_image)
-    #
-    # s_image = sobel_filter_y(original_image, BATCH_SIZE_DEFAULT)
-    # show_gray(s_image)
-    #
-    # s_image = sobel_total(original_image, BATCH_SIZE_DEFAULT)
-    # show_gray(s_image)
-    #
-    # o = horizontal_flip(original_image, BATCH_SIZE_DEFAULT)
-    # o = sobel_filter_x(o, BATCH_SIZE_DEFAULT)
-    # show_gray(o)
-    #
-    # o = vertical_flip(original_image, BATCH_SIZE_DEFAULT)
-    # o = sobel_filter_x(o, BATCH_SIZE_DEFAULT)
-    # show_gray(o)
-    #
-    # o = scale(original_image, size - 10, 5, BATCH_SIZE_DEFAULT)
-    # o = sobel_filter_x(o, BATCH_SIZE_DEFAULT)
-    # show_gray(o)
-    #
-    # o = rotate(original_image, 20, BATCH_SIZE_DEFAULT)
-    # o = sobel_filter_x(o, BATCH_SIZE_DEFAULT)
-    # show_gray(o)
-
-    # augments = {0: scale(original_image, size-10, 5, BATCH_SIZE_DEFAULT),
-    #             1: horizontal_flip(original_image, BATCH_SIZE_DEFAULT),
-    #             2: original_image,
-    #             3: horizontal_flip(scale(original_image, size-10, 5, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT),
-    #             4: rotate(original_image, 20, BATCH_SIZE_DEFAULT),
-    #             5: rotate(original_image, -20, BATCH_SIZE_DEFAULT),
-    #             6: vertical_flip(original_image, BATCH_SIZE_DEFAULT)}
+    #original_image = sobel_total(original_image, BATCH_SIZE_DEFAULT)
 
     augments = {0: horizontal_flip(original_image, BATCH_SIZE_DEFAULT),
                 1: original_image,
@@ -111,97 +83,75 @@ def encode_4_patches(image, colons, replace,
                 4: rotate(original_image, 20, BATCH_SIZE_DEFAULT),
                 5: rotate(original_image, -20, BATCH_SIZE_DEFAULT),
                 6: center_crop(image, SIZE, BATCH_SIZE_DEFAULT),
-                # 7: sobel_total(original_image, BATCH_SIZE_DEFAULT)
+                7: sobel_filter_x(original_image, BATCH_SIZE_DEFAULT),
+                8: sobel_filter_y(original_image, BATCH_SIZE_DEFAULT),
+                9: sobel_total(original_image, BATCH_SIZE_DEFAULT)
                 }
 
-    ids = np.random.choice(len(augments), size=3, replace=False)
-
-    sobels = {0: sobel_filter_x(augments[ids[0]], BATCH_SIZE_DEFAULT),
-              1: sobel_total(augments[ids[1]], BATCH_SIZE_DEFAULT),
-              2: sobel_filter_y(augments[ids[2]], BATCH_SIZE_DEFAULT)}
-
-    sobel_id = np.random.choice(len(sobels), size=3, replace=False)
-
-    image_1 = sobels[sobel_id[0]]
-    image_2 = sobels[sobel_id[1]]
-    image_3 = sobels[sobel_id[2]]
-
-
-    # image_4 = sobels[sobel_id[3]]
-
-    # image_1 = augments[ids[0]]
-    # image_2 = augments[ids[1]]
-    # image_3 = augments[ids[2]]
-    # image_4 = torch.round(image_4)
+    ids = np.random.choice(len(augments), size=6, replace=False)
     #
+    # sobels = {0: sobel_filter_x(augments[ids[0]], BATCH_SIZE_DEFAULT),
+    #           1: sobel_total(augments[ids[1]], BATCH_SIZE_DEFAULT),
+    #           2: sobel_filter_y(augments[ids[2]], BATCH_SIZE_DEFAULT),
+    #           3: augments[ids[3]],
+    #           4: sobel_total(augments[ids[4]], BATCH_SIZE_DEFAULT),
+    #           5: augments[ids[5]]
+    # }
+
+
+    # sobel_id = np.random.choice(len(sobels), size=6, replace=False)
+    #
+    # image_1 = sobels[sobel_id[0]]
+    # image_2 = sobels[sobel_id[1]]
+    # image_3 = sobels[sobel_id[2]]
+    # image_4 = sobels[sobel_id[3]]
+    # image_5 = sobels[sobel_id[4]]
+    # image_6 = sobels[sobel_id[5]]
+
+    image_1 = augments[ids[0]]
+    image_2 = augments[ids[1]]
+    image_3 = augments[ids[2]]
+    image_4 = augments[ids[3]]
+    image_5 = augments[ids[4]]
+    image_6 = augments[ids[5]]
+
     # show_gray(image_1)
     # show_gray(image_2)
     # show_gray(image_3)
-    #show_gray(image_4)
+    # show_gray(image_4)
+    # show_gray(image_5)
+    # show_gray(image_6)
 
     p1 = p1.cuda()
     p2 = p2.cuda()
     p3 = p3.cuda()
-    #p4 = p4.cuda()
+    p4 = p4.cuda()
+    p5 = p5.cuda()
+    p6 = p6.cuda()
 
     #net_id = np.random.choice(len(colons), size=4, replace=False)
 
-    image_1 = image_1.to('cuda')
-    image_2 = image_2.to('cuda')
-    image_3 = image_3.to('cuda')
-    #image_4 = image_4.to('cuda')
+    nets = [0, 0, 0]
+    if NETS == 3:
+        nets = [0, 1, 2]
 
-    # preds_1 = colons[net_id[0]](image_1, p2, p3, p4)
-    # preds_2 = colons[net_id[1]](image_2, p1, p3, p4)
-    # preds_3 = colons[net_id[2]](image_3, p1, p2, p4)
-    # preds_4 = colons[net_id[3]](image_4, p1, p2, p3)
+    preds_1 = make_pred(image_1, colons, nets[0], p2, p3, p4, p5, p6)
+    preds_2 = make_pred(image_2, colons, nets[1], p1, p3, p4, p5, p6)
+    preds_3 = make_pred(image_3, colons, nets[2], p1, p2, p4, p5, p6)
+    preds_4 = make_pred(image_4, colons, nets[0], p1, p2, p3, p5, p6)
+    preds_5 = make_pred(image_5, colons, nets[1], p1, p2, p3, p4, p6)
+    preds_6 = make_pred(image_6, colons, nets[2], p1, p2, p3, p4, p5)
 
-    preds_1 = colons[0](image_1, p2, p3)
-    preds_2 = colons[0](image_2, p1, p3)
-    preds_3 = colons[0](image_3, p1, p2)
-    #preds_4 = colons[3](image_4, p1, p2, p3)
+    return preds_1, preds_2, preds_3, preds_4, preds_5, preds_6
 
-    # image_1 = image_1.to('cuda')
-    # preds_1 = colons[0](image_1, p2, p3, p4)
-    # del image_1
-    # torch.cuda.empty_cache()
-    #
-    # image_2 = image_2.to('cuda')
-    # preds_2 = colons[0](image_2, p1, p3, p4)
-    # del image_2
-    # torch.cuda.empty_cache()
-    #
-    # image_3 = image_3.to('cuda')
-    # preds_3 = colons[0](image_3, p1, p2, p4)
-    # del image_3
-    # torch.cuda.empty_cache()
-    #
-    # image_4 = image_4.to('cuda')
-    # preds_4 = colons[0](image_4, p1, p2, p3)
-    # del image_4
-    # torch.cuda.empty_cache()
 
-    # image_1 = image_1.to('cuda')
-    # preds_1 = colons[net_id[0]](image_1, p2, p3, p4)
-    # del image_1
-    # torch.cuda.empty_cache()
-    #
-    # image_2 = image_2.to('cuda')
-    # preds_2 = colons[net_id[1]](image_2, p1, p3, p4)
-    # del image_2
-    # torch.cuda.empty_cache()
-    #
-    # image_3 = image_3.to('cuda')
-    # preds_3 = colons[net_id[2]](image_3, p1, p2, p4)
-    # del image_3
-    # torch.cuda.empty_cache()
-    #
-    # image_4 = image_4.to('cuda')
-    # preds_4 = colons[net_id[3]](image_4, p1, p2, p3)
-    # del image_4
-    # torch.cuda.empty_cache()
+def make_pred(image, colons, net, p1, p2, p3, p4, p5):
+    image = image.to('cuda')
+    pred = colons[net](image, p1, p2, p3, p4, p5)
+    del image
+    torch.cuda.empty_cache()
 
-    return preds_1, preds_2, preds_3 #, preds_4
+    return pred
 
 
 def rgb2gray(rgb):
@@ -231,10 +181,23 @@ def show_image(image_1):
     return image_1
 
 
-def forward_block(X, ids, colons, optimizers, train, to_tensor_size,
-                p1 = torch.zeros([BATCH_SIZE_DEFAULT, 10]),
-                     p2 = torch.zeros([BATCH_SIZE_DEFAULT, 10]),
-                          p3 = torch.zeros([BATCH_SIZE_DEFAULT, 10])):
+def my_loss(preds_1, preds_2):
+    product = preds_1 * preds_2
+    product = product.mean(dim=0)  # * total_mean.detach()
+    log_product = torch.log(product)
+    loss = - log_product.mean(dim=0)
+
+    return loss
+
+
+def forward_block(X, ids, colons, optimizers, train, to_tensor_size, total_mean,
+                  p1=torch.zeros([BATCH_SIZE_DEFAULT, NUMBER_CLASSES]),
+                  p2=torch.zeros([BATCH_SIZE_DEFAULT, NUMBER_CLASSES]),
+                  p3=torch.zeros([BATCH_SIZE_DEFAULT, NUMBER_CLASSES]),
+                  p4=torch.zeros([BATCH_SIZE_DEFAULT, NUMBER_CLASSES]),
+                  p5=torch.zeros([BATCH_SIZE_DEFAULT, NUMBER_CLASSES]),
+                  p6=torch.zeros([BATCH_SIZE_DEFAULT, NUMBER_CLASSES])
+                  ):
 
     x_train = X[ids, :]
     x_train = rgb2gray(x_train)
@@ -250,27 +213,133 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size,
     if random.uniform(0, 1) > 0.5:
         replace = False
 
-    preds_1, preds_2, preds_3 = encode_4_patches(images, colons, replace, p1, p2, p3)
+    preds_1, preds_2, preds_3, preds_4, preds_5, preds_6 = encode_4_patches(images, colons, replace, p1, p2, p3, p4, p5, p6)
 
-    #mean_preds = preds_1 * preds_2 * preds_3 * preds_4
-    m_preds = (preds_1 + preds_2 + preds_3) / 3
-    #
-    coeff = 1
-    total_loss = entropies_loss(m_preds, coeff)
-    #
-    # l1 = entropies_loss(preds_1, coeff)
-    # l2 = entropies_loss(preds_2, coeff)
-    # l3 = entropies_loss(preds_3, coeff)
-    # l4 = entropies_loss(preds_4, coeff)
-    # #
-    # # #TODO
-    # total_loss = l1 + l2 + l3 + l4
+    m_preds = (preds_1 + preds_2 + preds_3 + preds_4 + preds_5 + preds_6) / 6
 
-    # product = preds_1 * preds_2 * preds_3
-    # product = product.mean(dim=0)
-    # squared = product * product * product
-    # log_product = torch.log(squared)
+    H = pred_entropy(m_preds)
+
+    batch_pred_1 = batch_entropy(preds_1)
+    batch_pred_2 = batch_entropy(preds_2)
+    batch_pred_3 = batch_entropy(preds_3)
+    batch_pred_4 = batch_entropy(preds_4)
+    batch_pred_5 = batch_entropy(preds_5)
+    batch_pred_6 = batch_entropy(preds_6)
+
+    total_loss = H - batch_pred_1 - batch_pred_2 - batch_pred_3 - batch_pred_4 - batch_pred_5 - batch_pred_6
+
+    # product = preds_1 * preds_2 * preds_3 * preds_4 * preds_5 * preds_6
+    # sum_indiv = product.mean(dim=1).mean()
+    # mean_0 = product.mean(dim=0).mean()
+    #
+    # total_loss = mean_0 - sum_indiv
+
+    # product = product.mean(dim=0) #* total_mean.detach()
+    # log_product = torch.log(product)
     # total_loss = - log_product.mean(dim=0)
+
+    # pm1 = preds_1.mean(dim=0)
+    # pm2 = preds_2.mean(dim=0)
+    # pm3 = preds_3.mean(dim=0)
+    # pm4 = preds_4.mean(dim=0)
+    # pm5 = preds_5.mean(dim=0)
+    # pm6 = preds_6.mean(dim=0)
+    #
+    # mean_pred_1 = torch.log(pm1*pm1*pm1*pm1).sum()
+    # mean_pred_2 = torch.log(pm2*pm2*pm2*pm2).sum()
+    # mean_pred_3 = torch.log(pm3*pm3*pm3*pm3).sum()
+    # mean_pred_4 = torch.log(pm4*pm4*pm4*pm4).sum()
+    # mean_pred_5 = torch.log(pm5*pm5*pm5*pm5).sum()
+    # mean_pred_6 = torch.log(pm6*pm6*pm6*pm6).sum()
+    #
+    # mean_pred_1 = preds_1.mean(dim=0)
+    # mean_pred_2 = preds_2.mean(dim=0)
+    # mean_pred_3 = preds_3.mean(dim=0)
+    # mean_pred_4 = preds_4.mean(dim=0)
+    # mean_pred_5 = preds_5.mean(dim=0)
+    # mean_pred_6 = preds_6.mean(dim=0)
+    #
+    # sqrt_mean_pred_1 = mean_pred_1 * mean_pred_1
+    # sqrt_mean_pred_2 = mean_pred_2 * mean_pred_2
+    # sqrt_mean_pred_3 = mean_pred_3 * mean_pred_3
+    # sqrt_mean_pred_4 = mean_pred_4 * mean_pred_4
+    # sqrt_mean_pred_5 = mean_pred_5 * mean_pred_5
+    # sqrt_mean_pred_6 = mean_pred_6 * mean_pred_6
+
+    # sum_mean_pred_1 = sqrt_mean_pred_1.mean()
+    # sum_mean_pred_2 = sqrt_mean_pred_2.mean()
+    # sum_mean_pred_3 = sqrt_mean_pred_3.mean()
+    # sum_mean_pred_4 = sqrt_mean_pred_4.mean()
+    # sum_mean_pred_5 = sqrt_mean_pred_5.mean()
+    # sum_mean_pred_6 = sqrt_mean_pred_6.mean()
+
+    #total_loss = sum_mean_pred_1 + sum_mean_pred_2 + sum_mean_pred_3 + sum_mean_pred_4 + sum_mean_pred_5 + sum_mean_pred_6 - sum_indiv
+
+    # l12 = my_loss(preds_1, preds_2)
+    # l13 = my_loss(preds_1, preds_3)
+    # l14 = my_loss(preds_1, preds_4)
+    # l15 = my_loss(preds_1, preds_5)
+    # l16 = my_loss(preds_1, preds_6)
+    #
+    # l23 = my_loss(preds_2, preds_3)
+    # l24 = my_loss(preds_2, preds_4)
+    # l25 = my_loss(preds_2, preds_5)
+    # l26 = my_loss(preds_2, preds_6)
+    #
+    # l34 = my_loss(preds_3, preds_4)
+    # l35 = my_loss(preds_3, preds_5)
+    # l36 = my_loss(preds_3, preds_6)
+    #
+    # l45 = my_loss(preds_4, preds_5)
+    # l46 = my_loss(preds_4, preds_6)
+    #
+    # l56 = my_loss(preds_5, preds_6)
+
+    # l12 = IID_loss(preds_1, preds_2)
+    # l13 = IID_loss(preds_1, preds_3)
+    # l14 = IID_loss(preds_1, preds_4)
+    # l15 = IID_loss(preds_1, preds_5)
+    # l16 = IID_loss(preds_1, preds_6)
+    #
+    # l23 = IID_loss(preds_2, preds_3)
+    # l24 = IID_loss(preds_2, preds_4)
+    # l25 = IID_loss(preds_2, preds_5)
+    # l26 = IID_loss(preds_2, preds_6)
+    #
+    # l34 = IID_loss(preds_3, preds_4)
+    # l35 = IID_loss(preds_3, preds_5)
+    # l36 = IID_loss(preds_3, preds_6)
+    #
+    # l45 = IID_loss(preds_4, preds_5)
+    # l46 = IID_loss(preds_4, preds_6)
+    #
+    # l56 = IID_loss(preds_5, preds_6)
+
+    # paired_losses = l12 + l13 + l14 + l15 + l16 + l23 + l24 + l25 + l26 + l34 + l35 + l36 + l45 + l46 + l56
+    # mean_probs_losses = mean_pred_1 + mean_pred_2 + mean_pred_3 + mean_pred_4 + mean_pred_5 + mean_pred_6
+    # # #H = pred_entropy(m_preds)
+    # #
+    # total_loss = paired_losses - mean_probs_losses
+    # product = m_preds * m_preds
+    # product_mean = product.mean(dim=0)
+    # log_product_mean = torch.log(product_mean)
+    # batch_diversion = - log_product_mean.mean(dim=0)
+    #
+    # total_loss = batch_diversion
+
+    # H = pred_entropy(m_preds)
+    #
+    # sum1 = distance_loss(preds_1)
+    # sum2 = distance_loss(preds_2)
+    # sum3 = distance_loss(preds_3)
+    #
+    # total_loss = H + sum1 + sum2 + sum3
+
+    # coeff = 3
+    # total_loss = entropies_loss(m_preds, coeff)
+
+    total_mean = 0.99 * total_mean + 0.01 * m_preds.mean(dim=0).detach()
+
 
     if train:
         torch.autograd.set_detect_anomaly(True)
@@ -287,91 +356,74 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size,
         for idx, i in enumerate(optimizers):
             i.step()
 
-    return preds_1, preds_2, preds_3, total_loss
+    return preds_1, preds_2, preds_3, preds_4, preds_5, preds_6, total_loss, total_mean
 
 
 def entropies_loss(pred, coeff):
     return pred_entropy(pred) - coeff * batch_entropy(pred)
 
 
-def pred_entropy(prediction):
-    #prediction[(prediction < EPS).data] = EPS
-    pred = prediction
+def pred_entropy(pred):
     H = - (pred * torch.log(pred)).sum(dim=1).mean(dim=0)
+
     return H
 
 
 def batch_entropy(pred):
     batch_mean_preds = pred.mean(dim=0)
     H_batch = - (batch_mean_preds * torch.log(batch_mean_preds)).sum()
-    # print((batch_mean_preds * torch.log(batch_mean_preds)).sum())
-    # print((0.1 * torch.log(batch_mean_preds)).sum())
-    # print()
-    # input()
-    # H_batch = (torch.log(batch_mean_preds)).mean()
 
     return H_batch
 
+def distance_loss(pred):
+    mean_batch = pred.mean(dim=0)
+    distance = torch.log(1 - torch.abs(mean_batch - 0.1))
+    sum = -distance.sum()
 
-# def measure_acc_block(X_test, test_ids, colons, BATCH_SIZE_DEFAULT):
-#
-#     x_train = X_test[test_ids, :]
-#
-#     image = to_tensor(x_train, BATCH_SIZE_DEFAULT)
-#     image = image.to('cuda')
-#
-#     # p1 = p1.to('cuda')
-#     # p2 = p2.to('cuda')
-#     # p3 = p3.to('cuda')
-#     # p4 = p4.to('cuda')
-#
-#     ids = np.random.choice(len(colons), size=4, replace=False)
-#
-#     pred_1 = colons[ids[0]](image)
-#     pred_2 = colons[ids[1]](image)
-#     pred_3 = colons[ids[2]](image)
-#     pred_4 = colons[ids[3]](image)
-#
-#     product = pred_1 * pred_2 * pred_3 * pred_4
-#     product = product.mean(dim=0)
-#     log_product = torch.log(product)
-#
-#     # mean_probs = (pred_1.mean(dim=0) + pred_2.mean(dim=0) + pred_3.mean(dim=0) + pred_4.mean(dim=0)) / 4
-#     #
-#     # # momentum_mean_prob = betta * momentum_mean_prob.detach() + (1 - betta) * mean_probs
-#     #
-#     # if not train:
-#     #     print("mean probs", mean_probs)
-#     #     print("product", product)
-#     #     print("poduct/mean", product / mean_probs)
-#     #     print("prod - mean", torch.log(product) - torch.log(mean_probs))
-#     #
-#     # log_product = torch.log(product) - torch.log(mean_probs)
-#
-#     loss = - log_product.mean(dim=0)
-#
-#     return pred_1, pred_2, pred_3, pred_4, loss
+    return sum
 
 
-def measure_acc_augments(X_test, colons, targets):
+def measure_acc_augments(X_test, colons, targets, total_mean):
     print_dict = {1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 0: []}
     runs = len(X_test)//BATCH_SIZE_DEFAULT
     avg_loss = 0
 
+    print("total mean", total_mean.data.cpu().numpy())
     for j in range(runs):
         test_ids = range(j * BATCH_SIZE_DEFAULT, (j + 1) * BATCH_SIZE_DEFAULT)
         optimizers = []
-        p1, p2, p3,  mim = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT)
-        p1, p2, p3,  mim = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, p1, p2, p3)
+        p1, p2, p3, p4, p5, p6, mim, total_mean = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, total_mean)
+        #p1, p2, p3, p4, p5, p6, mim, total_mean = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, total_mean, p1, p2, p3, p4, p5, p6)
+
+        if j == 0:
+            print("a prediction 1: ", p1[0].data.cpu().numpy())
+            print("a prediction 2: ", p2[0].data.cpu().numpy())
+            print("a prediction 3: ", p3[0].data.cpu().numpy())
+            print("a prediction 4: ", p4[0].data.cpu().numpy())
+            print("a prediction 5: ", p5[0].data.cpu().numpy())
+            print("a prediction 6: ", p6[0].data.cpu().numpy())
+
+            print()
+
+            print("a prediction 1: ", p1[20].data.cpu().numpy())
+            print("a prediction 2: ", p2[20].data.cpu().numpy())
+            print("a prediction 3: ", p3[20].data.cpu().numpy())
+            print("a prediction 4: ", p4[20].data.cpu().numpy())
+            print("a prediction 5: ", p5[20].data.cpu().numpy())
+            print("a prediction 6: ", p6[20].data.cpu().numpy())
 
         avg_loss += mim.item()
         for i in range(p1.shape[0]):
             val, index = torch.max(p1[i], 0)
             val, index2 = torch.max(p2[i], 0)
             val, index3 = torch.max(p3[i], 0)
-            # val, index4 = torch.max(p4[i], 0)
+            val, index4 = torch.max(p4[i], 0)
+            val, index5 = torch.max(p5[i], 0)
+            val, index6 = torch.max(p6[i], 0)
 
-            preds = [index.data.cpu().numpy(), index2.data.cpu().numpy(), index3.data.cpu().numpy()]
+            preds = [index.data.cpu().numpy(), index2.data.cpu().numpy(), index3.data.cpu().numpy(),
+                     index4.data.cpu().numpy(), index5.data.cpu().numpy(), index6.data.cpu().numpy()]
+
             preds = list(preds)
             preds = [int(x) for x in preds]
             # print(preds)
@@ -412,62 +464,7 @@ def measure_acc_augments(X_test, colons, targets):
     print("Clusters found: " + str(len(clusters)) + " " + str(clusters))
     print()
 
-    return avg_loss
-#
-#
-# def measure_accuracy(X_test, colons, targets):
-#     print_dict = {1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 0: []}
-#     runs = len(X_test)//BATCH_SIZE_DEFAULT
-#     avg_loss = 0
-#     for j in range(runs):
-#         test_ids = range(j*BATCH_SIZE_DEFAULT, (j+1)*BATCH_SIZE_DEFAULT)
-#
-#         p1, p2, p3, p4, mim = measure_acc_block(X_test, test_ids, colons, BATCH_SIZE_DEFAULT)
-#
-#         avg_loss += mim.item()
-#         for i in range(p1.shape[0]):
-#
-#             val, index = torch.max(p1[i], 0)
-#             val, index2 = torch.max(p2[i], 0)
-#             val, index3 = torch.max(p3[i], 0)
-#             val, index4 = torch.max(p4[i], 0)
-#
-#             preds = [index.data.cpu().numpy(), index2.data.cpu().numpy(), index3.data.cpu().numpy(), index4.data.cpu().numpy()]
-#             preds = list(preds)
-#             preds = [int(x) for x in preds]
-#             #print(preds)
-#             verdict = most_frequent(preds)
-#
-#             # print("verdict", verdict)
-#             # print("target", targets[test_ids[i]])
-#             # input()
-#             label = targets[test_ids[i]]
-#             if label == 10:
-#                 label = 0
-#
-#             print_dict[label].append(verdict)
-#
-#     total_miss = 0
-#     for element in print_dict.keys():
-#         length = len(print_dict[element])
-#         misses = miss_classifications(print_dict[element])
-#         total_miss += misses
-#
-#         print("cluster: ",
-#               element,
-#               ", most frequent: ",
-#               most_frequent(print_dict[element]),
-#               ", miss-classifications: ",
-#               misses,
-#               ", miss percentage: ",
-#               misses/length)
-#
-#     print()
-#     print("avg loss: ", avg_loss/runs)
-#     print("TOTAL miss: ", total_miss)
-#     print("TOTAL datapoints: ", runs*BATCH_SIZE_DEFAULT)
-#     print("TOTAL miss percentage: ", total_miss/(runs*BATCH_SIZE_DEFAULT))
-#     print()
+    return avg_loss/runs, len(clusters)
 
 
 def miss_classifications(cluster):
@@ -521,17 +518,18 @@ def train():
     optimizer = torch.optim.Adam(c.parameters(), lr=LEARNING_RATE_DEFAULT)
     optimizers.append(optimizer)
 
-    # c1 = OneNet(1, INPUT_NET)
-    # c1 = c1.cuda()
-    # colons.append(c1)
-    # optimizer1 = torch.optim.Adam(c1.parameters(), lr=LEARNING_RATE_DEFAULT)
-    # optimizers.append(optimizer1)
-    #
-    # c2 = OneNet(1, INPUT_NET)
-    # c2 = c2.cuda()
-    # colons.append(c2)
-    # optimizer2 = torch.optim.Adam(c2.parameters(), lr=LEARNING_RATE_DEFAULT)
-    # optimizers.append(optimizer2)
+    if NETS == 3:
+        c1 = OneNet(1, INPUT_NET)
+        c1 = c1.cuda()
+        colons.append(c1)
+        optimizer1 = torch.optim.Adam(c1.parameters(), lr=LEARNING_RATE_DEFAULT)
+        optimizers.append(optimizer1)
+
+        c2 = OneNet(1, INPUT_NET)
+        c2 = c2.cuda()
+        colons.append(c2)
+        optimizer2 = torch.optim.Adam(c2.parameters(), lr=LEARNING_RATE_DEFAULT)
+        optimizers.append(optimizer2)
 
     # c3 = OneNet(1, INPUT_NET)
     # c3 = c3.cuda()
@@ -539,26 +537,37 @@ def train():
     # optimizer3 = torch.optim.Adam(c3.parameters(), lr=LEARNING_RATE_DEFAULT)
     # optimizers.append(optimizer3)
 
+    gen = OneNetGen(SIZE*SIZE)
+    gen = gen.cuda()
+    colons.append(gen)
+    optimizer_gen = torch.optim.Adam(gen.parameters(), lr=LEARNING_RATE_DEFAULT)
+    optimizers.append(optimizer_gen)
 
     max_loss = 1999
     max_loss_iter = 0
+    most_clusters = 0
+    most_clusters_iter = 0
 
     print(colons[0])
+    total_mean = torch.ones([NUMBER_CLASSES]) * 0.1
+    total_mean = total_mean.to('cuda')
+    print(total_mean)
+    print(total_mean.shape)
 
     for iteration in range(MAX_STEPS_DEFAULT):
 
         ids = np.random.choice(len(X_train), size=BATCH_SIZE_DEFAULT, replace=False)
 
         train = True
-        p1, p2, p3,  mim = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT)
-        p1, p2, p3,  mim = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, p1, p2, p3)
+        p1, p2, p3, p4, p5, p6, mim, total_mean = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, total_mean)
+        #p1, p2, p3, p4, p5, p6, mim, total_mean = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, total_mean, p1, p2, p3, p4, p5, p6)
 
         if iteration % EVAL_FREQ_DEFAULT == 0:
             test_ids = np.random.choice(len(X_test), size=BATCH_SIZE_DEFAULT, replace=False)
             print()
-            p1, p2, p3,  mim = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT)
+            p1, p2, p3,  p4, p5, p6, mim, total_mean = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, total_mean,)
             print("loss 1: ", mim.item())
-            p1, p2, p3,  mim = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, p1, p2, p3)
+            #p1, p2, p3,  p4, p5, p6,  mim, total_mean = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, total_mean, p1, p2, p3, p4, p5, p6)
             print("loss 2: ", mim.item())
 
 
@@ -569,9 +578,14 @@ def train():
                   ": ", max_loss)
             print("description: ", DESCRIPTION)
 
-            loss = measure_acc_augments(X_test, colons, targets)
-            #print_info(p1, p2, p3, targets, test_ids)
+            print_info(p1, p2, p3, p4, p5, p6, targets, test_ids)
+            loss, clusters = measure_acc_augments(X_test, colons, targets, total_mean)
 
+            if clusters >= most_clusters:
+                most_clusters = clusters
+                most_clusters_iter = iteration
+
+            print("most clusters: " + str(most_clusters) + " at iter: " + str(most_clusters_iter))
             if max_loss > loss:
                 max_loss = loss
                 max_loss_iter = iteration
@@ -600,15 +614,18 @@ def show_mnist(first_image, w, h):
     plt.show()
 
 
-def print_info(p1, p2, p3, targets, test_ids):
+def print_info(p1, p2, p3, p4, p5, p6, targets, test_ids):
     print_dict = {1: "", 2: "", 3: "", 4: "", 5: "", 6: "", 7: "", 8: "", 9: "", 0: ""}
     for i in range(p1.shape[0]):
         val, index = torch.max(p1[i], 0)
         val, index2 = torch.max(p2[i], 0)
         val, index3 = torch.max(p3[i], 0)
+        val, index4 = torch.max(p4[i], 0)
+        val, index5 = torch.max(p5[i], 0)
+        val, index6 = torch.max(p6[i], 0)
 
         string = str(index.data.cpu().numpy()) + " " + str(index2.data.cpu().numpy()) + " " + str(
-            index3.data.cpu().numpy())+ ", "
+            index3.data.cpu().numpy()) + " " + str(index4.data.cpu().numpy()) + " " + str(index5.data.cpu().numpy()) + " " + str(index6.data.cpu().numpy()) + ", "
 
         label = targets[test_ids[i]]
         if label == 10:
