@@ -254,7 +254,7 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size, total_mean,
     batch_pred_6 = batch_entropy(preds_6)
 
     batch_loss = batch_pred_1 + batch_pred_2 + batch_pred_3 + batch_pred_4 + batch_pred_5 + batch_pred_6
-    coeff = 1
+    coeff = 2
     total_loss = H - coeff * batch_loss  # - reconstruction_loss
 
     # if random.uniform(0, 1) < 0.005:
@@ -393,10 +393,10 @@ def distance_loss(pred):
     return sum
 
 
-def save_image(original_image, iteration, name, cluster=0):
+def save_image(original_image, index, name, cluster=0):
     sample = original_image.view(-1, 1, original_image.shape[2], original_image.shape[2])
     sample = make_grid(sample, nrow=8).detach().numpy().astype(np.float).transpose(1, 2, 0)
-    matplotlib.image.imsave(f"gen_images/c_{cluster}/{name}_iter_{iteration}.png", sample)
+    matplotlib.image.imsave(f"gen_images/c_{cluster}/{name}_index_{index}.png", sample)
 
 
 def measure_acc_augments(X_test, colons, targets, total_mean):
@@ -594,6 +594,8 @@ def train():
     for idx, i in enumerate(targets):
         test_dict[i].append(idx)
 
+    labels_to_imags = {1:"airplane", 2:"bird", 3:"car", 4:"cat", 5:"deer", 6:"dog", 7:"horse", 8:"monkey", 9:"ship", 10:"truck"}
+
     for iteration in range(MAX_STEPS_DEFAULT):
         ids = []
         samples_per_cluster = BATCH_SIZE_DEFAULT // 10
@@ -631,10 +633,10 @@ def train():
 
             image_dict = print_info(p1, p2, p3, p4, p5, p6, targets, test_ids)
 
-            if iteration > 2000:
+            if iteration > -1:
                 for i in image_dict.keys():
                     for index in image_dict[i]:
-                        save_image(orig_image.cpu().detach()[index], iteration, "orig_image_"+str(index), i)
+                        save_image(orig_image.cpu().detach()[index], index, "iter_"+str(iteration)+"_"+labels_to_imags[targets[test_ids[index]]], i)
 
             loss, clusters = measure_acc_augments(X_test, colons, targets, total_mean)
 
