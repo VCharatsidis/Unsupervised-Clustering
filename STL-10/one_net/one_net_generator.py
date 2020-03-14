@@ -5,6 +5,83 @@ import torch.nn as nn
 import torch
 
 
+class Encoder(nn.Module):
+
+    def __init__(self, input_dim, hidden_dim=500, z_dim=20):
+        super().__init__()
+
+        self.fc1 = nn.Linear(input_dim, hidden_dim)
+        self.mean = nn.Linear(hidden_dim, z_dim)
+        self.std = nn.Linear(hidden_dim, z_dim)
+
+        self.relu = nn.ReLU()
+        self.sigm = nn.Sigmoid()
+
+    def forward(self, input):
+        """
+        Perform forward pass of encoder.
+        Returns mean and std with shape [batch_size, z_dim]. Make sure
+        that any constraints are enforced.
+        """
+        h = self.fc1(input)
+        h = self.relu(h)
+
+        mean = self.mean(h)
+        std = self.std(h)
+
+        return mean, std
+
+
+class Decoder(nn.Module):
+
+    def __init__(self, input_dim, hidden_dim=500, z_dim=20):
+        super().__init__()
+
+        self.sigmoid = nn.Sigmoid()
+        self.tanh = nn.Tanh()
+        self.fc2 = nn.Linear(z_dim, hidden_dim)
+        self.fc3 = nn.Linear(hidden_dim, input_dim-10)
+
+    def forward(self, z):
+        """
+        Perform forward pass of decoder.
+        Returns mean with shape [batch_size, 784].
+        """
+        a = self.fc2(z)
+        b = self.tanh(a)
+        c = self.fc3(b)
+
+        y = self.sigmoid(c)
+
+        return y
+
+
+class OneNetVAE(nn.Module):
+
+    def __init__(self, input_dim, hidden_dim=500, z_dim=20):
+        super().__init__()
+
+        self.z_dim = z_dim
+        self.encoder = Encoder(input_dim, hidden_dim, z_dim).to("cuda")
+        self.decoder = Decoder(input_dim, hidden_dim, z_dim).to("cuda")
+
+    def forward(self, input, pred):
+        """
+        Given input, perform an encoding and decoding step and return the
+        negative average elbo for the given batch.
+        """
+
+        flatten_image = torch.flatten(input, 1)
+        concat = torch.cat([flatten_image, pred], 1)
+        mean, std = self.encoder(concat)
+
+        e = torch.zeros(mean.shape).normal_().to("cuda")
+        z = std * e + mean
+
+        output = self.decoder(z)
+
+        return output
+
 
 class OneNetGen(nn.Module):
     """
@@ -40,7 +117,7 @@ class OneNetGen(nn.Module):
             nn.Linear(100, 500),
             nn.Tanh(),
 
-            nn.Linear(500, n_inputs),
+            nn.Linear(500, n_inputs-10),
             nn.Sigmoid()
         )
 
@@ -59,3 +136,8 @@ class OneNetGen(nn.Module):
         noised_image = self.linear(concat)
 
         return noised_image
+
+
+
+
+

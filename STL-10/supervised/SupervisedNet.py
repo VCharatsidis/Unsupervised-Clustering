@@ -6,14 +6,14 @@ import torch
 
 
 
-class OneNet(nn.Module):
+class SupervisedNet(nn.Module):
     """
     This class implements a Multi-layer Perceptron in PyTorch.
     It handles the different layers and parameters of the model.
     Once initialized an MLP object can perform forward.
     """
 
-    def __init__(self, n_channels, n_inputs, number_classes):
+    def __init__(self, n_channels, n_inputs):
         """
         Initializes MLP object.
         Args:
@@ -26,30 +26,26 @@ class OneNet(nn.Module):
                      This number is required in order to specify the
                      output dimensions of the MLP
         """
-        super(OneNet, self).__init__()
+        super(SupervisedNet, self).__init__()
 
+        MP = 2
         self.conv = nn.Sequential(
             # nn.Conv2d(n_channels, 64, kernel_size=3, stride=1, padding=1),
             # nn.BatchNorm2d(64),
             # nn.ReLU(),
             # nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
             # #
-            # nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
-            # nn.BatchNorm2d(64),
+            # nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
+            # nn.BatchNorm2d(128),
             # nn.ReLU(),
             # nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
             # #
-            # nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
-            # nn.BatchNorm2d(64),
+            # nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
+            # nn.BatchNorm2d(256),
             # nn.ReLU(),
             # nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
             #
-            # nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
-            # nn.BatchNorm2d(64),
-            # nn.ReLU(),
-            # nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
-
-            # nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1),
+            # nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1),
             # nn.BatchNorm2d(512),
             # nn.ReLU(),
             # nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
@@ -57,12 +53,12 @@ class OneNet(nn.Module):
             nn.Conv2d(n_channels, 64, kernel_size=(3, 3), stride=1, padding=1),
             nn.BatchNorm2d(64),
             nn.ReLU(),
-            nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1),
+            nn.MaxPool2d(kernel_size=(MP, MP), stride=2, padding=1),
 
             nn.Conv2d(64, 128, kernel_size=(3, 3), stride=1, padding=1),
             nn.BatchNorm2d(128),
             nn.ReLU(),
-            nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1),
+            nn.MaxPool2d(kernel_size=(MP, MP), stride=2, padding=1),
 
             nn.Conv2d(128, 256, kernel_size=(3, 3), stride=1, padding=1),
             nn.BatchNorm2d(256),
@@ -72,7 +68,7 @@ class OneNet(nn.Module):
             nn.BatchNorm2d(256),
             nn.ReLU(),
 
-            nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1),
+            nn.MaxPool2d(kernel_size=(MP, MP), stride=2, padding=1),
 
             nn.Conv2d(256, 512, kernel_size=(3, 3), stride=1, padding=1),
             nn.BatchNorm2d(512),
@@ -82,33 +78,33 @@ class OneNet(nn.Module):
             nn.BatchNorm2d(512),
             nn.ReLU(),
 
-            nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1),
+            nn.MaxPool2d(kernel_size=(MP, MP), stride=2, padding=1),
 
             nn.Conv2d(512, 512, kernel_size=(3, 3), stride=1, padding=1),
             nn.BatchNorm2d(512),
             nn.ReLU(),
 
-            nn.Conv2d(512, 725, kernel_size=(3, 3), stride=1, padding=1),
-            nn.BatchNorm2d(725),
+            nn.Conv2d(512, 512, kernel_size=(3, 3), stride=1, padding=1),
+            nn.BatchNorm2d(512),
             nn.ReLU(),
 
-            nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1),
+            nn.MaxPool2d(kernel_size=(MP, MP), stride=2, padding=1),
             nn.AvgPool2d(kernel_size=(1, 1), stride=1, padding=0),
         )
 
         self.linear = nn.Sequential(
-            # nn.Linear(n_inputs, 600),
-            # nn.Tanh(),
+            nn.Linear(n_inputs, 1000),
+            nn.Tanh(),
             #
             # nn.Linear(600, 300),
             # nn.Tanh(),
 
-            nn.Linear(n_inputs, number_classes),
+            nn.Linear(1000, 10),
             nn.Softmax(dim=1)
         )
 
 
-    def forward(self, x, p1, p2, p3, p4, p5):
+    def forward(self, x):
         """
         Performs forward pass of the input. Here an input tensor x is transformed through
         several layer transformations.
@@ -120,9 +116,6 @@ class OneNet(nn.Module):
 
         conv = self.conv(x)
         conv = torch.flatten(conv, 1)
-
-        #linear_input = torch.cat([conv, p1, p2, p3, p4, p5], 1)
-
         preds = self.linear(conv)
 
         return preds

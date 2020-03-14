@@ -181,6 +181,20 @@ def center_crop(X, size, batch_size):
     return X_res
 
 
+def color_jitter(X, batch_size):
+    X_copy = copy.deepcopy(X)
+    X_copy = Variable(torch.FloatTensor(X_copy))
+
+    for i in range(X_copy.shape[0]):
+        transformation = transforms.ColorJitter(brightness=1)
+        trans = transforms.Compose([transformation, transforms.ToTensor()])
+        a = F.to_pil_image(X_copy[i])
+        trans_image = trans(a)
+        X_copy[i] = trans_image
+
+    return X_copy
+
+
 def show_gray_numpy(image_1):
     z = image_1.squeeze(1)
     pixels = z[0]

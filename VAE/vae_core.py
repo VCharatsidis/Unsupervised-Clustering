@@ -57,14 +57,15 @@ class VAE(nn.Module):
 
         return elbo
 
-    def calc_distance(self, out, y):
 
+    def calc_distance(self, out, y):
         abs_difference = torch.abs(out - y)
 
         eps = 1e-8
         information_loss = torch.log(1 - abs_difference+eps)
 
         return information_loss
+
 
     def sample(self, n_samples):
         """

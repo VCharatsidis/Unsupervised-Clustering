@@ -89,8 +89,8 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size):
 
     mean_pred = (pred_1 + pred_2) / 2
     mean_pred[(mean_pred < EPS).data] = EPS
-    loss = entropy_balance_loss(mean_pred, 1)
-    #loss = IID_loss(pred_1, pred_2)
+    #loss = entropy_balance_loss(mean_pred, 1)
+    loss = IID_loss(pred_1, pred_2)
 
     if train:
         optimizers[0].zero_grad()

@@ -13,10 +13,12 @@ from stl10_input import read_all_images, read_labels
 import torchvision.transforms.functional as F
 from PIL import Image
 from one_net_model import OneNet
-from stl_utils import rotate, scale, to_grayscale, random_erease, vertical_flip, horizontal_flip, sobel_filter_y, sobel_filter_x, sobel_total,center_crop
+from stl_utils import rotate, scale, to_grayscale, random_erease, vertical_flip, horizontal_flip, sobel_filter_y, sobel_filter_x, sobel_total,center_crop, color_jitter
 import random
 import sys
-from one_net_generator import OneNetGen
+from one_net_generator import OneNetGen, OneNetVAE
+from torchvision.utils import make_grid
+import matplotlib
 from IID_loss import IID_loss
 import torch.nn as nn
 from torchvision import transforms
@@ -28,14 +30,14 @@ EPS=sys.float_info.epsilon
 LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 300000
 
-BATCH_SIZE_DEFAULT = 68
-INPUT_NET = 4608
+BATCH_SIZE_DEFAULT = 70
+INPUT_NET = 725
 SIZE = 32
 NETS = 1
 DESCRIPTION = "Augments: 3 augments then 3 sobels x,y,total. Nets: "+str(NETS) +" net. Loss: total_loss = paired_losses - mean_probs_losses. Image size: " + str(SIZE)
 
 EVAL_FREQ_DEFAULT = 200
-NUMBER_CLASSES = 11
+NUMBER_CLASSES = 10
 np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
 FLAGS = None
 
@@ -60,36 +62,38 @@ def encode_4_patches(image, colons, replace,
                      p5=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
                      p6=torch.zeros([BATCH_SIZE_DEFAULT, 10])
                      ):
-    image /= 255
 
     # size = 40
     # pad = (96 - size) // 2
     # lydia = image[:, :, pad:96 - pad, pad:96 - pad]
     # show_gray(lydia)
-
+    image /= 255
     #show_gray(image)
 
     pad = (96-SIZE)//2
     original_image = scale(image, SIZE, pad, BATCH_SIZE_DEFAULT)
-    #show_gray(original_image)
 
     original_image = original_image[:, :, pad:96-pad, pad:96-pad]
+    # show_gray(original_image)
+    # jitter = color_jitter(original_image, BATCH_SIZE_DEFAULT)
+    # show_gray(jitter)
     #original_image = sobel_total(original_image, BATCH_SIZE_DEFAULT)
 
     augments = {0: horizontal_flip(original_image, BATCH_SIZE_DEFAULT),
                 1: original_image,
-                2: vertical_flip(original_image, BATCH_SIZE_DEFAULT),
-                3: scale(original_image, SIZE-6, 3, BATCH_SIZE_DEFAULT),
-                4: rotate(original_image, 20, BATCH_SIZE_DEFAULT),
-                5: rotate(original_image, -20, BATCH_SIZE_DEFAULT),
-                6: center_crop(image, SIZE, BATCH_SIZE_DEFAULT),
-                7: sobel_filter_x(original_image, BATCH_SIZE_DEFAULT),
-                8: sobel_filter_y(original_image, BATCH_SIZE_DEFAULT),
-                9: sobel_total(original_image, BATCH_SIZE_DEFAULT)
+                2: scale(original_image, SIZE-8, 4, BATCH_SIZE_DEFAULT),
+                3: rotate(original_image, 20, BATCH_SIZE_DEFAULT),
+                4: rotate(original_image, -20, BATCH_SIZE_DEFAULT),
+                5: sobel_filter_x(original_image, BATCH_SIZE_DEFAULT),
+                6: sobel_filter_y(original_image, BATCH_SIZE_DEFAULT),
+                7: sobel_total(original_image, BATCH_SIZE_DEFAULT),
+                8: sobel_filter_x(horizontal_flip(original_image, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT),
+                9: sobel_filter_y(horizontal_flip(original_image, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT),
+                10: sobel_total(horizontal_flip(original_image, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT)
                 }
 
     ids = np.random.choice(len(augments), size=6, replace=False)
-    #
+    # #
     # sobels = {0: sobel_filter_x(augments[ids[0]], BATCH_SIZE_DEFAULT),
     #           1: sobel_total(augments[ids[1]], BATCH_SIZE_DEFAULT),
     #           2: sobel_filter_y(augments[ids[2]], BATCH_SIZE_DEFAULT),
@@ -122,12 +126,12 @@ def encode_4_patches(image, colons, replace,
     # show_gray(image_5)
     # show_gray(image_6)
 
-    p1 = p1.cuda()
-    p2 = p2.cuda()
-    p3 = p3.cuda()
-    p4 = p4.cuda()
-    p5 = p5.cuda()
-    p6 = p6.cuda()
+    p1 = p1.cuda().detach()
+    p2 = p2.cuda().detach()
+    p3 = p3.cuda().detach()
+    p4 = p4.cuda().detach()
+    p5 = p5.cuda().detach()
+    p6 = p6.cuda().detach()
 
     #net_id = np.random.choice(len(colons), size=4, replace=False)
 
@@ -142,7 +146,11 @@ def encode_4_patches(image, colons, replace,
     preds_5 = make_pred(image_5, colons, nets[1], p1, p2, p3, p4, p6)
     preds_6 = make_pred(image_6, colons, nets[2], p1, p2, p3, p4, p5)
 
-    return preds_1, preds_2, preds_3, preds_4, preds_5, preds_6
+    original_image_cuda = original_image.to("cuda")
+    # image_6 = colons[-1](original_image_cuda, preds_1).reshape(BATCH_SIZE_DEFAULT, SIZE, SIZE).unsqueeze(1)
+    # preds_6 = colons[nets[2]](image_6, p1, p2, p3, p4, p5)
+
+    return preds_1, preds_2, preds_3, preds_4, preds_5, preds_6, original_image, original_image_cuda, ids
 
 
 def make_pred(image, colons, net, p1, p2, p3, p4, p5):
@@ -190,6 +198,14 @@ def my_loss(preds_1, preds_2):
     return loss
 
 
+def calc_distance(out, y):
+    abs_difference = torch.abs(out - y)
+
+    information_loss = torch.log(1 - abs_difference + EPS)
+
+    return information_loss
+
+
 def forward_block(X, ids, colons, optimizers, train, to_tensor_size, total_mean,
                   p1=torch.zeros([BATCH_SIZE_DEFAULT, NUMBER_CLASSES]),
                   p2=torch.zeros([BATCH_SIZE_DEFAULT, NUMBER_CLASSES]),
@@ -213,12 +229,23 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size, total_mean,
     if random.uniform(0, 1) > 0.5:
         replace = False
 
-    preds_1, preds_2, preds_3, preds_4, preds_5, preds_6 = encode_4_patches(images, colons, replace, p1, p2, p3, p4, p5, p6)
+    preds_1, preds_2, preds_3, preds_4, preds_5, preds_6, image_6, orig_image, aug_ids = encode_4_patches(images, colons, replace, p1, p2, p3, p4, p5, p6)
+
+    # flatten_image = torch.flatten(image_6, 1)
+    # H_image = - (flatten_image * torch.log(flatten_image)).sum(dim=1).mean(dim=0)
+    # sum_pixels = flatten_image.sum(dim=1).mean(dim=0)
+
+    #reconstruction_loss = calc_distance(image_6, orig_image).sum(dim=-1).mean()
+
+    # product = preds_1 * preds_2 * preds_3 * preds_4 * preds_5 * preds_6
+    # mean_pr = product.mean(dim=0)
+    # log_p = torch.log(mean_pr+EPS)
+    # total_loss = -log_p.mean()
 
     m_preds = (preds_1 + preds_2 + preds_3 + preds_4 + preds_5 + preds_6) / 6
-
+    #
     H = pred_entropy(m_preds)
-
+    #
     batch_pred_1 = batch_entropy(preds_1)
     batch_pred_2 = batch_entropy(preds_2)
     batch_pred_3 = batch_entropy(preds_3)
@@ -226,7 +253,14 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size, total_mean,
     batch_pred_5 = batch_entropy(preds_5)
     batch_pred_6 = batch_entropy(preds_6)
 
-    total_loss = H - batch_pred_1 - batch_pred_2 - batch_pred_3 - batch_pred_4 - batch_pred_5 - batch_pred_6
+    batch_loss = batch_pred_1 + batch_pred_2 + batch_pred_3 + batch_pred_4 + batch_pred_5 + batch_pred_6
+    coeff = 1
+    total_loss = H - coeff * batch_loss  # - reconstruction_loss
+
+    # if random.uniform(0, 1) < 0.005:
+    #     print("coeff: ", coeff)
+
+    # loss_generator = H - batch_pred_6 # + H_image + torch.abs(sum_pixels-100)
 
     # product = preds_1 * preds_2 * preds_3 * preds_4 * preds_5 * preds_6
     # sum_indiv = product.mean(dim=1).mean()
@@ -295,26 +329,6 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size, total_mean,
     #
     # l56 = my_loss(preds_5, preds_6)
 
-    # l12 = IID_loss(preds_1, preds_2)
-    # l13 = IID_loss(preds_1, preds_3)
-    # l14 = IID_loss(preds_1, preds_4)
-    # l15 = IID_loss(preds_1, preds_5)
-    # l16 = IID_loss(preds_1, preds_6)
-    #
-    # l23 = IID_loss(preds_2, preds_3)
-    # l24 = IID_loss(preds_2, preds_4)
-    # l25 = IID_loss(preds_2, preds_5)
-    # l26 = IID_loss(preds_2, preds_6)
-    #
-    # l34 = IID_loss(preds_3, preds_4)
-    # l35 = IID_loss(preds_3, preds_5)
-    # l36 = IID_loss(preds_3, preds_6)
-    #
-    # l45 = IID_loss(preds_4, preds_5)
-    # l46 = IID_loss(preds_4, preds_6)
-    #
-    # l56 = IID_loss(preds_5, preds_6)
-
     # paired_losses = l12 + l13 + l14 + l15 + l16 + l23 + l24 + l25 + l26 + l34 + l35 + l36 + l45 + l46 + l56
     # mean_probs_losses = mean_pred_1 + mean_pred_2 + mean_pred_3 + mean_pred_4 + mean_pred_5 + mean_pred_6
     # # #H = pred_entropy(m_preds)
@@ -340,23 +354,16 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size, total_mean,
 
     total_mean = 0.99 * total_mean + 0.01 * m_preds.mean(dim=0).detach()
 
-
     if train:
         torch.autograd.set_detect_anomaly(True)
 
-        for idx, i in enumerate(optimizers):
-            i.zero_grad()
-
-        # l1.backward(retain_graph=True)
-        # l2.backward(retain_graph=True)
-        # l3.backward(retain_graph=True)
-        # l4.backward(retain_graph=True)
+        optimizers[0].zero_grad()
+        optimizers[-1].zero_grad()
         total_loss.backward(retain_graph=True)
+        optimizers[0].step()
+        optimizers[-1].step()
 
-        for idx, i in enumerate(optimizers):
-            i.step()
-
-    return preds_1, preds_2, preds_3, preds_4, preds_5, preds_6, total_loss, total_mean
+    return preds_1, preds_2, preds_3, preds_4, preds_5, preds_6, total_loss, total_mean, image_6, orig_image, aug_ids
 
 
 def entropies_loss(pred, coeff):
@@ -364,16 +371,19 @@ def entropies_loss(pred, coeff):
 
 
 def pred_entropy(pred):
-    H = - (pred * torch.log(pred)).sum(dim=1).mean(dim=0)
+    H = - (pred * torch.log(pred + EPS)).sum(dim=1).mean(dim=0)
 
     return H
 
 
 def batch_entropy(pred):
     batch_mean_preds = pred.mean(dim=0)
-    H_batch = - (batch_mean_preds * torch.log(batch_mean_preds)).sum()
+    targets = torch.ones([NUMBER_CLASSES]).to('cuda')
+    targets /= NUMBER_CLASSES
+    H_batch = (targets * torch.log(batch_mean_preds + EPS)).sum()
 
     return H_batch
+
 
 def distance_loss(pred):
     mean_batch = pred.mean(dim=0)
@@ -383,34 +393,53 @@ def distance_loss(pred):
     return sum
 
 
+def save_image(original_image, iteration, name, cluster=0):
+    sample = original_image.view(-1, 1, original_image.shape[2], original_image.shape[2])
+    sample = make_grid(sample, nrow=8).detach().numpy().astype(np.float).transpose(1, 2, 0)
+    matplotlib.image.imsave(f"gen_images/c_{cluster}/{name}_iter_{iteration}.png", sample)
+
+
 def measure_acc_augments(X_test, colons, targets, total_mean):
     print_dict = {1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 0: []}
     runs = len(X_test)//BATCH_SIZE_DEFAULT
     avg_loss = 0
 
+    augments = {0: "horizontal flip",
+                1: "original",
+                2: "scale",
+                3: "rotate",
+                4: "counter rotate",
+                5: "sobel x",
+                6: "sobel y",
+                7: "total sobel",
+                8: "sobel x horizontal",
+                9: "sobel y scale",
+                10: "total sobel rotate"
+                }
+
     print("total mean", total_mean.data.cpu().numpy())
     for j in range(runs):
         test_ids = range(j * BATCH_SIZE_DEFAULT, (j + 1) * BATCH_SIZE_DEFAULT)
         optimizers = []
-        p1, p2, p3, p4, p5, p6, mim, total_mean = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, total_mean)
-        #p1, p2, p3, p4, p5, p6, mim, total_mean = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, total_mean, p1, p2, p3, p4, p5, p6)
+        p1, p2, p3, p4, p5, p6, mim, total_mean, _, orig_image, aug_ids = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, total_mean)
+        #p1, p2, p3, p4, p5, p6, mim, total_mean, _, orig_image, aug_ids = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, total_mean, p1, p2, p3, p4, p5, p6)
 
         if j == 0:
-            print("a prediction 1: ", p1[0].data.cpu().numpy())
-            print("a prediction 2: ", p2[0].data.cpu().numpy())
-            print("a prediction 3: ", p3[0].data.cpu().numpy())
-            print("a prediction 4: ", p4[0].data.cpu().numpy())
-            print("a prediction 5: ", p5[0].data.cpu().numpy())
-            print("a prediction 6: ", p6[0].data.cpu().numpy())
+            print("a prediction 1: ", p1[0].data.cpu().numpy(), " ", augments[aug_ids[0]])
+            print("a prediction 2: ", p2[0].data.cpu().numpy(), " ", augments[aug_ids[1]])
+            print("a prediction 3: ", p3[0].data.cpu().numpy(), " ", augments[aug_ids[2]])
+            print("a prediction 4: ", p4[0].data.cpu().numpy(), " ", augments[aug_ids[3]])
+            print("a prediction 5: ", p5[0].data.cpu().numpy(), " ", augments[aug_ids[4]])
+            print("a prediction 6: ", p6[0].data.cpu().numpy(), " ", "generated")
 
             print()
 
-            print("a prediction 1: ", p1[20].data.cpu().numpy())
-            print("a prediction 2: ", p2[20].data.cpu().numpy())
-            print("a prediction 3: ", p3[20].data.cpu().numpy())
-            print("a prediction 4: ", p4[20].data.cpu().numpy())
-            print("a prediction 5: ", p5[20].data.cpu().numpy())
-            print("a prediction 6: ", p6[20].data.cpu().numpy())
+            print("a prediction 1: ", p1[20].data.cpu().numpy(), " ", augments[aug_ids[0]])
+            print("a prediction 2: ", p2[20].data.cpu().numpy(), " ", augments[aug_ids[1]])
+            print("a prediction 3: ", p3[20].data.cpu().numpy(), " ", augments[aug_ids[2]])
+            print("a prediction 4: ", p4[20].data.cpu().numpy(), " ", augments[aug_ids[3]])
+            print("a prediction 5: ", p5[20].data.cpu().numpy(), " ", augments[aug_ids[4]])
+            print("a prediction 6: ", p6[20].data.cpu().numpy(), " ", "generated")
 
         avg_loss += mim.item()
         for i in range(p1.shape[0]):
@@ -489,6 +518,9 @@ def train():
     fileName = "..\\data\\stl10_binary\\train_X.bin"
     X_train = read_all_images(fileName)
 
+    train_y_File = "..\\data\\stl10_binary\\train_y.bin"
+    y_train = read_labels(train_y_File)
+
     testFile = "..\\data\\stl10_binary\\test_X.bin"
     X_test = read_all_images(testFile)
 
@@ -512,7 +544,7 @@ def train():
     predictor_model = os.path.join(script_directory, filepath)
     colons_paths.append(predictor_model)
 
-    c = OneNet(1, INPUT_NET)
+    c = OneNet(1, INPUT_NET, NUMBER_CLASSES)
     c = c.cuda()
     colons.append(c)
     optimizer = torch.optim.Adam(c.parameters(), lr=LEARNING_RATE_DEFAULT)
@@ -537,7 +569,7 @@ def train():
     # optimizer3 = torch.optim.Adam(c3.parameters(), lr=LEARNING_RATE_DEFAULT)
     # optimizers.append(optimizer3)
 
-    gen = OneNetGen(SIZE*SIZE)
+    gen = OneNetVAE(SIZE * SIZE + NUMBER_CLASSES)
     gen = gen.cuda()
     colons.append(gen)
     optimizer_gen = torch.optim.Adam(gen.parameters(), lr=LEARNING_RATE_DEFAULT)
@@ -554,21 +586,40 @@ def train():
     print(total_mean)
     print(total_mean.shape)
 
-    for iteration in range(MAX_STEPS_DEFAULT):
+    labels_dict = {1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 10: []}
+    for idx, i in enumerate(y_train):
+        labels_dict[i].append(idx)
 
-        ids = np.random.choice(len(X_train), size=BATCH_SIZE_DEFAULT, replace=False)
+    test_dict = {1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 10: []}
+    for idx, i in enumerate(targets):
+        test_dict[i].append(idx)
+
+    for iteration in range(MAX_STEPS_DEFAULT):
+        ids = []
+        samples_per_cluster = BATCH_SIZE_DEFAULT // 10
+
+        for i in range(1, 11):
+            ids += random.sample(labels_dict[i], samples_per_cluster)
+
+        #ids = np.random.choice(len(X_train), size=BATCH_SIZE_DEFAULT, replace=False)
 
         train = True
-        p1, p2, p3, p4, p5, p6, mim, total_mean = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, total_mean)
-        #p1, p2, p3, p4, p5, p6, mim, total_mean = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, total_mean, p1, p2, p3, p4, p5, p6)
+        p1, p2, p3, p4, p5, p6, mim, total_mean, image_6, orig_image, aug_ids = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, total_mean)
+        #p1, p2, p3, p4, p5, p6, mim, total_mean, image_6, orig_image, aug_ids = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, total_mean, p1, p2, p3, p4, p5, p6)
 
         if iteration % EVAL_FREQ_DEFAULT == 0:
-            test_ids = np.random.choice(len(X_test), size=BATCH_SIZE_DEFAULT, replace=False)
+            test_ids = []
+            samples_per_cluster = BATCH_SIZE_DEFAULT // 10
+
+            for i in range(1, 11):
+                test_ids += random.sample(test_dict[i], samples_per_cluster)
+
+            #test_ids = np.random.choice(len(X_test), size=BATCH_SIZE_DEFAULT, replace=False)
             print()
-            p1, p2, p3,  p4, p5, p6, mim, total_mean = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, total_mean,)
+            p1, p2, p3, p4, p5, p6, mim, total_mean, image_6, orig_image, aug_ids = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, total_mean)
             print("loss 1: ", mim.item())
-            #p1, p2, p3,  p4, p5, p6,  mim, total_mean = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, total_mean, p1, p2, p3, p4, p5, p6)
-            print("loss 2: ", mim.item())
+            # p1, p2, p3,  p4, p5, p6, mim, total_mean, image_6, orig_image, aug_ids = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, total_mean, p1, p2, p3, p4, p5, p6)
+            # print("loss 2: ", mim.item())
 
 
             print("iteration: ", iteration,
@@ -578,7 +629,13 @@ def train():
                   ": ", max_loss)
             print("description: ", DESCRIPTION)
 
-            print_info(p1, p2, p3, p4, p5, p6, targets, test_ids)
+            image_dict = print_info(p1, p2, p3, p4, p5, p6, targets, test_ids)
+
+            if iteration > 2000:
+                for i in image_dict.keys():
+                    for index in image_dict[i]:
+                        save_image(orig_image.cpu().detach()[index], iteration, "orig_image_"+str(index), i)
+
             loss, clusters = measure_acc_augments(X_test, colons, targets, total_mean)
 
             if clusters >= most_clusters:
@@ -616,6 +673,8 @@ def show_mnist(first_image, w, h):
 
 def print_info(p1, p2, p3, p4, p5, p6, targets, test_ids):
     print_dict = {1: "", 2: "", 3: "", 4: "", 5: "", 6: "", 7: "", 8: "", 9: "", 0: ""}
+    image_dict = {1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 0: []}
+    counter = 0
     for i in range(p1.shape[0]):
         val, index = torch.max(p1[i], 0)
         val, index2 = torch.max(p2[i], 0)
@@ -624,9 +683,14 @@ def print_info(p1, p2, p3, p4, p5, p6, targets, test_ids):
         val, index5 = torch.max(p5[i], 0)
         val, index6 = torch.max(p6[i], 0)
 
+        verdict = most_frequent([int(index.data.cpu().numpy()), int(index2.data.cpu().numpy()), int(index3.data.cpu().numpy()), int(index4.data.cpu().numpy()),
+                                int(index5.data.cpu().numpy()), int(index6.data.cpu().numpy())])
+
         string = str(index.data.cpu().numpy()) + " " + str(index2.data.cpu().numpy()) + " " + str(
             index3.data.cpu().numpy()) + " " + str(index4.data.cpu().numpy()) + " " + str(index5.data.cpu().numpy()) + " " + str(index6.data.cpu().numpy()) + ", "
 
+        image_dict[verdict].append(counter)
+        counter += 1
         label = targets[test_ids[i]]
         if label == 10:
             label = 0
@@ -634,6 +698,11 @@ def print_info(p1, p2, p3, p4, p5, p6, targets, test_ids):
 
     for i in print_dict.keys():
         print(i, " : ", print_dict[i])
+
+    for i in image_dict.keys():
+        print(i, " : ", image_dict[i])
+
+    return image_dict
 
 
 def main():
