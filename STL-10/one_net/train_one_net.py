@@ -13,7 +13,11 @@ from stl10_input import read_all_images, read_labels
 import torchvision.transforms.functional as F
 from PIL import Image
 from one_net_model import OneNet
-from stl_utils import rotate, scale, to_grayscale, random_erease, vertical_flip, horizontal_flip, sobel_filter_y, sobel_filter_x, sobel_total,center_crop, color_jitter
+
+from stl_utils import rotate, scale, to_grayscale, \
+    random_erease, vertical_flip, horizontal_flip, \
+    sobel_filter_y, sobel_filter_x, sobel_total,center_crop, color_jitter, binary
+
 import random
 import sys
 from one_net_generator import OneNetGen, OneNetVAE
@@ -94,8 +98,13 @@ def encode_4_patches(image, colons, replace,
                 9: sobel_total(original_image, BATCH_SIZE_DEFAULT),
                 10: sobel_filter_x(horizontal_flip(original_image, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT),
                 11: sobel_filter_y(horizontal_flip(original_image, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT),
-                12: sobel_total(horizontal_flip(original_image, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT)
+                12: sobel_total(horizontal_flip(original_image, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT),
+                13: binary(original_image),
+                14: binary(horizontal_flip(original_image, BATCH_SIZE_DEFAULT)),
+                15: binary(scale_rot),
+                16: binary(scale_rev_rot)
                 }
+
 
     ids = np.random.choice(len(augments), size=6, replace=False)
     # # #
@@ -227,8 +236,6 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size, total_mean,
     x_tensor = x_tensor.unsqueeze(0)
     images = x_tensor.transpose(0, 1)
     images = images.transpose(2, 3)
-
-    #show_gray(images[0])
 
     replace = True
     if random.uniform(0, 1) > 0.5:
@@ -429,7 +436,11 @@ def measure_acc_augments(X_test, colons, targets, total_mean):
                 9: "sobel total",
                 10:"sobel x fliped",
                 11: "sobel y fliped",
-                12: "sobel total fliped"
+                12: "sobel total fliped",
+                13: "binary(original_image)",
+                14: "binary(horizontal_flip)",
+                15: "binary(scale_rot)",
+                16: "binary(scale_rev_rot)"
                 }
 
     print("total mean:     ", total_mean.data.cpu().numpy())
@@ -664,7 +675,7 @@ def train():
 
                 for i in image_dict.keys():
                     for index in image_dict[i]:
-                        save_image(orig_image.cpu().detach(), index, "iter_"+str(iteration)+"_"+labels_to_imags[targets[test_ids[index]]], i)
+                        save_image(orig_image.cpu().detach()[index], index, "iter_"+str(iteration)+"_"+labels_to_imags[targets[test_ids[index]]], i)
 
             if clusters >= most_clusters:
                 most_clusters = clusters

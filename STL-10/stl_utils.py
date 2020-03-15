@@ -26,6 +26,13 @@ def rotate(X, degrees, batch_size=BATCH_SIZE_DEFAULT):
     return X_copy
 
 
+def binary(images):
+    bin = images > 120/255
+    bin = bin.float()
+
+    return bin
+
+
 def rgb2gray(rgb):
 
     r, g, b = rgb[:, 0, :, :], rgb[:, 1, :, :], rgb[:, 2, :, :]
