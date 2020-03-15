@@ -30,14 +30,15 @@ EPS=sys.float_info.epsilon
 LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 300000
 
-BATCH_SIZE_DEFAULT = 70
-INPUT_NET = 725
-SIZE = 32
+BATCH_SIZE_DEFAULT = 40
+INPUT_NET = 8192
+SIZE = 40
 NETS = 1
 DESCRIPTION = "Augments: 3 augments then 3 sobels x,y,total. Nets: "+str(NETS) +" net. Loss: total_loss = paired_losses - mean_probs_losses. Image size: " + str(SIZE)
 
 EVAL_FREQ_DEFAULT = 200
 NUMBER_CLASSES = 10
+MIN_CLUSTERS_TO_SAVE = 9
 np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
 FLAGS = None
 
@@ -62,38 +63,42 @@ def encode_4_patches(image, colons, replace,
                      p5=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
                      p6=torch.zeros([BATCH_SIZE_DEFAULT, 10])
                      ):
-
+    pad = (96 - SIZE) // 2
     # size = 40
     # pad = (96 - size) // 2
     # lydia = image[:, :, pad:96 - pad, pad:96 - pad]
     # show_gray(lydia)
     image /= 255
     #show_gray(image)
+    #image = sobel_total(image, BATCH_SIZE_DEFAULT)
+    rot = rotate(image, 20, BATCH_SIZE_DEFAULT)
+    scale_rot = scale(rot, SIZE, pad, BATCH_SIZE_DEFAULT)
+    scale_rot = scale_rot[:, :, pad:96 - pad, pad:96 - pad]
 
-    pad = (96-SIZE)//2
+    rev_rot = rotate(image, -20, BATCH_SIZE_DEFAULT)
+    scale_rev_rot = scale(rev_rot, SIZE, pad, BATCH_SIZE_DEFAULT)
+    scale_rev_rot = scale_rev_rot[:, :, pad:96 - pad, pad:96 - pad]
+
     original_image = scale(image, SIZE, pad, BATCH_SIZE_DEFAULT)
-
     original_image = original_image[:, :, pad:96-pad, pad:96-pad]
-    # show_gray(original_image)
-    # jitter = color_jitter(original_image, BATCH_SIZE_DEFAULT)
-    # show_gray(jitter)
-    #original_image = sobel_total(original_image, BATCH_SIZE_DEFAULT)
 
     augments = {0: horizontal_flip(original_image, BATCH_SIZE_DEFAULT),
                 1: original_image,
                 2: scale(original_image, SIZE-8, 4, BATCH_SIZE_DEFAULT),
-                3: rotate(original_image, 20, BATCH_SIZE_DEFAULT),
-                4: rotate(original_image, -20, BATCH_SIZE_DEFAULT),
-                5: sobel_filter_x(original_image, BATCH_SIZE_DEFAULT),
-                6: sobel_filter_y(original_image, BATCH_SIZE_DEFAULT),
-                7: sobel_total(original_image, BATCH_SIZE_DEFAULT),
-                8: sobel_filter_x(horizontal_flip(original_image, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT),
-                9: sobel_filter_y(horizontal_flip(original_image, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT),
-                10: sobel_total(horizontal_flip(original_image, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT)
+                3: scale_rot,
+                4: scale_rev_rot,
+                5: center_crop(image, SIZE, BATCH_SIZE_DEFAULT),
+                6: random_erease(original_image, BATCH_SIZE_DEFAULT),
+                7: sobel_filter_x(original_image, BATCH_SIZE_DEFAULT),
+                8: sobel_filter_y(original_image, BATCH_SIZE_DEFAULT),
+                9: sobel_total(original_image, BATCH_SIZE_DEFAULT),
+                10: sobel_filter_x(horizontal_flip(original_image, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT),
+                11: sobel_filter_y(horizontal_flip(original_image, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT),
+                12: sobel_total(horizontal_flip(original_image, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT)
                 }
 
     ids = np.random.choice(len(augments), size=6, replace=False)
-    # #
+    # # #
     # sobels = {0: sobel_filter_x(augments[ids[0]], BATCH_SIZE_DEFAULT),
     #           1: sobel_total(augments[ids[1]], BATCH_SIZE_DEFAULT),
     #           2: sobel_filter_y(augments[ids[2]], BATCH_SIZE_DEFAULT),
@@ -101,7 +106,7 @@ def encode_4_patches(image, colons, replace,
     #           4: sobel_total(augments[ids[4]], BATCH_SIZE_DEFAULT),
     #           5: augments[ids[5]]
     # }
-
+    #
 
     # sobel_id = np.random.choice(len(sobels), size=6, replace=False)
     #
@@ -262,11 +267,13 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size, total_mean,
 
     # loss_generator = H - batch_pred_6 # + H_image + torch.abs(sum_pixels-100)
 
-    # product = preds_1 * preds_2 * preds_3 * preds_4 * preds_5 * preds_6
-    # sum_indiv = product.mean(dim=1).mean()
-    # mean_0 = product.mean(dim=0).mean()
-    #
-    # total_loss = mean_0 - sum_indiv
+    targets = torch.ones([NUMBER_CLASSES]).to('cuda')
+    targets /= NUMBER_CLASSES
+
+    product = preds_1 * preds_2 * preds_3 * preds_4 * preds_5 * preds_6
+    mean = product.mean(dim=0)
+    log = torch.log(mean + EPS)
+    total_loss = -(targets * log).mean()
 
     # product = product.mean(dim=0) #* total_mean.detach()
     # log_product = torch.log(product)
@@ -358,10 +365,10 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size, total_mean,
         torch.autograd.set_detect_anomaly(True)
 
         optimizers[0].zero_grad()
-        optimizers[-1].zero_grad()
+
         total_loss.backward(retain_graph=True)
         optimizers[0].step()
-        optimizers[-1].step()
+
 
     return preds_1, preds_2, preds_3, preds_4, preds_5, preds_6, total_loss, total_mean, image_6, orig_image, aug_ids
 
@@ -393,6 +400,12 @@ def distance_loss(pred):
     return sum
 
 
+def save_cluster(original_image, cluster, iteration):
+    sample = original_image.view(-1, 1, original_image.shape[2], original_image.shape[2])
+    sample = make_grid(sample, nrow=8).detach().numpy().astype(np.float).transpose(1, 2, 0)
+    matplotlib.image.imsave(f"gen_images/c_{cluster}/{iteration}_cluster_{cluster}.png", sample)
+
+
 def save_image(original_image, index, name, cluster=0):
     sample = original_image.view(-1, 1, original_image.shape[2], original_image.shape[2])
     sample = make_grid(sample, nrow=8).detach().numpy().astype(np.float).transpose(1, 2, 0)
@@ -409,15 +422,19 @@ def measure_acc_augments(X_test, colons, targets, total_mean):
                 2: "scale",
                 3: "rotate",
                 4: "counter rotate",
-                5: "sobel x",
-                6: "sobel y",
-                7: "total sobel",
-                8: "sobel x horizontal",
-                9: "sobel y scale",
-                10: "total sobel rotate"
+                5: "center_crop",
+                6: "random_erease",
+                7: "sobel x",
+                8: "sobel y",
+                9: "sobel total",
+                10:"sobel x fliped",
+                11: "sobel y fliped",
+                12: "sobel total fliped"
                 }
 
-    print("total mean", total_mean.data.cpu().numpy())
+    print("total mean:     ", total_mean.data.cpu().numpy())
+    print()
+
     for j in range(runs):
         test_ids = range(j * BATCH_SIZE_DEFAULT, (j + 1) * BATCH_SIZE_DEFAULT)
         optimizers = []
@@ -430,7 +447,7 @@ def measure_acc_augments(X_test, colons, targets, total_mean):
             print("a prediction 3: ", p3[0].data.cpu().numpy(), " ", augments[aug_ids[2]])
             print("a prediction 4: ", p4[0].data.cpu().numpy(), " ", augments[aug_ids[3]])
             print("a prediction 5: ", p5[0].data.cpu().numpy(), " ", augments[aug_ids[4]])
-            print("a prediction 6: ", p6[0].data.cpu().numpy(), " ", "generated")
+            print("a prediction 6: ", p6[0].data.cpu().numpy(), " ", augments[aug_ids[5]])
 
             print()
 
@@ -439,7 +456,7 @@ def measure_acc_augments(X_test, colons, targets, total_mean):
             print("a prediction 3: ", p3[20].data.cpu().numpy(), " ", augments[aug_ids[2]])
             print("a prediction 4: ", p4[20].data.cpu().numpy(), " ", augments[aug_ids[3]])
             print("a prediction 5: ", p5[20].data.cpu().numpy(), " ", augments[aug_ids[4]])
-            print("a prediction 6: ", p6[20].data.cpu().numpy(), " ", "generated")
+            print("a prediction 6: ", p6[20].data.cpu().numpy(), " ", augments[aug_ids[5]])
 
         avg_loss += mim.item()
         for i in range(p1.shape[0]):
@@ -569,11 +586,11 @@ def train():
     # optimizer3 = torch.optim.Adam(c3.parameters(), lr=LEARNING_RATE_DEFAULT)
     # optimizers.append(optimizer3)
 
-    gen = OneNetVAE(SIZE * SIZE + NUMBER_CLASSES)
-    gen = gen.cuda()
-    colons.append(gen)
-    optimizer_gen = torch.optim.Adam(gen.parameters(), lr=LEARNING_RATE_DEFAULT)
-    optimizers.append(optimizer_gen)
+    # gen = OneNetVAE(SIZE * SIZE + NUMBER_CLASSES)
+    # gen = gen.cuda()
+    # colons.append(gen)
+    # optimizer_gen = torch.optim.Adam(gen.parameters(), lr=LEARNING_RATE_DEFAULT)
+    # optimizers.append(optimizer_gen)
 
     max_loss = 1999
     max_loss_iter = 0
@@ -633,12 +650,21 @@ def train():
 
             image_dict = print_info(p1, p2, p3, p4, p5, p6, targets, test_ids)
 
-            if iteration > -1:
+            loss, clusters = measure_acc_augments(X_test, colons, targets, total_mean)
+
+            if iteration > 200 and clusters >= MIN_CLUSTERS_TO_SAVE:
+                for i in image_dict.keys():
+                    numpy_cluster = torch.zeros([len(image_dict[i]), 1, SIZE, SIZE])
+                    counter = 0
+                    for index in image_dict[i]:
+                        numpy_cluster[counter] = orig_image.cpu().detach()[index]
+                        counter += 1
+                    if counter > 0:
+                        save_cluster(numpy_cluster, i, iteration)
+
                 for i in image_dict.keys():
                     for index in image_dict[i]:
-                        save_image(orig_image.cpu().detach()[index], index, "iter_"+str(iteration)+"_"+labels_to_imags[targets[test_ids[index]]], i)
-
-            loss, clusters = measure_acc_augments(X_test, colons, targets, total_mean)
+                        save_image(orig_image.cpu().detach(), index, "iter_"+str(iteration)+"_"+labels_to_imags[targets[test_ids[index]]], i)
 
             if clusters >= most_clusters:
                 most_clusters = clusters
@@ -648,7 +674,6 @@ def train():
             if max_loss > loss:
                 max_loss = loss
                 max_loss_iter = iteration
-                #measure_accuracy(X_test, colons, targets)
 
                 print("models saved iter: " + str(iteration))
                 # for i in range(number_colons):
