@@ -73,7 +73,7 @@ def read_all_images(path_to_data):
         # You might want to comment this line or reverse the shuffle
         # if you will use a learning algorithm like CNN, since they like
         # their channels separated.
-        #images = np.transpose(images, (0, 3, 2, 1))
+        # images = np.transpose(images, (0, 3, 2, 1))
         return images
 
 

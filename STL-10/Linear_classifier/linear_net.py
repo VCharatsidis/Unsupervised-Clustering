@@ -33,7 +33,6 @@ class LinearNet(nn.Module):
             nn.Softmax(dim=1)
         )
 
-
     def forward(self, x):
         """
         Performs forward pass of the input. Here an input tensor x is transformed through

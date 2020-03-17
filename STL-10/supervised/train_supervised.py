@@ -149,15 +149,15 @@ def forward_block(X, ids, colons, optimizers, train, dictionary):
         mean_preds = (sum_preds / cluster_length).to('cuda')
         #print("mean preds", mean_preds)
 
-        #log_preds = -(y * torch.log(product_preds + EPS)).sum()
-        H = - (mean_preds * torch.log(mean_preds + EPS)).sum()
-        CE = - (y * torch.log(mean_preds + EPS)).sum()
+        log_preds = -(y * torch.log(product_preds + EPS)).sum()
+        # H = - (mean_preds * torch.log(mean_preds + EPS)).sum()
+        # CE = - (y * torch.log(mean_preds + EPS)).sum()
 
         # print("H shape", H)
         # print("CE shape", CE)
         # print("total loss", total_loss)
-        cluster_loss = H + CE
-        total_loss += cluster_loss
+
+        total_loss += log_preds
 
     # print("total loss", total_loss)
     # print("total counter", total_counter)

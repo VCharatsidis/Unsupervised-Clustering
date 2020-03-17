@@ -91,20 +91,19 @@ def encode_4_patches(image, colons, replace,
                 2: scale(original_image, SIZE-8, 4, BATCH_SIZE_DEFAULT),
                 3: scale_rot,
                 4: scale_rev_rot,
-                5: center_crop(image, SIZE, BATCH_SIZE_DEFAULT),
-                6: random_erease(original_image, BATCH_SIZE_DEFAULT),
-                7: sobel_filter_x(original_image, BATCH_SIZE_DEFAULT),
-                8: sobel_filter_y(original_image, BATCH_SIZE_DEFAULT),
-                9: sobel_total(original_image, BATCH_SIZE_DEFAULT),
-                10: sobel_filter_x(horizontal_flip(original_image, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT),
-                11: sobel_filter_y(horizontal_flip(original_image, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT),
-                12: sobel_total(horizontal_flip(original_image, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT),
-                13: binary(original_image),
-                14: binary(horizontal_flip(original_image, BATCH_SIZE_DEFAULT)),
-                15: binary(scale_rot),
-                16: binary(scale_rev_rot)
+                5: random_erease(original_image, BATCH_SIZE_DEFAULT),
+                6: sobel_filter_x(original_image, BATCH_SIZE_DEFAULT),
+                7: sobel_filter_y(original_image, BATCH_SIZE_DEFAULT),
+                8: sobel_total(original_image, BATCH_SIZE_DEFAULT),
+                9: sobel_filter_x(horizontal_flip(original_image, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT),
+                10: sobel_filter_y(horizontal_flip(original_image, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT),
+                11: sobel_total(horizontal_flip(original_image, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT),
+                12: binary(original_image),
+                13: binary(horizontal_flip(original_image, BATCH_SIZE_DEFAULT)),
+                14: binary(scale_rot),
+                15: binary(scale_rev_rot),
+                #16: center_crop(image, SIZE, BATCH_SIZE_DEFAULT),
                 }
-
 
     ids = np.random.choice(len(augments), size=6, replace=False)
     # # #
@@ -214,7 +213,6 @@ def my_loss(preds_1, preds_2):
 
 def calc_distance(out, y):
     abs_difference = torch.abs(out - y)
-
     information_loss = torch.log(1 - abs_difference + EPS)
 
     return information_loss
@@ -266,8 +264,8 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size, total_mean,
     batch_pred_6 = batch_entropy(preds_6)
 
     batch_loss = batch_pred_1 + batch_pred_2 + batch_pred_3 + batch_pred_4 + batch_pred_5 + batch_pred_6
-    coeff = 2
-    total_loss = H - coeff * batch_loss  # - reconstruction_loss
+    # coeff = 2
+    # total_loss = H - coeff * batch_loss  # - reconstruction_loss
 
     # if random.uniform(0, 1) < 0.005:
     #     print("coeff: ", coeff)
@@ -280,7 +278,7 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size, total_mean,
     product = preds_1 * preds_2 * preds_3 * preds_4 * preds_5 * preds_6
     mean = product.mean(dim=0)
     log = torch.log(mean + EPS)
-    total_loss = -(targets * log).mean()
+    total_loss = - (targets * log).mean() - batch_loss
 
     # product = product.mean(dim=0) #* total_mean.detach()
     # log_product = torch.log(product)
@@ -376,7 +374,6 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size, total_mean,
         total_loss.backward(retain_graph=True)
         optimizers[0].step()
 
-
     return preds_1, preds_2, preds_3, preds_4, preds_5, preds_6, total_loss, total_mean, image_6, orig_image, aug_ids
 
 
@@ -429,18 +426,18 @@ def measure_acc_augments(X_test, colons, targets, total_mean):
                 2: "scale",
                 3: "rotate",
                 4: "counter rotate",
-                5: "center_crop",
-                6: "random_erease",
-                7: "sobel x",
-                8: "sobel y",
-                9: "sobel total",
-                10:"sobel x fliped",
-                11: "sobel y fliped",
-                12: "sobel total fliped",
-                13: "binary(original_image)",
-                14: "binary(horizontal_flip)",
-                15: "binary(scale_rot)",
-                16: "binary(scale_rev_rot)"
+                5: "random_erease",
+                6: "sobel x",
+                7: "sobel y",
+                8: "sobel total",
+                9: "sobel x fliped",
+                10: "sobel y fliped",
+                11: "sobel total fliped",
+                12: "binary(original_image)",
+                13: "binary(horizontal_flip)",
+                14: "binary(scale_rot)",
+                15: "binary(scale_rev_rot)",
+                #16: "center_crop",
                 }
 
     print("total mean:     ", total_mean.data.cpu().numpy())
@@ -638,6 +635,13 @@ def train():
         #p1, p2, p3, p4, p5, p6, mim, total_mean, image_6, orig_image, aug_ids = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, total_mean, p1, p2, p3, p4, p5, p6)
 
         if iteration % EVAL_FREQ_DEFAULT == 0:
+            print("iteration: ", iteration,
+                  ", batch size: ", BATCH_SIZE_DEFAULT,
+                  ", lr: ", LEARNING_RATE_DEFAULT,
+                  ", best loss: ", max_loss_iter,
+                  ": ", max_loss)
+            print("description: ", DESCRIPTION)
+
             test_ids = []
             samples_per_cluster = BATCH_SIZE_DEFAULT // 10
 
@@ -647,17 +651,8 @@ def train():
             #test_ids = np.random.choice(len(X_test), size=BATCH_SIZE_DEFAULT, replace=False)
             print()
             p1, p2, p3, p4, p5, p6, mim, total_mean, image_6, orig_image, aug_ids = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, total_mean)
-            print("loss 1: ", mim.item())
             # p1, p2, p3,  p4, p5, p6, mim, total_mean, image_6, orig_image, aug_ids = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, total_mean, p1, p2, p3, p4, p5, p6)
             # print("loss 2: ", mim.item())
-
-
-            print("iteration: ", iteration,
-                  ", batch size: ", BATCH_SIZE_DEFAULT,
-                  ", lr: ", LEARNING_RATE_DEFAULT,
-                  ", best loss: ", max_loss_iter,
-                  ": ", max_loss)
-            print("description: ", DESCRIPTION)
 
             image_dict = print_info(p1, p2, p3, p4, p5, p6, targets, test_ids)
 
