@@ -26,8 +26,8 @@ def rotate(X, degrees, batch_size=BATCH_SIZE_DEFAULT):
     return X_copy
 
 
-def binary(images):
-    bin = images > 120/255
+def binary(images, threshold=120):
+    bin = images > threshold/255
     bin = bin.float()
 
     return bin

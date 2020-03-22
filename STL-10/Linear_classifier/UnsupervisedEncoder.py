@@ -13,7 +13,7 @@ class UnsupervisedNet(nn.Module):
     Once initialized an MLP object can perform forward.
     """
 
-    def __init__(self, n_channels, n_inputs, number_classes):
+    def __init__(self, n_channels, n_inputs, number_classes, dp):
         """
         Initializes MLP object.
         Args:
@@ -96,13 +96,56 @@ class UnsupervisedNet(nn.Module):
             # nn.AvgPool2d(kernel_size=(1, 1), stride=1, padding=0),
         )
 
-        self.linear = nn.Sequential(
+        self.test_linear = nn.Sequential(
             # nn.Linear(n_inputs, 600),
             # nn.Tanh(),
             #
             # nn.Linear(600, 300),
             # nn.Tanh(),
-            nn.Dropout(0.8),
+            nn.Linear(n_inputs, 10),
+            nn.Softmax(dim=1)
+        )
+
+        self.help_linear1 = nn.Sequential(
+            # nn.Linear(n_inputs, 600),
+            # nn.Tanh(),
+            #
+            # nn.Linear(600, 300),
+            # nn.Tanh(),
+            nn.Dropout2d(dp),
+            nn.Linear(n_inputs, 10),
+            nn.Softmax(dim=1)
+        )
+
+        self.help_linear2 = nn.Sequential(
+            # nn.Linear(n_inputs, 600),
+            # nn.Tanh(),
+            #
+            # nn.Linear(600, 300),
+            # nn.Tanh(),
+            nn.Dropout2d(dp),
+            nn.Linear(n_inputs, 10),
+            nn.Softmax(dim=1)
+        )
+
+        self.help_linear3 = nn.Sequential(
+            # nn.Linear(n_inputs, 600),
+            # nn.Tanh(),
+            #
+            # nn.Linear(600, 300),
+            # nn.Tanh(),
+            nn.Dropout2d(dp),
+            nn.Linear(n_inputs, 10),
+            nn.Softmax(dim=1)
+        )
+
+        self.train_linear = nn.Sequential(
+            # nn.Linear(n_inputs, 600),
+            # nn.Tanh(),
+            #
+            # nn.Linear(600, 300),
+            # nn.Tanh(),
+            nn.Dropout2d(dp),
             nn.Linear(n_inputs, number_classes),
             nn.Softmax(dim=1)
         )
@@ -118,8 +161,13 @@ class UnsupervisedNet(nn.Module):
         """
 
         conv = self.conv(x)
-
         encoding = torch.flatten(conv, 1)
-        preds = self.linear(encoding)
 
-        return encoding, preds
+        preds = self.train_linear(encoding)
+        test_preds = self.test_linear(encoding)
+
+        help_preds1 = self.help_linear1(encoding)
+        help_preds2 = self.help_linear2(encoding)
+        help_preds3 = self.help_linear3(encoding)
+
+        return encoding, preds, test_preds, help_preds1, help_preds2, help_preds3

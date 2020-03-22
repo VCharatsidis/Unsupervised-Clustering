@@ -26,16 +26,16 @@ DEPTH = 3
 SIZE = HEIGHT * WIDTH * DEPTH
 
 # path to the directory with the data
-DATA_DIR = './data'
+DATA_DIR = './data_2'
 
 # url of the binary data
 DATA_URL = 'http://ai.stanford.edu/~acoates/stl10/stl10_binary.tar.gz'
 
 # path to the binary train file with image data
-DATA_PATH = './data/stl10_binary/train_X.bin'
+DATA_PATH = './data_2/stl10_binary/train_X.bin'
 
 # path to the binary train file with labels
-LABEL_PATH = './data/stl10_binary/train_y.bin'
+LABEL_PATH = './data_2/stl10_binary/train_y.bin'
 
 
 def read_labels(path_to_labels):
@@ -92,7 +92,7 @@ def read_single_image(image_file):
     # You might want to comment this line or reverse the shuffle
     # if you will use a learning algorithm like CNN, since they like
     # their channels separated.
-    image = np.transpose(image, (2, 1, 0))
+    #image = np.transpose(image, (2, 1, 0))
     return image
 
 
@@ -149,7 +149,7 @@ def save_images(images, labels):
 
 if __name__ == "__main__":
     # download data if needed
-    # download_and_extract()
+    download_and_extract()
     #
     # test to check if the image is read correctly
     with open(DATA_PATH) as f:

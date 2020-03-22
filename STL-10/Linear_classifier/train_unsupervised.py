@@ -17,24 +17,50 @@ EPS=sys.float_info.epsilon
 LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 300000
 
-BATCH_SIZE_DEFAULT = 40
-INPUT_NET = 8192
-SIZE = 44
+BATCH_SIZE_DEFAULT = 70
+INPUT_NET = 4608
+SIZE = 32
 NETS = 1
-DESCRIPTION = "Augments: 3 augments then 3 sobels x,y,total. Nets: "+str(NETS) +" net. Loss: total_loss = paired_losses - mean_probs_losses. Image size: " + str(SIZE)
+DROPOUT = 0.95
+DESCRIPTION = " image size: "+str(SIZE) + " , Dropout2d: "+str(DROPOUT)
 
-EVAL_FREQ_DEFAULT = 200
-NUMBER_CLASSES = 10
+EVAL_FREQ_DEFAULT = 250
+NUMBER_CLASSES = 12
 MIN_CLUSTERS_TO_SAVE = 9
 np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
 FLAGS = None
 
 TARGETS = (torch.ones([NUMBER_CLASSES]).to('cuda')) / NUMBER_CLASSES
+TEST_TARGETS = (torch.ones([10]).to('cuda')) / 10
+
+labels_to_imags = {1: "airplane",
+                   2: "bird    ",
+                   3: "car     ",
+                   4: "cat     ",
+                   5: "deer    ",
+                   6: "dog     ",
+                   7: "horse   ",
+                   8: "monkey  ",
+                   9: "ship    ",
+                   0: "truck   "}
 
 
 def encode_4_patches(image, encoder):
     pad = (96 - SIZE) // 2
     image /= 255
+
+    soft_bin = binary(image)
+    soft_bin = scale(soft_bin, SIZE, pad, BATCH_SIZE_DEFAULT)
+
+    soft_bin = soft_bin[:, :, pad:96 - pad, pad:96 - pad]
+    rev_soft_bin = torch.abs(1 - soft_bin)
+
+    horiz_f = horizontal_flip(image, BATCH_SIZE_DEFAULT)
+    soft_bin_hf = binary(horiz_f)
+    soft_bin_hf = scale(soft_bin_hf, SIZE, pad, BATCH_SIZE_DEFAULT)
+    soft_bin_hf = soft_bin_hf[:, :, pad:96 - pad, pad:96 - pad]
+
+    rev_soft_bin_hf = torch.abs(1 - soft_bin_hf)
 
     rot = rotate(image, 20, BATCH_SIZE_DEFAULT)
     scale_rot = scale(rot, SIZE, pad, BATCH_SIZE_DEFAULT)
@@ -62,6 +88,11 @@ def encode_4_patches(image, encoder):
                 12: binary(horizontal_flip(original_image, BATCH_SIZE_DEFAULT)),
                 13: binary(scale_rot),
                 14: binary(scale_rev_rot),
+                15: soft_bin,
+                16: rev_soft_bin,
+                17: soft_bin_hf,
+                18: rev_soft_bin_hf,
+                19: torch.abs(1 - original_image)
                 #16: center_crop(image, SIZE, BATCH_SIZE_DEFAULT),
                 }
 
@@ -81,14 +112,19 @@ def encode_4_patches(image, encoder):
     # show_gray(image_5)
     # show_gray(image_6)
 
-    _, preds_1 = encoder(image_1.to('cuda'))
-    _, preds_2 = encoder(image_2.to('cuda'))
-    _, preds_3 = encoder(image_3.to('cuda'))
-    _, preds_4 = encoder(image_4.to('cuda'))
-    _, preds_5 = encoder(image_5.to('cuda'))
-    _, preds_6 = encoder(image_6.to('cuda'))
+    _, preds_1, test_preds_1, help_preds_1_1, help_preds_1_2,  help_preds_1_3 = encoder(image_1.to('cuda'))
+    _, preds_2, test_preds_2, help_preds_2_1, help_preds_2_2,  help_preds_2_3 = encoder(image_2.to('cuda'))
+    _, preds_3, test_preds_3, help_preds_3_1, help_preds_3_2,  help_preds_3_3 = encoder(image_3.to('cuda'))
+    _, preds_4, test_preds_4, help_preds_4_1, help_preds_4_2,  help_preds_4_3 = encoder(image_4.to('cuda'))
+    _, preds_5, test_preds_5, help_preds_5_1, help_preds_5_2,  help_preds_5_3 = encoder(image_5.to('cuda'))
+    _, preds_6, test_preds_6, help_preds_6_1, help_preds_6_2,  help_preds_6_3 = encoder(image_6.to('cuda'))
 
-    return preds_1, preds_2, preds_3, preds_4, preds_5, preds_6, original_image, ids
+    return preds_1, preds_2, preds_3, preds_4, preds_5, preds_6,\
+           test_preds_1, test_preds_2, test_preds_3, test_preds_4, test_preds_5, test_preds_6, \
+           help_preds_1_1, help_preds_2_1,  help_preds_3_1, help_preds_4_1, help_preds_5_1,  help_preds_6_1, \
+           help_preds_1_2, help_preds_2_2, help_preds_3_2, help_preds_4_2, help_preds_5_2, help_preds_6_2, \
+           help_preds_1_3, help_preds_2_3, help_preds_3_3, help_preds_4_3, help_preds_5_3, help_preds_6_3, \
+           original_image, ids
 
 
 def forward_block(X, ids, encoder, optimizer, train, total_mean):
@@ -101,36 +137,69 @@ def forward_block(X, ids, encoder, optimizer, train, total_mean):
     images = x_tensor.transpose(0, 1)
     images = images.transpose(2, 3)
 
-    preds_1, preds_2, preds_3, preds_4, preds_5, preds_6, orig_image, aug_ids = encode_4_patches(images, encoder)
+    preds_1, preds_2, preds_3, preds_4, preds_5, preds_6,\
+    test_preds_1, test_preds_2, test_preds_3, test_preds_4, test_preds_5, test_preds_6, \
+    help_preds_1_1, help_preds_2_1, help_preds_3_1, help_preds_4_1, help_preds_5_1, help_preds_6_1, \
+    help_preds_1_2, help_preds_2_2, help_preds_3_2, help_preds_4_2, help_preds_5_2, help_preds_6_2, \
+    help_preds_1_3, help_preds_2_3, help_preds_3_3, help_preds_4_3, help_preds_5_3, help_preds_6_3, \
+    orig_image, aug_ids = encode_4_patches(images, encoder)
 
-    batch_pred_1 = batch_entropy(preds_1)
-    batch_pred_2 = batch_entropy(preds_2)
-    batch_pred_3 = batch_entropy(preds_3)
-    batch_pred_4 = batch_entropy(preds_4)
-    batch_pred_5 = batch_entropy(preds_5)
-    batch_pred_6 = batch_entropy(preds_6)
+    help_batch_pred_1 = batch_entropy(help_preds_1_1, TEST_TARGETS)
+    help_batch_pred_2 = batch_entropy(help_preds_2_1, TEST_TARGETS)
+    help_batch_pred_3 = batch_entropy(help_preds_3_1, TEST_TARGETS)
+    help_batch_pred_4 = batch_entropy(help_preds_4_1, TEST_TARGETS)
+    help_batch_pred_5 = batch_entropy(help_preds_5_1, TEST_TARGETS)
+    help_batch_pred_6 = batch_entropy(help_preds_6_1, TEST_TARGETS)
+
+    test_batch_pred_1 = batch_entropy(test_preds_1, TEST_TARGETS)
+    test_batch_pred_2 = batch_entropy(test_preds_2, TEST_TARGETS)
+    test_batch_pred_3 = batch_entropy(test_preds_3, TEST_TARGETS)
+    test_batch_pred_4 = batch_entropy(test_preds_4, TEST_TARGETS)
+    test_batch_pred_5 = batch_entropy(test_preds_5, TEST_TARGETS)
+    test_batch_pred_6 = batch_entropy(test_preds_6, TEST_TARGETS)
+
+    batch_pred_1 = batch_entropy(preds_1, TARGETS)
+    batch_pred_2 = batch_entropy(preds_2, TARGETS)
+    batch_pred_3 = batch_entropy(preds_3, TARGETS)
+    batch_pred_4 = batch_entropy(preds_4, TARGETS)
+    batch_pred_5 = batch_entropy(preds_5, TARGETS)
+    batch_pred_6 = batch_entropy(preds_6, TARGETS)
 
     batch_loss = batch_pred_1 + batch_pred_2 + batch_pred_3 + batch_pred_4 + batch_pred_5 + batch_pred_6
+    test_batch_loss = test_batch_pred_1 + test_batch_pred_2 + test_batch_pred_3 + test_batch_pred_4 + test_batch_pred_5 + test_batch_pred_6
+    help_batch_loss_1 = help_batch_pred_1 + help_batch_pred_2 + help_batch_pred_3 + help_batch_pred_4 + help_batch_pred_5 + help_batch_pred_6
 
     product = preds_1 * preds_2 * preds_3 * preds_4 * preds_5 * preds_6
     mean = product.mean(dim=0)
     log = torch.log(mean + EPS)
     total_loss = - (TARGETS * log).mean() - batch_loss
 
-    m_preds = (preds_1 + preds_2 + preds_3 + preds_4 + preds_5 + preds_6) / 6
+    test_product = test_preds_1 * test_preds_2 * test_preds_3 * test_preds_4 * test_preds_5 * test_preds_6
+    test_mean = test_product.mean(dim=0)
+    test_log = torch.log(test_mean + EPS)
+    test_total_loss = - (TEST_TARGETS * test_log).mean() - test_batch_loss
+
+    help_product_1 = help_batch_pred_1 * help_batch_pred_2 * help_batch_pred_3 * help_batch_pred_4 * help_batch_pred_5 * help_batch_pred_6
+    help_mean_1 = help_product_1.mean(dim=0)
+    help_log_1 = torch.log(help_mean_1 + EPS)
+    help_total_loss_1 = - (TEST_TARGETS * help_log_1).mean() - help_batch_loss_1
+
+    m_preds = (test_preds_1 + test_preds_2 + test_preds_3 + test_preds_4 + test_preds_5 + test_preds_6) / 6
     total_mean = 0.99 * total_mean + 0.01 * m_preds.mean(dim=0).detach()
+
+    all_losses = total_loss + test_total_loss + help_total_loss_1
 
     if train:
         optimizer.zero_grad()
-        total_loss.backward(retain_graph=True)
+        all_losses.backward(retain_graph=True)
         optimizer.step()
 
-    return preds_1, preds_2, preds_3, preds_4, preds_5, preds_6, total_loss, total_mean, orig_image, aug_ids
+    return test_preds_1, test_preds_2, test_preds_3, test_preds_4, test_preds_5, test_preds_6, test_total_loss, total_mean, orig_image, aug_ids
 
 
-def batch_entropy(pred):
+def batch_entropy(pred, targets):
     batch_mean_preds = pred.mean(dim=0)
-    H_batch = (TARGETS.detach() * torch.log(batch_mean_preds + EPS)).sum()
+    H_batch = (targets.detach() * torch.log(batch_mean_preds + EPS)).sum()
 
     return H_batch
 
@@ -138,7 +207,7 @@ def batch_entropy(pred):
 def save_cluster(original_image, cluster, iteration):
     sample = original_image.view(-1, 1, original_image.shape[2], original_image.shape[2])
     sample = make_grid(sample, nrow=8).detach().numpy().astype(np.float).transpose(1, 2, 0)
-    matplotlib.image.imsave(f"gen_images/c_{cluster}/{iteration}_cluster_{cluster}.png", sample)
+    matplotlib.image.imsave(f"images/iter_{iteration}_c_{cluster}.png", sample)
 
 
 def save_image(original_image, index, name, cluster=0):
@@ -167,9 +236,15 @@ def measure_acc_augments(X_test, colons, targets, total_mean):
                 12: "binary(horizontal_flip)",
                 13: "binary(scale_rot)",
                 14: "binary(scale_rev_rot)",
+                15: "soft_bin",
+                16: "rev_soft_bin",
+                17: "soft_bin_hf",
+                18: "rev_soft_bin_hf",
+                19: "torch.abs(1-original_image)"
                 #16: "center_crop",
                 }
 
+    print()
     print("total mean:     ", total_mean.data.cpu().numpy())
     print()
 
@@ -228,7 +303,7 @@ def measure_acc_augments(X_test, colons, targets, total_mean):
         mfe = most_frequent(print_dict[element])
         clusters.add(mfe)
         print("cluster: ",
-              element,
+              labels_to_imags[element],
               ", most frequent: ",
               mfe,
               ", miss-classifications: ",
@@ -268,8 +343,8 @@ def print_params(model):
 
 def train():
     x_train_fileName = "..\\data\\stl10_binary\\train_X.bin"
-    unlabeled_fileName = "..\\data\\stl10_binary\\unlabeled_X.bin"
-    X_train = read_all_images(x_train_fileName)
+    unlabeled_fileName = "..\\data_2\\stl10_binary\\unlabeled_X.bin"
+    X_train = read_all_images(unlabeled_fileName)
 
     train_y_File = "..\\data\\stl10_binary\\train_y.bin"
     y_train = read_labels(train_y_File)
@@ -285,7 +360,7 @@ def train():
     filepath = 'encoder' + '.model'
     net_path = os.path.join(script_directory, filepath)
 
-    encoder = UnsupervisedNet(1, INPUT_NET, NUMBER_CLASSES).to('cuda')
+    encoder = UnsupervisedNet(1, INPUT_NET, NUMBER_CLASSES, DROPOUT).to('cuda')
     optimizer = torch.optim.Adam(encoder.parameters(), lr=LEARNING_RATE_DEFAULT)
 
     max_loss = 1999
@@ -294,7 +369,8 @@ def train():
     most_clusters_iter = 0
 
     print(encoder)
-    total_mean = torch.ones([NUMBER_CLASSES]) * 0.1
+    print("X_train: ", X_train.shape, " y_train: ", y_train.shape, " X_test: ", X_test.shape, " targets: ", targets.shape)
+    total_mean = torch.ones([10]) * 0.1
     total_mean = total_mean.to('cuda')
 
     labels_dict = {1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 10: []}
@@ -304,17 +380,6 @@ def train():
     test_dict = {1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 10: []}
     for idx, i in enumerate(targets):
         test_dict[i].append(idx)
-
-    labels_to_imags = {1: "airplane",
-                       2: "bird",
-                       3: "car",
-                       4: "cat",
-                       5: "deer",
-                       6: "dog",
-                       7: "horse",
-                       8: "monkey",
-                       9: "ship",
-                       10: "truck"}
 
     for iteration in range(MAX_STEPS_DEFAULT):
         # ids = []
@@ -331,9 +396,11 @@ def train():
             print("iteration: ", iteration,
                   ", batch size: ", BATCH_SIZE_DEFAULT,
                   ", lr: ", LEARNING_RATE_DEFAULT,
-                  ", best loss: ", max_loss_iter,
-                  ": ", max_loss)
-            print("description: ", DESCRIPTION)
+                  ", best loss iter: ", max_loss_iter,
+                  "-", max_loss,
+                   ",", DESCRIPTION,
+                  ", most clusters iter: ", most_clusters_iter,
+                  "-", most_clusters)
 
             # test_ids = []
             #
@@ -341,7 +408,7 @@ def train():
             #     test_ids += random.sample(test_dict[i], samples_per_cluster)
 
             test_ids = np.random.choice(len(X_test), size=BATCH_SIZE_DEFAULT, replace=False)
-            print()
+
             p1, p2, p3, p4, p5, p6, mim, total_mean, orig_image, aug_ids = forward_block(X_test, test_ids, encoder, optimizer, False, total_mean)
 
             image_dict = print_info(p1, p2, p3, p4, p5, p6, targets, test_ids)
@@ -358,9 +425,9 @@ def train():
                     if counter > 0:
                         save_cluster(numpy_cluster, i, iteration)
 
-                for i in image_dict.keys():
-                    for index in image_dict[i]:
-                        save_image(orig_image.cpu().detach()[index], index, "iter_"+str(iteration)+"_"+labels_to_imags[targets[test_ids[index]]], i)
+                # for i in image_dict.keys():
+                #     for index in image_dict[i]:
+                #         save_image(orig_image.cpu().detach()[index], index, "iter_"+str(iteration)+"_"+labels_to_imags[targets[test_ids[index]]], i)
 
             if clusters >= most_clusters:
                 most_clusters = clusters
@@ -372,8 +439,6 @@ def train():
 
                     print("models saved iter: " + str(iteration))
                     torch.save(encoder, net_path)
-
-            print("most clusters: " + str(most_clusters) + " at iter: " + str(most_clusters_iter))
 
 
 def to_tensor(X):
@@ -403,13 +468,14 @@ def print_info(p1, p2, p3, p4, p5, p6, targets, test_ids):
 
         image_dict[verdict].append(counter)
         counter += 1
+
         label = targets[test_ids[i]]
         if label == 10:
             label = 0
         print_dict[label] += string
 
     for i in print_dict.keys():
-        print(i, " : ", print_dict[i])
+        print(labels_to_imags[i], " : ", print_dict[i])
 
     for i in image_dict.keys():
         print(i, " : ", image_dict[i])

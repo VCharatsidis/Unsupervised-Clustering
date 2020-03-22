@@ -96,19 +96,22 @@ class OneNet(nn.Module):
             # nn.AvgPool2d(kernel_size=(1, 1), stride=1, padding=0),
         )
 
+        self.dropout =nn.Sequential(
+            nn.Dropout2d(0.95)
+        )
+
         self.linear = nn.Sequential(
             # nn.Linear(n_inputs, 600),
             # nn.Tanh(),
             #
             # nn.Linear(600, 300),
             # nn.Tanh(),
-            nn.Dropout(0.8),
+
             nn.Linear(n_inputs, number_classes),
             nn.Softmax(dim=1)
         )
 
-
-    def forward(self, x, p1, p2, p3, p4, p5):
+    def forward(self, x, p1, p2, p3, p4, p5, mean):
         """
         Performs forward pass of the input. Here an input tensor x is transformed through
         several layer transformations.
@@ -119,10 +122,16 @@ class OneNet(nn.Module):
         """
 
         conv = self.conv(x)
-        conv = torch.flatten(conv, 1)
+        droped = self.dropout(conv)
 
-        #linear_input = torch.cat([conv, p1, p2, p3, p4, p5], 1)
+        fatten = torch.flatten(droped, 1)
 
-        preds = self.linear(conv)
+        batch_size = p1.shape[0]
+
+        m_pred = mean.expand(batch_size, 10)
+
+        linear_input = torch.cat([fatten, p1, p2, p3, p4, p5, m_pred], 1)
+
+        preds = self.linear(linear_input)
 
         return preds
