@@ -17,21 +17,26 @@ EPS=sys.float_info.epsilon
 LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 300000
 
-BATCH_SIZE_DEFAULT = 70
-INPUT_NET = 4608
-SIZE = 32
+BATCH_SIZE_DEFAULT = 40
+INPUT_NET = 8192
+SIZE = 40
 NETS = 1
-DROPOUT = 0.95
+UNSUPERVISED = False
+DROPOUT = 0.8
 DESCRIPTION = " image size: "+str(SIZE) + " , Dropout2d: "+str(DROPOUT)
 
-EVAL_FREQ_DEFAULT = 250
-NUMBER_CLASSES = 12
+EVAL_FREQ_DEFAULT = 500
+NUMBER_CLASSES = 30
 MIN_CLUSTERS_TO_SAVE = 9
 np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
 FLAGS = None
 
-TARGETS = (torch.ones([NUMBER_CLASSES]).to('cuda')) / NUMBER_CLASSES
-TEST_TARGETS = (torch.ones([10]).to('cuda')) / 10
+
+TEN_TARGETS = (torch.ones([10]).to('cuda')) / 10
+TWENTY_TARGETS = (torch.ones([20]).to('cuda')) / 20
+THIRTY_TARGETS = (torch.ones([30]).to('cuda')) / 30
+FORTY_TARGETS = (torch.ones([40]).to('cuda')) / 40
+FIFTY_TARGETS = (torch.ones([50]).to('cuda')) / 50
 
 labels_to_imags = {1: "airplane",
                    2: "bird    ",
@@ -84,15 +89,15 @@ def encode_4_patches(image, encoder):
                 8: sobel_filter_x(horizontal_flip(original_image, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT),
                 9: sobel_filter_y(horizontal_flip(original_image, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT),
                 10: sobel_total(horizontal_flip(original_image, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT),
-                11: binary(original_image),
-                12: binary(horizontal_flip(original_image, BATCH_SIZE_DEFAULT)),
-                13: binary(scale_rot),
-                14: binary(scale_rev_rot),
-                15: soft_bin,
-                16: rev_soft_bin,
-                17: soft_bin_hf,
-                18: rev_soft_bin_hf,
-                19: torch.abs(1 - original_image)
+                # 11: binary(original_image),
+                # 12: binary(horizontal_flip(original_image, BATCH_SIZE_DEFAULT)),
+                # 13: binary(scale_rot),
+                # 14: binary(scale_rev_rot),
+                11: soft_bin,
+                12: rev_soft_bin,
+                13: soft_bin_hf,
+                14: rev_soft_bin_hf,
+                15: torch.abs(1 - original_image)
                 #16: center_crop(image, SIZE, BATCH_SIZE_DEFAULT),
                 }
 
@@ -112,23 +117,40 @@ def encode_4_patches(image, encoder):
     # show_gray(image_5)
     # show_gray(image_6)
 
-    _, preds_1, test_preds_1, help_preds_1_1, help_preds_1_2,  help_preds_1_3 = encoder(image_1.to('cuda'))
-    _, preds_2, test_preds_2, help_preds_2_1, help_preds_2_2,  help_preds_2_3 = encoder(image_2.to('cuda'))
-    _, preds_3, test_preds_3, help_preds_3_1, help_preds_3_2,  help_preds_3_3 = encoder(image_3.to('cuda'))
-    _, preds_4, test_preds_4, help_preds_4_1, help_preds_4_2,  help_preds_4_3 = encoder(image_4.to('cuda'))
-    _, preds_5, test_preds_5, help_preds_5_1, help_preds_5_2,  help_preds_5_3 = encoder(image_5.to('cuda'))
-    _, preds_6, test_preds_6, help_preds_6_1, help_preds_6_2,  help_preds_6_3 = encoder(image_6.to('cuda'))
+    _, test_preds_1, help_preds_1_1, help_preds_1_2,  help_preds_1_3, help_preds_1_4 = encoder(image_1.to('cuda'))
+    _, test_preds_2, help_preds_2_1, help_preds_2_2,  help_preds_2_3, help_preds_2_4 = encoder(image_2.to('cuda'))
+    _, test_preds_3, help_preds_3_1, help_preds_3_2,  help_preds_3_3, help_preds_3_4 = encoder(image_3.to('cuda'))
+    _, test_preds_4, help_preds_4_1, help_preds_4_2,  help_preds_4_3, help_preds_4_4 = encoder(image_4.to('cuda'))
+    _, test_preds_5, help_preds_5_1, help_preds_5_2,  help_preds_5_3, help_preds_5_4 = encoder(image_5.to('cuda'))
+    _, test_preds_6, help_preds_6_1, help_preds_6_2,  help_preds_6_3, help_preds_6_4 = encoder(image_6.to('cuda'))
 
-    return preds_1, preds_2, preds_3, preds_4, preds_5, preds_6,\
-           test_preds_1, test_preds_2, test_preds_3, test_preds_4, test_preds_5, test_preds_6, \
+    return test_preds_1, test_preds_2, test_preds_3, test_preds_4, test_preds_5, test_preds_6, \
            help_preds_1_1, help_preds_2_1,  help_preds_3_1, help_preds_4_1, help_preds_5_1,  help_preds_6_1, \
            help_preds_1_2, help_preds_2_2, help_preds_3_2, help_preds_4_2, help_preds_5_2, help_preds_6_2, \
            help_preds_1_3, help_preds_2_3, help_preds_3_3, help_preds_4_3, help_preds_5_3, help_preds_6_3, \
+           help_preds_1_4, help_preds_2_4, help_preds_3_4, help_preds_4_4, help_preds_5_4, help_preds_6_4, \
            original_image, ids
 
 
-def forward_block(X, ids, encoder, optimizer, train, total_mean):
+def entropy_minmax_loss(targets, preds_1, preds_2, preds_3, preds_4, preds_5, preds_6):
+    help_batch_pred_1_1 = batch_entropy(preds_1, targets)
+    help_batch_pred_2_1 = batch_entropy(preds_2, targets)
+    help_batch_pred_3_1 = batch_entropy(preds_3, targets)
+    help_batch_pred_4_1 = batch_entropy(preds_4, targets)
+    help_batch_pred_5_1 = batch_entropy(preds_5, targets)
+    help_batch_pred_6_1 = batch_entropy(preds_6, targets)
 
+    help_batch_loss_1 = help_batch_pred_1_1 + help_batch_pred_2_1 + help_batch_pred_3_1 + help_batch_pred_4_1 + help_batch_pred_5_1 + help_batch_pred_6_1
+
+    help_product_1 = preds_1 * preds_2 * preds_3 * preds_4 * preds_5 * preds_6
+    help_mean_1 = help_product_1.mean(dim=0)
+    help_log_1 = torch.log(help_mean_1 + EPS)
+    total_loss = - (targets * help_log_1).mean() - help_batch_loss_1
+
+    return total_loss
+
+
+def forward_block(X, ids, encoder, optimizer, train, total_mean):
     x_train = X[ids, :]
     x_train = rgb2gray(x_train)
 
@@ -137,57 +159,23 @@ def forward_block(X, ids, encoder, optimizer, train, total_mean):
     images = x_tensor.transpose(0, 1)
     images = images.transpose(2, 3)
 
-    preds_1, preds_2, preds_3, preds_4, preds_5, preds_6,\
     test_preds_1, test_preds_2, test_preds_3, test_preds_4, test_preds_5, test_preds_6, \
     help_preds_1_1, help_preds_2_1, help_preds_3_1, help_preds_4_1, help_preds_5_1, help_preds_6_1, \
     help_preds_1_2, help_preds_2_2, help_preds_3_2, help_preds_4_2, help_preds_5_2, help_preds_6_2, \
     help_preds_1_3, help_preds_2_3, help_preds_3_3, help_preds_4_3, help_preds_5_3, help_preds_6_3, \
+    help_preds_1_4, help_preds_2_4, help_preds_3_4, help_preds_4_4, help_preds_5_4, help_preds_6_4, \
     orig_image, aug_ids = encode_4_patches(images, encoder)
 
-    help_batch_pred_1 = batch_entropy(help_preds_1_1, TEST_TARGETS)
-    help_batch_pred_2 = batch_entropy(help_preds_2_1, TEST_TARGETS)
-    help_batch_pred_3 = batch_entropy(help_preds_3_1, TEST_TARGETS)
-    help_batch_pred_4 = batch_entropy(help_preds_4_1, TEST_TARGETS)
-    help_batch_pred_5 = batch_entropy(help_preds_5_1, TEST_TARGETS)
-    help_batch_pred_6 = batch_entropy(help_preds_6_1, TEST_TARGETS)
-
-    test_batch_pred_1 = batch_entropy(test_preds_1, TEST_TARGETS)
-    test_batch_pred_2 = batch_entropy(test_preds_2, TEST_TARGETS)
-    test_batch_pred_3 = batch_entropy(test_preds_3, TEST_TARGETS)
-    test_batch_pred_4 = batch_entropy(test_preds_4, TEST_TARGETS)
-    test_batch_pred_5 = batch_entropy(test_preds_5, TEST_TARGETS)
-    test_batch_pred_6 = batch_entropy(test_preds_6, TEST_TARGETS)
-
-    batch_pred_1 = batch_entropy(preds_1, TARGETS)
-    batch_pred_2 = batch_entropy(preds_2, TARGETS)
-    batch_pred_3 = batch_entropy(preds_3, TARGETS)
-    batch_pred_4 = batch_entropy(preds_4, TARGETS)
-    batch_pred_5 = batch_entropy(preds_5, TARGETS)
-    batch_pred_6 = batch_entropy(preds_6, TARGETS)
-
-    batch_loss = batch_pred_1 + batch_pred_2 + batch_pred_3 + batch_pred_4 + batch_pred_5 + batch_pred_6
-    test_batch_loss = test_batch_pred_1 + test_batch_pred_2 + test_batch_pred_3 + test_batch_pred_4 + test_batch_pred_5 + test_batch_pred_6
-    help_batch_loss_1 = help_batch_pred_1 + help_batch_pred_2 + help_batch_pred_3 + help_batch_pred_4 + help_batch_pred_5 + help_batch_pred_6
-
-    product = preds_1 * preds_2 * preds_3 * preds_4 * preds_5 * preds_6
-    mean = product.mean(dim=0)
-    log = torch.log(mean + EPS)
-    total_loss = - (TARGETS * log).mean() - batch_loss
-
-    test_product = test_preds_1 * test_preds_2 * test_preds_3 * test_preds_4 * test_preds_5 * test_preds_6
-    test_mean = test_product.mean(dim=0)
-    test_log = torch.log(test_mean + EPS)
-    test_total_loss = - (TEST_TARGETS * test_log).mean() - test_batch_loss
-
-    help_product_1 = help_batch_pred_1 * help_batch_pred_2 * help_batch_pred_3 * help_batch_pred_4 * help_batch_pred_5 * help_batch_pred_6
-    help_mean_1 = help_product_1.mean(dim=0)
-    help_log_1 = torch.log(help_mean_1 + EPS)
-    help_total_loss_1 = - (TEST_TARGETS * help_log_1).mean() - help_batch_loss_1
+    test_total_loss = entropy_minmax_loss(TEN_TARGETS, test_preds_1, test_preds_2, test_preds_3, test_preds_4, test_preds_5, test_preds_6)
+    help_total_loss_1 = entropy_minmax_loss(TEN_TARGETS, help_preds_1_1, help_preds_2_1, help_preds_3_1, help_preds_4_1, help_preds_5_1, help_preds_6_1)
+    help_total_loss_2 = entropy_minmax_loss(TEN_TARGETS, help_preds_1_2, help_preds_2_2, help_preds_3_2, help_preds_4_2, help_preds_5_2, help_preds_6_2)
+    help_total_loss_3 = entropy_minmax_loss(TEN_TARGETS, help_preds_1_3, help_preds_2_3, help_preds_3_3, help_preds_4_3, help_preds_5_3, help_preds_6_3)
+    help_total_loss_4 = entropy_minmax_loss(TEN_TARGETS, help_preds_1_4, help_preds_2_4, help_preds_3_4, help_preds_4_4, help_preds_5_4, help_preds_6_4)
 
     m_preds = (test_preds_1 + test_preds_2 + test_preds_3 + test_preds_4 + test_preds_5 + test_preds_6) / 6
     total_mean = 0.99 * total_mean + 0.01 * m_preds.mean(dim=0).detach()
 
-    all_losses = total_loss + test_total_loss + help_total_loss_1
+    all_losses = test_total_loss + help_total_loss_1 + help_total_loss_2 + help_total_loss_3 + help_total_loss_4
 
     if train:
         optimizer.zero_grad()
@@ -232,15 +220,15 @@ def measure_acc_augments(X_test, colons, targets, total_mean):
                 8: "sobel x fliped",
                 9: "sobel y fliped",
                 10: "sobel total fliped",
-                11: "binary(original_image)",
-                12: "binary(horizontal_flip)",
-                13: "binary(scale_rot)",
-                14: "binary(scale_rev_rot)",
-                15: "soft_bin",
-                16: "rev_soft_bin",
-                17: "soft_bin_hf",
-                18: "rev_soft_bin_hf",
-                19: "torch.abs(1-original_image)"
+                # 11: "binary(original_image)",
+                # 12: "binary(horizontal_flip)",
+                # 13: "binary(scale_rot)",
+                # 14: "binary(scale_rev_rot)",
+                11: "soft_bin",
+                12: "rev_soft_bin",
+                13: "soft_bin_hf",
+                14: "rev_soft_bin_hf",
+                15: "torch.abs(1-original_image)"
                 #16: "center_crop",
                 }
 
@@ -342,9 +330,13 @@ def print_params(model):
 
 
 def train():
-    x_train_fileName = "..\\data\\stl10_binary\\train_X.bin"
-    unlabeled_fileName = "..\\data_2\\stl10_binary\\unlabeled_X.bin"
-    X_train = read_all_images(unlabeled_fileName)
+    train_path = "..\\data\\stl10_binary\\train_X.bin"
+
+    if UNSUPERVISED:
+        train_path = "..\\data_2\\stl10_binary\\unlabeled_X.bin"
+
+    print(train_path)
+    X_train = read_all_images(train_path)
 
     train_y_File = "..\\data\\stl10_binary\\train_y.bin"
     y_train = read_labels(train_y_File)
@@ -393,12 +385,14 @@ def train():
         p1, p2, p3, p4, p5, p6, mim, total_mean, orig_image, aug_ids = forward_block(X_train, ids, encoder, optimizer, train, total_mean)
 
         if iteration % EVAL_FREQ_DEFAULT == 0:
+            print("==================================================================================")
             print("iteration: ", iteration,
                   ", batch size: ", BATCH_SIZE_DEFAULT,
                   ", lr: ", LEARNING_RATE_DEFAULT,
+                  ", Unsupervised: ", UNSUPERVISED,
                   ", best loss iter: ", max_loss_iter,
                   "-", max_loss,
-                   ",", DESCRIPTION,
+                  ",", DESCRIPTION,
                   ", most clusters iter: ", most_clusters_iter,
                   "-", most_clusters)
 

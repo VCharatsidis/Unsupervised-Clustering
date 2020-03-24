@@ -30,76 +30,70 @@ class SupervisedNet(nn.Module):
 
         MP = 2
         self.conv = nn.Sequential(
-            # nn.Conv2d(n_channels, 64, kernel_size=3, stride=1, padding=1),
-            # nn.BatchNorm2d(64),
-            # nn.ReLU(),
-            # nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
-            # #
-            # nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
-            # nn.BatchNorm2d(128),
-            # nn.ReLU(),
-            # nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
-            # #
-            # nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
-            # nn.BatchNorm2d(256),
-            # nn.ReLU(),
-            # nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
-            #
-            # nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1),
-            # nn.BatchNorm2d(512),
-            # nn.ReLU(),
-            # nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
-
-            nn.Conv2d(n_channels, 64, kernel_size=(3, 3), stride=1, padding=1),
+            nn.Conv2d(n_channels, 64, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm2d(64),
             nn.ReLU(),
-            nn.MaxPool2d(kernel_size=(MP, MP), stride=2, padding=1),
-
-            nn.Conv2d(64, 128, kernel_size=(3, 3), stride=1, padding=1),
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
+            #
+            nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm2d(128),
             nn.ReLU(),
-            nn.MaxPool2d(kernel_size=(MP, MP), stride=2, padding=1),
-
-            nn.Conv2d(128, 256, kernel_size=(3, 3), stride=1, padding=1),
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
+            #
+            nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm2d(256),
             nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
 
-            nn.Conv2d(256, 256, kernel_size=(3, 3), stride=1, padding=1),
-            nn.BatchNorm2d(256),
-            nn.ReLU(),
-
-            nn.MaxPool2d(kernel_size=(MP, MP), stride=2, padding=1),
-
-            nn.Conv2d(256, 512, kernel_size=(3, 3), stride=1, padding=1),
+            nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm2d(512),
             nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
 
-            nn.Conv2d(512, 512, kernel_size=(3, 3), stride=1, padding=1),
-            nn.BatchNorm2d(512),
-            nn.ReLU(),
-
-            nn.MaxPool2d(kernel_size=(MP, MP), stride=2, padding=1),
-
-            nn.Conv2d(512, 512, kernel_size=(3, 3), stride=1, padding=1),
-            nn.BatchNorm2d(512),
-            nn.ReLU(),
-
-            nn.Conv2d(512, 512, kernel_size=(3, 3), stride=1, padding=1),
-            nn.BatchNorm2d(512),
-            nn.ReLU(),
-
-            nn.MaxPool2d(kernel_size=(MP, MP), stride=2, padding=1),
-            nn.AvgPool2d(kernel_size=(1, 1), stride=1, padding=0),
+            # nn.Conv2d(n_channels, 64, kernel_size=(3, 3), stride=1, padding=1),
+            # nn.BatchNorm2d(64),
+            # nn.ReLU(),
+            # nn.MaxPool2d(kernel_size=(MP, MP), stride=2, padding=1),
+            #
+            # nn.Conv2d(64, 128, kernel_size=(3, 3), stride=1, padding=1),
+            # nn.BatchNorm2d(128),
+            # nn.ReLU(),
+            # nn.MaxPool2d(kernel_size=(MP, MP), stride=2, padding=1),
+            #
+            # nn.Conv2d(128, 256, kernel_size=(3, 3), stride=1, padding=1),
+            # nn.BatchNorm2d(256),
+            # nn.ReLU(),
+            #
+            # nn.Conv2d(256, 256, kernel_size=(3, 3), stride=1, padding=1),
+            # nn.BatchNorm2d(256),
+            # nn.ReLU(),
+            #
+            # nn.MaxPool2d(kernel_size=(MP, MP), stride=2, padding=1),
+            #
+            # nn.Conv2d(256, 512, kernel_size=(3, 3), stride=1, padding=1),
+            # nn.BatchNorm2d(512),
+            # nn.ReLU(),
+            #
+            # nn.Conv2d(512, 512, kernel_size=(3, 3), stride=1, padding=1),
+            # nn.BatchNorm2d(512),
+            # nn.ReLU(),
+            #
+            # nn.MaxPool2d(kernel_size=(MP, MP), stride=2, padding=1),
+            #
+            # nn.Conv2d(512, 512, kernel_size=(3, 3), stride=1, padding=1),
+            # nn.BatchNorm2d(512),
+            # nn.ReLU(),
+            #
+            # nn.Conv2d(512, 512, kernel_size=(3, 3), stride=1, padding=1),
+            # nn.BatchNorm2d(512),
+            # nn.ReLU(),
+            #
+            # nn.MaxPool2d(kernel_size=(MP, MP), stride=2, padding=1),
+            # nn.AvgPool2d(kernel_size=(1, 1), stride=1, padding=0),
         )
 
         self.linear = nn.Sequential(
-            nn.Linear(n_inputs, 1000),
-            nn.Tanh(),
-            #
-            # nn.Linear(600, 300),
-            # nn.Tanh(),
-
-            nn.Linear(1000, 10),
+            nn.Linear(n_inputs, 10),
             nn.Softmax(dim=1)
         )
 

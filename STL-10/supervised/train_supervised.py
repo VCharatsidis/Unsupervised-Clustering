@@ -27,12 +27,12 @@ import torchvision
 
 # Default constants
 EPS=sys.float_info.epsilon
-LEARNING_RATE_DEFAULT = 1e-4
+LEARNING_RATE_DEFAULT = 1e-5
 MAX_STEPS_DEFAULT = 300000
 
 BATCH_SIZE_DEFAULT = 120
 INPUT_NET = 4608
-SIZE = 50
+SIZE = 32
 NETS = 1
 DESCRIPTION = "Augments: 3 augments then 3 sobels x,y,total. Nets: "+str(NETS) +" net. Loss: total_loss = paired_losses - mean_probs_losses. Image size: " + str(SIZE)
 
@@ -59,7 +59,7 @@ def encode(image, colons):
     original_image = scale(image, SIZE, pad, BATCH_SIZE_DEFAULT)
     original_image = original_image[:, :, pad:96 - pad, pad:96 - pad]
 
-    #show_image(original_image)
+    #show_gray(original_image)
 
     original_image = original_image.to('cuda')
     preds = colons[0](original_image)
@@ -111,53 +111,67 @@ def calc_distance(out, y):
     return information_loss
 
 
-def forward_block(X, ids, colons, optimizers, train, dictionary):
+def forward_block(X, ids, colons, optimizers, train, dictionary, targets):
     images = X[ids, :]
-    x_tensor = to_tensor(images, BATCH_SIZE_DEFAULT)
+    x_tensor = to_tensor(images)
 
-    images = x_tensor / 255.0
+    x_train = rgb2gray(x_tensor)
+    x_tensor = to_tensor(x_train)
+    x_tensor = x_tensor.unsqueeze(0)
+    images = x_tensor.transpose(0, 1)
+    images = images.transpose(2, 3)
+
+    images = images / 255.0
 
     preds = encode(images, colons)
+
+    tensor_targets = torch.LongTensor(targets[ids]).unsqueeze(dim=1).to('cuda')
+    y_onehot = torch.FloatTensor(BATCH_SIZE_DEFAULT, NUMBER_CLASSES).to('cuda')
+    y_onehot.zero_()
+    y_onehot.scatter_(1, tensor_targets, 1)
+
+    total_loss = - (y_onehot * torch.log(preds + EPS)).sum(dim=1).mean()
+
     #print("preds shape", preds.shape)
 
-    total_loss = torch.zeros([]).to('cuda')
-
-    total_counter = 0
-    for i in range(0, 10):
-        y = torch.zeros([NUMBER_CLASSES]).to('cuda')
-        y[i] = 1
-        #print("zeros", y)
-        sum_preds = torch.zeros([NUMBER_CLASSES]).to('cuda')
-        product_preds = torch.ones([NUMBER_CLASSES]).to('cuda')
-        cluster_ids = [id for id in ids if id in dictionary[i]]
-        cluster_length = len(cluster_ids)
-        #print("cluster length", cluster_length)
-        if cluster_length ==0:
-            continue
-
-        for id in cluster_ids:
-            index = np.where(ids == id)
-            # print("sum preds", sum_preds.shape)
-            # print("preds size", preds[index].squeeze().shape)
-            # print("index", index)
-            # print(preds[index].squeeze().shape)
-            # print()
-            product_preds *= preds[index].squeeze()
-            sum_preds += preds[index].squeeze()
-            total_counter += 1
-
-        mean_preds = (sum_preds / cluster_length).to('cuda')
-        #print("mean preds", mean_preds)
-
-        log_preds = -(y * torch.log(product_preds + EPS)).sum()
-        # H = - (mean_preds * torch.log(mean_preds + EPS)).sum()
-        # CE = - (y * torch.log(mean_preds + EPS)).sum()
-
-        # print("H shape", H)
-        # print("CE shape", CE)
-        # print("total loss", total_loss)
-
-        total_loss += log_preds
+    # total_loss = torch.zeros([]).to('cuda')
+    #
+    # total_counter = 0
+    # for i in range(0, 10):
+    #     y = torch.zeros([NUMBER_CLASSES]).to('cuda')
+    #     y[i] = 1
+    #     #print("zeros", y)
+    #     sum_preds = torch.zeros([NUMBER_CLASSES]).to('cuda')
+    #     product_preds = torch.ones([NUMBER_CLASSES]).to('cuda')
+    #     cluster_ids = [id for id in ids if id in dictionary[i]]
+    #     cluster_length = len(cluster_ids)
+    #     #print("cluster length", cluster_length)
+    #     if cluster_length ==0:
+    #         continue
+    #
+    #     for id in cluster_ids:
+    #         index = np.where(ids == id)
+    #         # print("sum preds", sum_preds.shape)
+    #         # print("preds size", preds[index].squeeze().shape)
+    #         # print("index", index)
+    #         # print(preds[index].squeeze().shape)
+    #         # print()
+    #         product_preds *= preds[index].squeeze()
+    #         sum_preds += preds[index].squeeze()
+    #         total_counter += 1
+    #
+    #     mean_preds = (sum_preds / cluster_length).to('cuda')
+    #     #print("mean preds", mean_preds)
+    #
+    #     log_preds = -(y * torch.log(product_preds + EPS)).sum()
+    #     # H = - (mean_preds * torch.log(mean_preds + EPS)).sum()
+    #     # CE = - (y * torch.log(mean_preds + EPS)).sum()
+    #
+    #     # print("H shape", H)
+    #     # print("CE shape", CE)
+    #     # print("total loss", total_loss)
+    #
+    #     total_loss += log_preds
 
     # print("total loss", total_loss)
     # print("total counter", total_counter)
@@ -218,7 +232,7 @@ def measure_acc_augments(X_test, colons, targets, test_dict):
         test_ids = range(j * BATCH_SIZE_DEFAULT, (j + 1) * BATCH_SIZE_DEFAULT)
         test_ids = np.array(test_ids)
         optimizers = []
-        preds, mim = forward_block(X_test, test_ids, colons, optimizers, False, test_dict)
+        preds, mim = forward_block(X_test, test_ids, colons, optimizers, False, test_dict, targets)
 
         avg_accuracy += accuracy(preds, targets[test_ids])
         avg_loss += mim.item()
@@ -278,7 +292,7 @@ def train():
     predictor_model = os.path.join(script_directory, filepath)
     colons_paths.append(predictor_model)
 
-    c = SupervisedNet(3, INPUT_NET)
+    c = SupervisedNet(1, INPUT_NET)
     c = c.cuda()
     colons.append(c)
     optimizer = torch.optim.Adam(c.parameters(), lr=LEARNING_RATE_DEFAULT)
@@ -306,7 +320,7 @@ def train():
     for iteration in range(MAX_STEPS_DEFAULT):
         ids = np.random.choice(len(X_train), size=BATCH_SIZE_DEFAULT, replace=False)
         train = True
-        preds, mim = forward_block(X_train, ids, colons, optimizers, train, labels_dict)
+        preds, mim = forward_block(X_train, ids, colons, optimizers, train, labels_dict, y_train)
 
         if iteration % EVAL_FREQ_DEFAULT == 0:
             print()

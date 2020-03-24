@@ -102,6 +102,7 @@ class UnsupervisedNet(nn.Module):
             #
             # nn.Linear(600, 300),
             # nn.Tanh(),
+            nn.Dropout2d(dp),
             nn.Linear(n_inputs, 10),
             nn.Softmax(dim=1)
         )
@@ -139,14 +140,14 @@ class UnsupervisedNet(nn.Module):
             nn.Softmax(dim=1)
         )
 
-        self.train_linear = nn.Sequential(
+        self.help_linear4 = nn.Sequential(
             # nn.Linear(n_inputs, 600),
             # nn.Tanh(),
             #
             # nn.Linear(600, 300),
             # nn.Tanh(),
             nn.Dropout2d(dp),
-            nn.Linear(n_inputs, number_classes),
+            nn.Linear(n_inputs, 10),
             nn.Softmax(dim=1)
         )
 
@@ -163,11 +164,11 @@ class UnsupervisedNet(nn.Module):
         conv = self.conv(x)
         encoding = torch.flatten(conv, 1)
 
-        preds = self.train_linear(encoding)
         test_preds = self.test_linear(encoding)
 
         help_preds1 = self.help_linear1(encoding)
         help_preds2 = self.help_linear2(encoding)
         help_preds3 = self.help_linear3(encoding)
+        help_preds4 = self.help_linear4(encoding)
 
-        return encoding, preds, test_preds, help_preds1, help_preds2, help_preds3
+        return encoding, test_preds, help_preds1, help_preds2, help_preds3, help_preds4

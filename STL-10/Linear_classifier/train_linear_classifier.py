@@ -16,6 +16,7 @@ from SupervisedNet import SupervisedNet
 from stl_utils import rotate, scale, to_grayscale, random_erease, vertical_flip, horizontal_flip, sobel_filter_y, sobel_filter_x, sobel_total,center_crop, color_jitter
 import random
 import sys
+from stl_utils import *
 
 from torchvision.utils import make_grid
 import matplotlib
@@ -23,12 +24,12 @@ from linear_net import LinearNet
 
 # Default constants
 EPS=sys.float_info.epsilon
-LEARNING_RATE_DEFAULT = 1e-4
+LEARNING_RATE_DEFAULT = 1e-5
 MAX_STEPS_DEFAULT = 300000
 
 BATCH_SIZE_DEFAULT = 120
-INPUT_NET = 4608
-SIZE = 50
+INPUT_NET = 8192
+SIZE = 40
 NETS = 1
 DESCRIPTION = "Augments: 3 augments then 3 sobels x,y,total. Nets: "+str(NETS) +" net. Loss: total_loss = paired_losses - mean_probs_losses. Image size: " + str(SIZE)
 
@@ -37,7 +38,7 @@ NUMBER_CLASSES = 10
 np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
 FLAGS = None
 
-encoder = torch.load("")
+encoder = torch.load("encoder.model")
 encoder.eval()
 
 
@@ -46,32 +47,35 @@ def encode(image):
     original_image = scale(image, SIZE, pad, BATCH_SIZE_DEFAULT)
     original_image = original_image[:, :, pad:96 - pad, pad:96 - pad]
 
-    #show_image(original_image)
+    #show_gray(original_image)
 
     original_image = original_image.to('cuda')
-    encoding, _ = encoder(original_image)
+    encoding, preds, test_preds, help_preds1, help_preds2, help_preds3 = encoder(original_image)
 
     return encoding
 
 
 def forward_block(X, ids, classifier, optimizer, train, targets):
     images = X[ids, :]
-    x_tensor = to_tensor(images, BATCH_SIZE_DEFAULT)
+    x_tensor = to_tensor(images)
 
-    images = x_tensor / 255.0
+    x_train = rgb2gray(x_tensor)
+    x_tensor = to_tensor(x_train)
+    x_tensor = x_tensor.unsqueeze(0)
+    images = x_tensor.transpose(0, 1)
+    images = images.transpose(2, 3)
+
+    images = images / 255.0
 
     encodings = encode(images)
     preds = classifier(encodings)
-    print("preds shape", preds.shape)
 
+    tensor_targets = torch.LongTensor(targets[ids]).unsqueeze(dim=1).to('cuda')
     y_onehot = torch.FloatTensor(BATCH_SIZE_DEFAULT, NUMBER_CLASSES).to('cuda')
     y_onehot.zero_()
-    y_onehot.scatter_(1, targets[ids], 1)
+    y_onehot.scatter_(1, tensor_targets, 1)
 
-    print(targets[ids])
-    print(y_onehot)
-
-    cross_entropy_loss = - (y_onehot * torch.log(preds + EPS)).mean()
+    cross_entropy_loss = - (y_onehot * torch.log(preds + EPS)).sum(dim=1).mean()
 
     if train:
         optimizer.zero_grad()
@@ -155,7 +159,7 @@ def train():
     filepath = 'encoders\\encoder_' + str(0) + '.model'
     path_to_model = os.path.join(script_directory, filepath)
 
-    linearClassifier = SupervisedNet(3, INPUT_NET).to('cuda')
+    linearClassifier = LinearNet(INPUT_NET).to('cuda')
     optimizer = torch.optim.Adam(linearClassifier.parameters(), lr=LEARNING_RATE_DEFAULT)
 
     max_loss = 1999
