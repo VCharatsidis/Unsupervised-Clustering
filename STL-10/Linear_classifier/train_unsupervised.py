@@ -14,16 +14,17 @@ import matplotlib
 
 
 EPS=sys.float_info.epsilon
-LEARNING_RATE_DEFAULT = 1e-4
+LEARNING_RATE_DEFAULT = 5e-5
 MAX_STEPS_DEFAULT = 300000
 
 BATCH_SIZE_DEFAULT = 40
-INPUT_NET = 8192
+INPUT_NET = 2900
 SIZE = 40
 NETS = 1
-UNSUPERVISED = False
-DROPOUT = 0.8
-DESCRIPTION = " image size: "+str(SIZE) + " , Dropout2d: "+str(DROPOUT)
+UNSUPERVISED = True
+DROPOUT = [0.6, 0.6, 0.6, 0.6, 0.6]
+CLASSES = [20, 20, 20, 20, 20]
+DESCRIPTION = " Image size: "+str(SIZE) + " , Dropout2d: "+str(DROPOUT)+" , Classes: "+str(CLASSES)
 
 EVAL_FREQ_DEFAULT = 500
 NUMBER_CLASSES = 30
@@ -32,11 +33,6 @@ np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
 FLAGS = None
 
 
-TEN_TARGETS = (torch.ones([10]).to('cuda')) / 10
-TWENTY_TARGETS = (torch.ones([20]).to('cuda')) / 20
-THIRTY_TARGETS = (torch.ones([30]).to('cuda')) / 30
-FORTY_TARGETS = (torch.ones([40]).to('cuda')) / 40
-FIFTY_TARGETS = (torch.ones([50]).to('cuda')) / 50
 
 labels_to_imags = {1: "airplane",
                    2: "bird    ",
@@ -49,6 +45,9 @@ labels_to_imags = {1: "airplane",
                    9: "ship    ",
                    0: "truck   "}
 
+
+def get_targets(number_classes):
+    return (torch.ones([number_classes]).to('cuda')) / number_classes
 
 def encode_4_patches(image, encoder):
     pad = (96 - SIZE) // 2
@@ -166,11 +165,11 @@ def forward_block(X, ids, encoder, optimizer, train, total_mean):
     help_preds_1_4, help_preds_2_4, help_preds_3_4, help_preds_4_4, help_preds_5_4, help_preds_6_4, \
     orig_image, aug_ids = encode_4_patches(images, encoder)
 
-    test_total_loss = entropy_minmax_loss(TEN_TARGETS, test_preds_1, test_preds_2, test_preds_3, test_preds_4, test_preds_5, test_preds_6)
-    help_total_loss_1 = entropy_minmax_loss(TEN_TARGETS, help_preds_1_1, help_preds_2_1, help_preds_3_1, help_preds_4_1, help_preds_5_1, help_preds_6_1)
-    help_total_loss_2 = entropy_minmax_loss(TEN_TARGETS, help_preds_1_2, help_preds_2_2, help_preds_3_2, help_preds_4_2, help_preds_5_2, help_preds_6_2)
-    help_total_loss_3 = entropy_minmax_loss(TEN_TARGETS, help_preds_1_3, help_preds_2_3, help_preds_3_3, help_preds_4_3, help_preds_5_3, help_preds_6_3)
-    help_total_loss_4 = entropy_minmax_loss(TEN_TARGETS, help_preds_1_4, help_preds_2_4, help_preds_3_4, help_preds_4_4, help_preds_5_4, help_preds_6_4)
+    test_total_loss = entropy_minmax_loss(get_targets(CLASSES[0]), test_preds_1, test_preds_2, test_preds_3, test_preds_4, test_preds_5, test_preds_6)
+    help_total_loss_1 = entropy_minmax_loss(get_targets(CLASSES[1]), help_preds_1_1, help_preds_2_1, help_preds_3_1, help_preds_4_1, help_preds_5_1, help_preds_6_1)
+    help_total_loss_2 = entropy_minmax_loss(get_targets(CLASSES[2]), help_preds_1_2, help_preds_2_2, help_preds_3_2, help_preds_4_2, help_preds_5_2, help_preds_6_2)
+    help_total_loss_3 = entropy_minmax_loss(get_targets(CLASSES[3]), help_preds_1_3, help_preds_2_3, help_preds_3_3, help_preds_4_3, help_preds_5_3, help_preds_6_3)
+    help_total_loss_4 = entropy_minmax_loss(get_targets(CLASSES[4]), help_preds_1_4, help_preds_2_4, help_preds_3_4, help_preds_4_4, help_preds_5_4, help_preds_6_4)
 
     m_preds = (test_preds_1 + test_preds_2 + test_preds_3 + test_preds_4 + test_preds_5 + test_preds_6) / 6
     total_mean = 0.99 * total_mean + 0.01 * m_preds.mean(dim=0).detach()
@@ -352,7 +351,7 @@ def train():
     filepath = 'encoder' + '.model'
     net_path = os.path.join(script_directory, filepath)
 
-    encoder = UnsupervisedNet(1, INPUT_NET, NUMBER_CLASSES, DROPOUT).to('cuda')
+    encoder = UnsupervisedNet(1, INPUT_NET, NUMBER_CLASSES, DROPOUT, CLASSES).to('cuda')
     optimizer = torch.optim.Adam(encoder.parameters(), lr=LEARNING_RATE_DEFAULT)
 
     max_loss = 1999
@@ -362,7 +361,7 @@ def train():
 
     print(encoder)
     print("X_train: ", X_train.shape, " y_train: ", y_train.shape, " X_test: ", X_test.shape, " targets: ", targets.shape)
-    total_mean = torch.ones([10]) * 0.1
+    total_mean = torch.ones([CLASSES[0]]) * 0.1
     total_mean = total_mean.to('cuda')
 
     labels_dict = {1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 10: []}
@@ -445,6 +444,7 @@ def to_tensor(X):
 def print_info(p1, p2, p3, p4, p5, p6, targets, test_ids):
     print_dict = {1: "", 2: "", 3: "", 4: "", 5: "", 6: "", 7: "", 8: "", 9: "", 0: ""}
     image_dict = {1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 0: []}
+    image_dict = {x: [] for x in range(CLASSES[0])}
     counter = 0
     for i in range(p1.shape[0]):
         val, index = torch.max(p1[i], 0)

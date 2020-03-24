@@ -31,9 +31,9 @@ BATCH_SIZE_DEFAULT = 120
 INPUT_NET = 8192
 SIZE = 40
 NETS = 1
-DESCRIPTION = "Augments: 3 augments then 3 sobels x,y,total. Nets: "+str(NETS) +" net. Loss: total_loss = paired_losses - mean_probs_losses. Image size: " + str(SIZE)
+DESCRIPTION = "Batch size: " + str(BATCH_SIZE_DEFAULT) + " lr: "+str(LEARNING_RATE_DEFAULT) + " Image size: " + str(SIZE)
 
-EVAL_FREQ_DEFAULT = 200
+EVAL_FREQ_DEFAULT = 500
 NUMBER_CLASSES = 10
 np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
 FLAGS = None
@@ -50,7 +50,7 @@ def encode(image):
     #show_gray(original_image)
 
     original_image = original_image.to('cuda')
-    encoding, preds, test_preds, help_preds1, help_preds2, help_preds3 = encoder(original_image)
+    encoding, _, _, _, _, _ = encoder(original_image)
 
     return encoding
 
@@ -115,9 +115,7 @@ def measure_acc_augments(X_test, classifier, targets):
         avg_accuracy += accuracy(preds, targets[test_ids])
         avg_loss += mim.item()
 
-    print()
     print("AUGMENTS avg loss: ", avg_loss / runs, " avg accuracy: ", avg_accuracy / runs)
-    print()
 
     return avg_loss/runs, avg_accuracy / runs
 
