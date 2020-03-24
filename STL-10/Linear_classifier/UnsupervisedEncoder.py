@@ -13,7 +13,7 @@ class UnsupervisedNet(nn.Module):
     Once initialized an MLP object can perform forward.
     """
 
-    def __init__(self, n_channels, n_inputs, number_classes, dp, classes):
+    def __init__(self, n_channels, n_inputs, dp, classes):
         """
         Initializes MLP object.
         Args:

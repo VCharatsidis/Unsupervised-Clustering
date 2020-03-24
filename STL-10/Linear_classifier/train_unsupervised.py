@@ -27,8 +27,7 @@ CLASSES = [20, 20, 20, 20, 20]
 DESCRIPTION = " Image size: "+str(SIZE) + " , Dropout2d: "+str(DROPOUT)+" , Classes: "+str(CLASSES)
 
 EVAL_FREQ_DEFAULT = 500
-NUMBER_CLASSES = 30
-MIN_CLUSTERS_TO_SAVE = 9
+MIN_CLUSTERS_TO_SAVE = 1
 np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
 FLAGS = None
 
@@ -44,6 +43,17 @@ labels_to_imags = {1: "airplane",
                    8: "monkey  ",
                    9: "ship    ",
                    0: "truck   "}
+
+images_to_labels ={"airplane": 1,
+                   "bird    ": 2,
+                   "car     ": 3,
+                   "cat     ": 4,
+                   "deer    ": 5,
+                   "dog     ": 6,
+                   "horse   ": 7,
+                   "monkey  ": 8,
+                   "ship    ": 9,
+                   "truck   ": 0}
 
 
 def get_targets(number_classes):
@@ -337,8 +347,8 @@ def train():
     print(train_path)
     X_train = read_all_images(train_path)
 
-    train_y_File = "..\\data\\stl10_binary\\train_y.bin"
-    y_train = read_labels(train_y_File)
+    # train_y_File = "..\\data\\stl10_binary\\train_y.bin"
+    # y_train = read_labels(train_y_File)
 
     testFile = "..\\data\\stl10_binary\\test_X.bin"
     X_test = read_all_images(testFile)
@@ -351,7 +361,7 @@ def train():
     filepath = 'encoder' + '.model'
     net_path = os.path.join(script_directory, filepath)
 
-    encoder = UnsupervisedNet(1, INPUT_NET, NUMBER_CLASSES, DROPOUT, CLASSES).to('cuda')
+    encoder = UnsupervisedNet(1, INPUT_NET, DROPOUT, CLASSES).to('cuda')
     optimizer = torch.optim.Adam(encoder.parameters(), lr=LEARNING_RATE_DEFAULT)
 
     max_loss = 1999
@@ -360,13 +370,13 @@ def train():
     most_clusters_iter = 0
 
     print(encoder)
-    print("X_train: ", X_train.shape, " y_train: ", y_train.shape, " X_test: ", X_test.shape, " targets: ", targets.shape)
+    print("X_train: ", X_train.shape, " X_test: ", X_test.shape, " targets: ", targets.shape)
     total_mean = torch.ones([CLASSES[0]]) * 0.1
     total_mean = total_mean.to('cuda')
 
-    labels_dict = {1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 10: []}
-    for idx, i in enumerate(y_train):
-        labels_dict[i].append(idx)
+    # labels_dict = {1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 10: []}
+    # for idx, i in enumerate(y_train):
+    #     labels_dict[i].append(idx)
 
     test_dict = {1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 10: []}
     for idx, i in enumerate(targets):
@@ -374,7 +384,7 @@ def train():
 
     for iteration in range(MAX_STEPS_DEFAULT):
         # ids = []
-        # samples_per_cluster = BATCH_SIZE_DEFAULT // 10
+        samples_per_cluster = BATCH_SIZE_DEFAULT // 10
         #
         # for i in range(1, 11):
         #     ids += random.sample(labels_dict[i], samples_per_cluster)
@@ -395,28 +405,27 @@ def train():
                   ", most clusters iter: ", most_clusters_iter,
                   "-", most_clusters)
 
-            # test_ids = []
-            #
-            # for i in range(1, 11):
-            #     test_ids += random.sample(test_dict[i], samples_per_cluster)
+            test_ids = []
 
-            test_ids = np.random.choice(len(X_test), size=BATCH_SIZE_DEFAULT, replace=False)
+            for i in range(1, 11):
+                test_ids += random.sample(test_dict[i], samples_per_cluster)
+
+            #test_ids = np.random.choice(len(X_test), size=BATCH_SIZE_DEFAULT, replace=False)
 
             p1, p2, p3, p4, p5, p6, mim, total_mean, orig_image, aug_ids = forward_block(X_test, test_ids, encoder, optimizer, False, total_mean)
-
-            image_dict = print_info(p1, p2, p3, p4, p5, p6, targets, test_ids)
+            classes_dict, numbers_classes_dict = print_info(p1, p2, p3, p4, p5, p6, targets, test_ids)
 
             loss, clusters = measure_acc_augments(X_test, encoder, targets, total_mean)
 
             if clusters >= MIN_CLUSTERS_TO_SAVE:
-                for i in image_dict.keys():
-                    numpy_cluster = torch.zeros([len(image_dict[i]), 1, SIZE, SIZE])
+                for key in numbers_classes_dict.keys():
+                    numpy_cluster = torch.zeros([len(numbers_classes_dict[key]), 1, SIZE, SIZE])
                     counter = 0
-                    for index in image_dict[i]:
+                    for index in numbers_classes_dict[key]:
                         numpy_cluster[counter] = orig_image.cpu().detach()[index]
                         counter += 1
                     if counter > 0:
-                        save_cluster(numpy_cluster, i, iteration)
+                        save_cluster(numpy_cluster, key, iteration)
 
                 # for i in image_dict.keys():
                 #     for index in image_dict[i]:
@@ -443,10 +452,11 @@ def to_tensor(X):
 
 def print_info(p1, p2, p3, p4, p5, p6, targets, test_ids):
     print_dict = {1: "", 2: "", 3: "", 4: "", 5: "", 6: "", 7: "", 8: "", 9: "", 0: ""}
-    image_dict = {1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 0: []}
+    #image_dict = {1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 0: []}
     image_dict = {x: [] for x in range(CLASSES[0])}
-    counter = 0
-    for i in range(p1.shape[0]):
+    numbers_classes_dict = {x: [] for x in range(CLASSES[0])}
+
+    for i in range(len(test_ids)):
         val, index = torch.max(p1[i], 0)
         val, index2 = torch.max(p2[i], 0)
         val, index3 = torch.max(p3[i], 0)
@@ -460,12 +470,12 @@ def print_info(p1, p2, p3, p4, p5, p6, targets, test_ids):
         string = str(index.data.cpu().numpy()) + " " + str(index2.data.cpu().numpy()) + " " + str(
             index3.data.cpu().numpy()) + " " + str(index4.data.cpu().numpy()) + " " + str(index5.data.cpu().numpy()) + " " + str(index6.data.cpu().numpy()) + ", "
 
-        image_dict[verdict].append(counter)
-        counter += 1
-
         label = targets[test_ids[i]]
         if label == 10:
             label = 0
+
+        numbers_classes_dict[verdict].append(i)
+        image_dict[verdict].append(labels_to_imags[label])
         print_dict[label] += string
 
     for i in print_dict.keys():
@@ -474,7 +484,7 @@ def print_info(p1, p2, p3, p4, p5, p6, targets, test_ids):
     for i in image_dict.keys():
         print(i, " : ", image_dict[i])
 
-    return image_dict
+    return image_dict, numbers_classes_dict
 
 
 def main():
