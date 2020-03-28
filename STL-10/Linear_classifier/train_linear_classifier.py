@@ -24,17 +24,36 @@ from linear_net import LinearNet
 
 # Default constants
 EPS=sys.float_info.epsilon
-LEARNING_RATE_DEFAULT = 1e-5
+LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 300000
 
-BATCH_SIZE_DEFAULT = 120
-INPUT_NET = 8192
+BATCH_SIZE_DEFAULT = 256
+INPUT_NET = 9216
 SIZE = 40
 NETS = 1
-DESCRIPTION = "Batch size: " + str(BATCH_SIZE_DEFAULT) + " lr: "+str(LEARNING_RATE_DEFAULT) + " Image size: " + str(SIZE)
 
-EVAL_FREQ_DEFAULT = 500
+############ UNSUPERVISED INFO #############################
 NUMBER_CLASSES = 10
+conv_layers_encoder = 3
+linear_layers_encoder = 0
+batch_size = 110
+lr = 1e-4
+augments_compared = 3
+heads = 5
+
+DESCRIPTION = "UNSUPERVISED INFO: " + " Image size: " + str(SIZE)\
+              +" Classes: " + str(NUMBER_CLASSES) \
+              +" embedding dim: "+ str(INPUT_NET) \
+              +" conv layers: "+ str(conv_layers_encoder) \
+              +" linear layers: "+ str(linear_layers_encoder)\
+              +" BATCH SIZE: " + str(batch_size)\
+              +" lr: " + str(lr)\
+              +" augments compared: "+ str(augments_compared)\
+              +" heads: " + str(heads)\
+              +" Augments policy: " + "draw from 26 different augments"
+
+EVAL_FREQ_DEFAULT = 20
+
 np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
 FLAGS = None
 
@@ -96,15 +115,15 @@ def accuracy(predictions, targets):
    preds = np.argmax(predictions, 1)
    result = preds == targets
    sum = np.sum(result)
-   accur = sum / float(targets.shape[0])
+   #accur = sum / float(targets.shape[0])
 
-   return accur
+   return sum
 
 
 def measure_acc_augments(X_test, classifier, targets):
     runs = len(X_test) // BATCH_SIZE_DEFAULT
     avg_loss = 0
-    avg_accuracy = 0
+    sum_correct = 0
 
     for j in range(runs):
         test_ids = range(j * BATCH_SIZE_DEFAULT, (j + 1) * BATCH_SIZE_DEFAULT)
@@ -112,12 +131,14 @@ def measure_acc_augments(X_test, classifier, targets):
         optimizer = []
         preds, mim = forward_block(X_test, test_ids, classifier, optimizer, False, targets)
 
-        avg_accuracy += accuracy(preds, targets[test_ids])
+        sum_correct += accuracy(preds, targets[test_ids])
         avg_loss += mim.item()
 
-    print("AUGMENTS avg loss: ", avg_loss / runs, " avg accuracy: ", avg_accuracy / runs)
+    average_test_loss = avg_loss / runs
+    accuracy_test_set = sum_correct / (runs * BATCH_SIZE_DEFAULT)
+    print("Test set avg loss: ", average_test_loss, " avg accuracy: ", accuracy_test_set)
 
-    return avg_loss/runs, avg_accuracy / runs
+    return average_test_loss, accuracy_test_set
 
 
 def miss_classifications(cluster):
@@ -160,8 +181,9 @@ def train():
     linearClassifier = LinearNet(INPUT_NET).to('cuda')
     optimizer = torch.optim.Adam(linearClassifier.parameters(), lr=LEARNING_RATE_DEFAULT)
 
-    max_loss = 1999
-    max_loss_iter = 0
+    best_accuracy = 0
+    iter_acc = 0
+    patience = 20
 
     for iteration in range(MAX_STEPS_DEFAULT):
         ids = np.random.choice(len(X_train), size=BATCH_SIZE_DEFAULT, replace=False)
@@ -173,17 +195,26 @@ def train():
             print("iteration: ", iteration,
                   ", batch size: ", BATCH_SIZE_DEFAULT,
                   ", lr: ", LEARNING_RATE_DEFAULT,
-                  ", best loss: ", max_loss_iter,
-                  ": ", max_loss)
+                  ", best acc: ", iter_acc,
+                  ": ", best_accuracy)
             print("description: ", DESCRIPTION)
+            print("patience: ", patience)
 
-            loss, clusters = measure_acc_augments(X_test, linearClassifier, targets)
+            loss, acc = measure_acc_augments(X_test, linearClassifier, targets)
 
-            if max_loss > loss:
-                max_loss = loss
-                max_loss_iter = iteration
-
+            if best_accuracy < acc:
+                best_accuracy = acc
+                iter_acc = iteration
+                patience = 0
                 print("models saved iter: " + str(iteration))
+            else:
+                patience += 1
+
+            if patience > 20:
+                print("For ", patience, " iterations we do not have a better accuracy")
+                print("best accuracy: ", best_accuracy, " at iter: ", iter_acc)
+                print("accuracy at stop: ", acc, "loss at stop: ", loss)
+                break;
 
 
 def to_tensor(X):

@@ -17,7 +17,7 @@ def rotate(X, degrees, batch_size=BATCH_SIZE_DEFAULT):
     X_copy = Variable(torch.FloatTensor(X_copy))
 
     for i in range(X_copy.shape[0]):
-        transformation = transforms.RandomRotation(degrees=[degrees, degrees])
+        transformation = transforms.RandomRotation(degrees=[degrees-4, degrees+4])
         trans = transforms.Compose([transformation, transforms.ToTensor()])
         a = F.to_pil_image(X_copy[i])
         trans_image = trans(a)
@@ -180,6 +180,22 @@ def center_crop(X, size, batch_size):
 
     for i in range(X_copy.shape[0]):
         transformation = transforms.CenterCrop(size=size)
+        trans = transforms.Compose([transformation, transforms.ToTensor()])
+        a = F.to_pil_image(X_copy[i])
+        trans_image = trans(a)
+        X_res[i] = trans_image
+
+    return X_res
+
+
+def random_crop(X, size, batch_size):
+    X_copy = copy.deepcopy(X)
+    X_copy = Variable(torch.FloatTensor(X_copy))
+
+    X_res = torch.zeros([batch_size, 1, size, size])
+
+    for i in range(X_copy.shape[0]):
+        transformation = transforms.RandomCrop(size=size)
         trans = transforms.Compose([transformation, transforms.ToTensor()])
         a = F.to_pil_image(X_copy[i])
         trans_image = trans(a)
