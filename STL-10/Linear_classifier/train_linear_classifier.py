@@ -27,37 +27,48 @@ EPS=sys.float_info.epsilon
 LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 300000
 
-BATCH_SIZE_DEFAULT = 256
-INPUT_NET = 9216
-SIZE = 40
+BATCH_SIZE_DEFAULT = 200
+INPUT_NET = 6272
+SIZE = 44
 NETS = 1
 
+
+
 ############ UNSUPERVISED INFO #############################
-NUMBER_CLASSES = 10
+classes_encoder = 12
+
 conv_layers_encoder = 3
+number_filters = 128
 linear_layers_encoder = 0
-batch_size = 110
+
+batch_size = 180
 lr = 1e-4
+
 augments_compared = 3
 heads = 5
 
-DESCRIPTION = "UNSUPERVISED INFO: " + " Image size: " + str(SIZE)\
-              +" Classes: " + str(NUMBER_CLASSES) \
-              +" embedding dim: "+ str(INPUT_NET) \
-              +" conv layers: "+ str(conv_layers_encoder) \
-              +" linear layers: "+ str(linear_layers_encoder)\
-              +" BATCH SIZE: " + str(batch_size)\
-              +" lr: " + str(lr)\
-              +" augments compared: "+ str(augments_compared)\
-              +" heads: " + str(heads)\
-              +" Augments policy: " + "draw from 26 different augments"
+encoder_name = "best_loss"
+#encoder_name = "most_clusters"
+
+DESCRIPTION = ["UNSUPERVISED INFO: ", " Image size: " + str(SIZE)\
+              +",  BATCH SIZE: " + str(batch_size)\
+              +",  lr: " + str(lr)\
+              ,",  Classes: " + str(classes_encoder)\
+              ,",  embedding dim: "+ str(INPUT_NET) \
+              +",  conv layers: "+ str(conv_layers_encoder) \
+              +",  linear layers: "+ str(linear_layers_encoder)\
+              ,",  number filters: " + str(number_filters)\
+              ,",  augments compared: "+ str(augments_compared)\
+              +",  heads: " + str(heads)\
+              +",  Augments policy: " + "draw from 26 different augments," + "  " + encoder_name]
 
 EVAL_FREQ_DEFAULT = 20
 
 np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
 FLAGS = None
 
-encoder = torch.load("encoder.model")
+encoder = torch.load(encoder_name+"_encoder.model")
+#encoder = torch.load("most_clusters_encoder.model")
 encoder.eval()
 
 
@@ -90,7 +101,7 @@ def forward_block(X, ids, classifier, optimizer, train, targets):
     preds = classifier(encodings)
 
     tensor_targets = torch.LongTensor(targets[ids]).unsqueeze(dim=1).to('cuda')
-    y_onehot = torch.FloatTensor(BATCH_SIZE_DEFAULT, NUMBER_CLASSES).to('cuda')
+    y_onehot = torch.FloatTensor(BATCH_SIZE_DEFAULT, 10).to('cuda')
     y_onehot.zero_()
     y_onehot.scatter_(1, tensor_targets, 1)
 
@@ -192,14 +203,17 @@ def train():
 
         if iteration % EVAL_FREQ_DEFAULT == 0:
             print()
-            print("iteration: ", iteration,
+            print("==============================================================")
+            print("ITERATION: ", iteration,
                   ", batch size: ", BATCH_SIZE_DEFAULT,
                   ", lr: ", LEARNING_RATE_DEFAULT,
                   ", best acc: ", iter_acc,
                   ": ", best_accuracy)
-            print("description: ", DESCRIPTION)
             print("patience: ", patience)
-
+            print()
+            for info in DESCRIPTION:
+                print(info)
+            print()
             loss, acc = measure_acc_augments(X_test, linearClassifier, targets)
 
             if best_accuracy < acc:
@@ -214,6 +228,14 @@ def train():
                 print("For ", patience, " iterations we do not have a better accuracy")
                 print("best accuracy: ", best_accuracy, " at iter: ", iter_acc)
                 print("accuracy at stop: ", acc, "loss at stop: ", loss)
+
+                file = open("experiments.txt", "a")
+                for info in DESCRIPTION:
+                    file.write(info)
+
+                accuracy_info = ",  BEST ACCURACY: " + str(best_accuracy) + " at iter: " + str(iter_acc) + "\n"
+                file.write(accuracy_info)
+                file.close()
                 break;
 
 

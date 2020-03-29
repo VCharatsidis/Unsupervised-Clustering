@@ -17,13 +17,13 @@ EPS=sys.float_info.epsilon
 LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 300000
 
-BATCH_SIZE_DEFAULT = 110
-INPUT_NET = 9216
-SIZE = 40
+BATCH_SIZE_DEFAULT = 180
+INPUT_NET = 6272
+SIZE = 44
 NETS = 1
 UNSUPERVISED = True
 DROPOUT = [0.0, 0.0, 0.0, 0.0, 0.0]
-class_n = 30
+class_n = 12
 CLASSES = [class_n, class_n, class_n, class_n, class_n]
 DESCRIPTION = " Image size: "+str(SIZE) + " , Dropout2d: "+str(DROPOUT)+" , Classes: "+str(CLASSES)
 
@@ -188,16 +188,18 @@ def encode_4_patches(image, encoder):
 
 
 def entropy_minmax_loss(targets, preds_1, preds_2, preds_3):
-    help_batch_pred_1_1 = batch_entropy(preds_1, targets)
-    help_batch_pred_2_1 = batch_entropy(preds_2, targets)
-    help_batch_pred_3_1 = batch_entropy(preds_3, targets)
+    batch_cross_entropy_1 = batch_entropy(preds_1, targets)
+    batch_cross_entropy_2 = batch_entropy(preds_2, targets)
+    batch_cross_entropy_3 = batch_entropy(preds_3, targets)
 
-    help_batch_loss_1 = help_batch_pred_1_1 + help_batch_pred_2_1 + help_batch_pred_3_1
+    total_batch_cross_entropy = batch_cross_entropy_1 + batch_cross_entropy_2 + batch_cross_entropy_3
 
-    help_product_1 = preds_1 * preds_2 * preds_3
-    help_mean_1 = help_product_1.mean(dim=0)
-    help_log_1 = torch.log(help_mean_1 + EPS)
-    total_loss = - (targets * help_log_1).mean() - help_batch_loss_1
+    product = preds_1 * preds_2 * preds_3
+    batch_mean_product = product.mean(dim=0)
+    log_batch_mean_product = torch.log(batch_mean_product + EPS)
+    class_mean = - log_batch_mean_product.mean()
+
+    total_loss = class_mean - total_batch_cross_entropy
 
     return total_loss
 
@@ -414,8 +416,11 @@ def train():
 
     script_directory = os.path.split(os.path.abspath(__file__))[0]
 
-    filepath = 'encoder' + '.model'
-    net_path = os.path.join(script_directory, filepath)
+    filepath = 'most_clusters_encoder' + '.model'
+    clusters_net_path = os.path.join(script_directory, filepath)
+
+    filepath = 'best_loss_encoder' + '.model'
+    loss_net_path = os.path.join(script_directory, filepath)
 
     encoder = UnsupervisedNet(1, INPUT_NET, DROPOUT, CLASSES).to('cuda')
     optimizer = torch.optim.Adam(encoder.parameters(), lr=LEARNING_RATE_DEFAULT)
@@ -451,13 +456,14 @@ def train():
 
         if iteration % EVAL_FREQ_DEFAULT == 0:
             print("==================================================================================")
-            print("iteration: ", iteration,
-                  ", batch size: ", BATCH_SIZE_DEFAULT,
-                  ", lr: ", LEARNING_RATE_DEFAULT,
-                  ", Unsupervised: ", UNSUPERVISED,
-                  ", most clusters-best loss iter: ", max_loss_iter,
-                  "-", most_clusters,
+            print("ITERATION: ", iteration,
+                  ",  batch size: ", BATCH_SIZE_DEFAULT,
+                  ",  lr: ", LEARNING_RATE_DEFAULT,
+                  ",  Unsupervised: ", UNSUPERVISED,
+                  ",  best loss iter: ", max_loss_iter,
                   "-", max_loss,
+                  ",  most clusters iter: ", most_clusters_iter,
+                  "-", most_clusters,
                   ",", DESCRIPTION)
 
             test_ids = []
@@ -489,13 +495,15 @@ def train():
             if clusters >= most_clusters:
                 most_clusters = clusters
                 most_clusters_iter = iteration
+                print("models saved iter: " + str(iteration))
+                torch.save(encoder, clusters_net_path)
 
             if max_loss > loss:
                 max_loss = loss
                 max_loss_iter = iteration
 
                 print("models saved iter: " + str(iteration))
-                torch.save(encoder, net_path)
+                torch.save(encoder, loss_net_path)
 
 
 def to_tensor(X):
