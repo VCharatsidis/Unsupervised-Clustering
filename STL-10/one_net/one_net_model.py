@@ -30,22 +30,22 @@ class OneNet(nn.Module):
 
         self.conv = nn.Sequential(
             nn.Conv2d(n_channels, 64, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(64),
+            #nn.BatchNorm2d(64),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
             #
             nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(128),
+            #nn.BatchNorm2d(128),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
             #
             nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(256),
+            #nn.BatchNorm2d(256),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
 
             nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(512),
+            #nn.BatchNorm2d(512),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
 
@@ -96,8 +96,18 @@ class OneNet(nn.Module):
             # nn.AvgPool2d(kernel_size=(1, 1), stride=1, padding=0),
         )
 
-        self.dropout =nn.Sequential(
-            nn.Dropout2d(0.95)
+        self.dropout = nn.Sequential(
+            nn.Dropout2d(0.1)
+        )
+
+        self.linear_embedding = nn.Sequential(
+            # nn.Linear(n_inputs, 600),
+            # nn.Tanh(),
+            #
+            # nn.Linear(600, 300),
+            # nn.Tanh(),
+
+            nn.Linear(n_inputs, 256),
         )
 
         self.linear = nn.Sequential(
@@ -107,7 +117,7 @@ class OneNet(nn.Module):
             # nn.Linear(600, 300),
             # nn.Tanh(),
 
-            nn.Linear(n_inputs, number_classes),
+            nn.Linear(256, number_classes),
             nn.Softmax(dim=1)
         )
 
@@ -122,16 +132,19 @@ class OneNet(nn.Module):
         """
 
         conv = self.conv(x)
-        droped = self.dropout(conv)
+        embeddings = torch.flatten(conv, 1)
 
-        fatten = torch.flatten(droped, 1)
+        #droped = self.dropout(conv)
 
-        batch_size = p1.shape[0]
+        droped_embeddings = torch.flatten(embeddings, 1)
 
-        m_pred = mean.expand(batch_size, 10)
+        #batch_size = p1.shape[0]
 
-        linear_input = torch.cat([fatten, p1, p2, p3, p4, p5, m_pred], 1)
+        #m_pred = mean.expand(batch_size, 10)
 
-        preds = self.linear(linear_input)
+        linear_input = torch.cat([droped_embeddings, p1, p2, p3, p4, p5], 1)
+        lin_embedding = self.linear_embedding(linear_input)
 
-        return preds
+        preds = self.linear(lin_embedding)
+
+        return lin_embedding, preds

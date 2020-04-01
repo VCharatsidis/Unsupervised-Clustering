@@ -3,45 +3,43 @@ from __future__ import division
 from __future__ import print_function
 
 import argparse
-import numpy as np
 import os
-import torch
 
-from torch.autograd import Variable
-import matplotlib.pyplot as plt
 from stl10_input import read_all_images, read_labels
-import torchvision.transforms.functional as F
-from PIL import Image
-from SupervisedNet import SupervisedNet
-from stl_utils import rotate, scale, to_grayscale, random_erease, vertical_flip, horizontal_flip, sobel_filter_y, sobel_filter_x, sobel_total,center_crop, color_jitter
-import random
+
 import sys
 from stl_utils import *
 
 from torchvision.utils import make_grid
 import matplotlib
 from linear_net import LinearNet
+from RandomNet import RandomNet
+from SupervisedClassifier import SupervisedClassifier
 
 # Default constants
-EPS=sys.float_info.epsilon
+
 LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 300000
 
 BATCH_SIZE_DEFAULT = 200
-INPUT_NET = 6272
+INPUT_NET = 12544
 SIZE = 44
 NETS = 1
+EVAL_FREQ_DEFAULT = 20
+PATIENCE = 50
 
+np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
+FLAGS = None
 
 
 ############ UNSUPERVISED INFO #############################
-classes_encoder = 12
+classes_encoder = 10
 
 conv_layers_encoder = 3
-number_filters = 128
+number_filters = 256
 linear_layers_encoder = 0
 
-batch_size = 180
+batch_size = 100
 lr = 1e-4
 
 augments_compared = 3
@@ -49,27 +47,33 @@ heads = 5
 
 encoder_name = "best_loss"
 #encoder_name = "most_clusters"
+encoder = torch.load(encoder_name+"_encoder.model")
+
+# encoder_name = "one_net_best_loss.model"
+# encoder = torch.load(encoder_name)
+
+encoder.eval()
+
+# random_net = "random_encoder.model"
+# encoder = RandomNet().to('cuda')
+# torch.save(encoder, random_net)
+# encoder = torch.load(random_net)
+# encoder.eval()
+
+
+DESCRIPTION = ["RANDOM NET"]
 
 DESCRIPTION = ["UNSUPERVISED INFO: ", " Image size: " + str(SIZE)\
               +",  BATCH SIZE: " + str(batch_size)\
-              +",  lr: " + str(lr)\
+              +",  lr: " + str(lr) + ",  train iters: 22500"
               ,",  Classes: " + str(classes_encoder)\
-              ,",  embedding dim: "+ str(INPUT_NET) \
-              +",  conv layers: "+ str(conv_layers_encoder) \
-              +",  linear layers: "+ str(linear_layers_encoder)\
+              ,",  embedding dim: " + str(INPUT_NET) \
+              +",  conv layers: " + str(conv_layers_encoder) \
+              +",  linear layers: " + str(linear_layers_encoder)\
               ,",  number filters: " + str(number_filters)\
-              ,",  augments compared: "+ str(augments_compared)\
+              ,",  augments compared: " + str(augments_compared)\
               +",  heads: " + str(heads)\
-              +",  Augments policy: " + "draw from 26 different augments," + "  " + encoder_name]
-
-EVAL_FREQ_DEFAULT = 20
-
-np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
-FLAGS = None
-
-encoder = torch.load(encoder_name+"_encoder.model")
-#encoder = torch.load("most_clusters_encoder.model")
-encoder.eval()
+              +",  Augments policy: REMOVED EPS, REMOVED BATCH NORM, ADDED MAX OF ENTROPY TERM IN LOSS" + "draw from 26 different augments," + "  " + encoder_name]
 
 
 def encode(image):
@@ -79,8 +83,12 @@ def encode(image):
 
     #show_gray(original_image)
 
+    targets = torch.zeros([BATCH_SIZE_DEFAULT, classes_encoder]).to('cuda')
+
     original_image = original_image.to('cuda')
+
     encoding, _, _, _, _, _ = encoder(original_image)
+    #encoding, _ = encoder(original_image, targets, targets, targets, targets, targets, targets)
 
     return encoding
 
@@ -97,17 +105,31 @@ def forward_block(X, ids, classifier, optimizer, train, targets):
 
     images = images / 255.0
 
-    encodings = encode(images)
-    preds = classifier(encodings)
+    with torch.no_grad():
+        encodings = encode(images)
+
+    preds = classifier(encodings.detach())
+
+    # pad = (96 - SIZE) // 2
+    # original_image = scale(images, SIZE, pad, BATCH_SIZE_DEFAULT)
+    # original_image = original_image[:, :, pad:96 - pad, pad:96 - pad]
+    # original_image = original_image.to('cuda')
+    # preds = classifier(original_image)
 
     tensor_targets = torch.LongTensor(targets[ids]).unsqueeze(dim=1).to('cuda')
     y_onehot = torch.FloatTensor(BATCH_SIZE_DEFAULT, 10).to('cuda')
     y_onehot.zero_()
     y_onehot.scatter_(1, tensor_targets, 1)
 
-    cross_entropy_loss = - (y_onehot * torch.log(preds + EPS)).sum(dim=1).mean()
+    cross_entropy_loss = - (y_onehot * torch.log(preds)).sum(dim=1).mean()
 
     if train:
+        # for p in encoder.parameters():
+        #     print(p.name, p.data)
+
+        for p in encoder.parameters():
+            p.requires_grad = False
+
         optimizer.zero_grad()
         cross_entropy_loss.backward(retain_graph=True)
         optimizer.step()
@@ -192,16 +214,21 @@ def train():
     linearClassifier = LinearNet(INPUT_NET).to('cuda')
     optimizer = torch.optim.Adam(linearClassifier.parameters(), lr=LEARNING_RATE_DEFAULT)
 
+    # linearClassifier = SupervisedClassifier(INPUT_NET).to('cuda')
+    # optimizer = torch.optim.Adam(linearClassifier.parameters(), lr=LEARNING_RATE_DEFAULT)
+
     best_accuracy = 0
     iter_acc = 0
-    patience = 20
+    patience = 50
 
     for iteration in range(MAX_STEPS_DEFAULT):
+        linearClassifier.train()
         ids = np.random.choice(len(X_train), size=BATCH_SIZE_DEFAULT, replace=False)
         train = True
         preds, mim = forward_block(X_train, ids, linearClassifier, optimizer, train, y_train)
 
         if iteration % EVAL_FREQ_DEFAULT == 0:
+            linearClassifier.eval()
             print()
             print("==============================================================")
             print("ITERATION: ", iteration,
@@ -224,7 +251,7 @@ def train():
             else:
                 patience += 1
 
-            if patience > 20:
+            if patience > PATIENCE:
                 print("For ", patience, " iterations we do not have a better accuracy")
                 print("best accuracy: ", best_accuracy, " at iter: ", iter_acc)
                 print("accuracy at stop: ", acc, "loss at stop: ", loss)

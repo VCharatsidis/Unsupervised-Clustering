@@ -30,17 +30,17 @@ import torchvision
 
 
 # Default constants
-EPS=sys.float_info.epsilon
+#EPS=sys.float_info.epsilon
 LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 300000
 
-BATCH_SIZE_DEFAULT = 40
-INPUT_NET = 4668
+BATCH_SIZE_DEFAULT = 60
+INPUT_NET = 4658
 SIZE = 32
 NETS = 1
 DESCRIPTION = "Augments: 3 augments then 3 sobels x,y,total. Nets: "+str(NETS) +" net. Loss: total_loss = paired_losses - mean_probs_losses. Image size: " + str(SIZE)
 
-EVAL_FREQ_DEFAULT = 200
+EVAL_FREQ_DEFAULT = 500
 NUMBER_CLASSES = 10
 MIN_CLUSTERS_TO_SAVE = 9
 np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
@@ -182,7 +182,7 @@ def encode_4_patches(image, colons, replace, mean,
 
 def make_pred(image, colons, net, p1, p2, p3, p4, p5, mean):
     image = image.to('cuda')
-    pred = colons[net](image, p1, p2, p3, p4, p5, mean)
+    _, pred = colons[net](image, p1, p2, p3, p4, p5, mean)
     del image
     torch.cuda.empty_cache()
 
@@ -227,7 +227,7 @@ def my_loss(preds_1, preds_2):
 
 def calc_distance(out, y):
     abs_difference = torch.abs(out - y)
-    information_loss = torch.log(1 - abs_difference + EPS)
+    information_loss = torch.log(1 - abs_difference)
 
     return information_loss
 
@@ -290,7 +290,7 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size, total_mean,
 
     product = preds_1 * preds_2 * preds_3 * preds_4 * preds_5 * preds_6
     mean = product.mean(dim=0)
-    log = torch.log(mean + EPS)
+    log = torch.log(mean)
     total_loss = - (targets * log).mean() - batch_loss
 
     # product = product.mean(dim=0) #* total_mean.detach()
@@ -392,7 +392,7 @@ def entropies_loss(pred, coeff):
 
 
 def pred_entropy(pred):
-    H = - (pred * torch.log(pred + EPS)).sum(dim=1).mean(dim=0)
+    H = - (pred * torch.log(pred)).sum(dim=1).mean(dim=0)
 
     return H
 
@@ -401,7 +401,7 @@ def batch_entropy(pred):
     batch_mean_preds = pred.mean(dim=0)
     targets = torch.ones([NUMBER_CLASSES]).to('cuda')
     targets /= NUMBER_CLASSES
-    H_batch = (targets * torch.log(batch_mean_preds + EPS)).sum()
+    H_batch = (targets * torch.log(batch_mean_preds)).sum()
 
     return H_batch
 
@@ -557,10 +557,10 @@ def train():
     #
     fileName = "..\\data\\stl10_binary\\train_X.bin"
     unlabeled_fileName = "..\\data_2\\stl10_binary\\unlabeled_X.bin"
-    X_train = read_all_images(fileName)
+    X_train = read_all_images(unlabeled_fileName)
 
-    train_y_File = "..\\data\\stl10_binary\\train_y.bin"
-    y_train = read_labels(train_y_File)
+    # train_y_File = "..\\data\\stl10_binary\\train_y.bin"
+    # y_train = read_labels(train_y_File)
 
     testFile = "..\\data\\stl10_binary\\test_X.bin"
     X_test = read_all_images(testFile)
@@ -627,9 +627,9 @@ def train():
     print(total_mean)
     print(total_mean.shape)
 
-    labels_dict = {1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 10: []}
-    for idx, i in enumerate(y_train):
-        labels_dict[i].append(idx)
+    # labels_dict = {1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 10: []}
+    # for idx, i in enumerate(y_train):
+    #     labels_dict[i].append(idx)
 
     test_dict = {1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 10: []}
     for idx, i in enumerate(targets):
@@ -641,10 +641,10 @@ def train():
         ids = []
         samples_per_cluster = BATCH_SIZE_DEFAULT // 10
 
-        for i in range(1, 11):
-            ids += random.sample(labels_dict[i], samples_per_cluster)
+        # for i in range(1, 11):
+        #     ids += random.sample(labels_dict[i], samples_per_cluster)
 
-        #ids = np.random.choice(len(X_train), size=BATCH_SIZE_DEFAULT, replace=False)
+        ids = np.random.choice(len(X_train), size=BATCH_SIZE_DEFAULT, replace=False)
 
         train = True
         p1, p2, p3, p4, p5, p6, mim, total_mean, image_6, orig_image, aug_ids = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, total_mean)
@@ -691,12 +691,14 @@ def train():
             if clusters >= most_clusters:
                 most_clusters = clusters
                 most_clusters_iter = iteration
+                torch.save(colons[0], os.path.join(script_directory, "..\\Linear_classifier\\one_net_most_clusters.model"))
+                print("models saved iter: " + str(iteration))
 
-                if max_loss > loss:
-                    max_loss = loss
-                    max_loss_iter = iteration
-
-                    print("models saved iter: " + str(iteration))
+            if max_loss > loss:
+                max_loss = loss
+                max_loss_iter = iteration
+                torch.save(colons[0], os.path.join(script_directory, "..\\Linear_classifier\\one_net_best_loss.model"))
+                print("models saved iter: " + str(iteration))
 
             print("most clusters: " + str(most_clusters) + " at iter: " + str(most_clusters_iter))
 
