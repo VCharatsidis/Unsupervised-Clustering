@@ -14,9 +14,7 @@ import torchvision.transforms.functional as F
 from PIL import Image
 from one_net_model import OneNet
 
-from stl_utils import rotate, scale, to_grayscale, \
-    random_erease, vertical_flip, horizontal_flip, \
-    sobel_filter_y, sobel_filter_x, sobel_total,center_crop, color_jitter, binary
+from stl_utils import*
 
 import random
 import sys
@@ -34,15 +32,16 @@ import torchvision
 LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 300000
 
-BATCH_SIZE_DEFAULT = 60
-INPUT_NET = 4658
+BATCH_SIZE_DEFAULT = 50
+INPUT_NET = 5248
 SIZE = 32
 NETS = 1
 DESCRIPTION = "Augments: 3 augments then 3 sobels x,y,total. Nets: "+str(NETS) +" net. Loss: total_loss = paired_losses - mean_probs_losses. Image size: " + str(SIZE)
 
 EVAL_FREQ_DEFAULT = 500
-NUMBER_CLASSES = 10
+NUMBER_CLASSES = 20
 MIN_CLUSTERS_TO_SAVE = 9
+EMBEDED_LAYER = 128
 np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
 FLAGS = None
 
@@ -60,15 +59,20 @@ def kl_divergence(p, q):
 
 
 def encode_4_patches(image, colons, replace, mean,
-                     p1=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
-                     p2=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
-                     p3=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
-                     p4=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
-                     p5=torch.zeros([BATCH_SIZE_DEFAULT, 10]),
-                     p6=torch.zeros([BATCH_SIZE_DEFAULT, 10])
+                     p1=torch.zeros([BATCH_SIZE_DEFAULT, EMBEDED_LAYER]),
+                     p2=torch.zeros([BATCH_SIZE_DEFAULT, EMBEDED_LAYER]),
+                     p3=torch.zeros([BATCH_SIZE_DEFAULT, EMBEDED_LAYER]),
+                     p4=torch.zeros([BATCH_SIZE_DEFAULT, EMBEDED_LAYER]),
+                     p5=torch.zeros([BATCH_SIZE_DEFAULT, EMBEDED_LAYER]),
+                     p6=torch.zeros([BATCH_SIZE_DEFAULT, EMBEDED_LAYER])
                      ):
     pad = (96 - SIZE) // 2
     image /= 255
+
+    crop_pad = 22
+    crop_preparation = scale(image, 52, crop_pad, BATCH_SIZE_DEFAULT)
+    crop_preparation = crop_preparation[:, :, crop_pad:96 - crop_pad, crop_pad:96 - crop_pad]
+    crop_prep_horizontal = horizontal_flip(crop_preparation)
 
     soft_bin = binary(image)
     soft_bin = scale(soft_bin, SIZE, pad, BATCH_SIZE_DEFAULT)
@@ -96,26 +100,26 @@ def encode_4_patches(image, colons, replace, mean,
     original_image = original_image[:, :, pad:96-pad, pad:96-pad]
 
     augments = {0: horizontal_flip(original_image, BATCH_SIZE_DEFAULT),
-                1: original_image,
-                2: scale(original_image, SIZE-8, 4, BATCH_SIZE_DEFAULT),
-                3: scale_rot,
-                4: scale_rev_rot,
-                5: random_erease(original_image, BATCH_SIZE_DEFAULT),
-                6: sobel_filter_x(original_image, BATCH_SIZE_DEFAULT),
-                7: sobel_filter_y(original_image, BATCH_SIZE_DEFAULT),
-                8: sobel_total(original_image, BATCH_SIZE_DEFAULT),
-                9: sobel_filter_x(horizontal_flip(original_image, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT),
-                10: sobel_filter_y(horizontal_flip(original_image, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT),
-                11: sobel_total(horizontal_flip(original_image, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT),
-                12: binary(original_image),
-                13: binary(horizontal_flip(original_image, BATCH_SIZE_DEFAULT)),
-                14: binary(scale_rot),
-                15: binary(scale_rev_rot),
-                16: soft_bin,
-                17: rev_soft_bin,
-                18: soft_bin_hf,
-                19: rev_soft_bin_hf,
-                20: torch.abs(1-original_image)
+
+                1: scale(original_image, SIZE-8, 4, BATCH_SIZE_DEFAULT),
+                2: scale_rot,
+                3: scale_rev_rot,
+                4: random_erease(original_image, BATCH_SIZE_DEFAULT),
+                5: sobel_filter_x(original_image, BATCH_SIZE_DEFAULT),
+                6: sobel_filter_y(original_image, BATCH_SIZE_DEFAULT),
+                7: sobel_total(original_image, BATCH_SIZE_DEFAULT),
+                8: sobel_filter_x(horizontal_flip(original_image, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT),
+                9: sobel_filter_y(horizontal_flip(original_image, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT),
+                10: sobel_total(horizontal_flip(original_image, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT),
+                # 12: binary(original_image),
+                # 13: binary(horizontal_flip(original_image, BATCH_SIZE_DEFAULT)),
+                # 14: binary(scale_rot),
+                # 15: binary(scale_rev_rot),
+                11: soft_bin,
+                12: rev_soft_bin,
+                13: soft_bin_hf,
+                14: rev_soft_bin_hf,
+                15: torch.abs(1-original_image)
                 #16: center_crop(image, SIZE, BATCH_SIZE_DEFAULT),
                 }
 
@@ -140,11 +144,11 @@ def encode_4_patches(image, colons, replace, mean,
     # image_6 = sobels[sobel_id[5]]
 
     image_1 = augments[ids[0]]
-    image_2 = augments[ids[1]]
-    image_3 = augments[ids[2]]
-    image_4 = augments[ids[3]]
-    image_5 = augments[ids[4]]
-    image_6 = augments[ids[5]]
+    image_2 = random_crop(crop_preparation, SIZE, BATCH_SIZE_DEFAULT)
+    image_3 = random_crop(crop_prep_horizontal, SIZE, BATCH_SIZE_DEFAULT)
+    image_4 = random_crop(crop_preparation, SIZE, BATCH_SIZE_DEFAULT)
+    image_5 = random_crop(crop_preparation, SIZE, BATCH_SIZE_DEFAULT)
+    image_6 = random_crop(crop_prep_horizontal, SIZE, BATCH_SIZE_DEFAULT)
 
     # show_gray(image_1)
     # show_gray(image_2)
@@ -166,27 +170,27 @@ def encode_4_patches(image, colons, replace, mean,
     if NETS == 3:
         nets = [0, 1, 2]
 
-    preds_1 = make_pred(image_1, colons, nets[0], p2, p3, p4, p5, p6, mean.detach())
-    preds_2 = make_pred(image_2, colons, nets[1], p1, p3, p4, p5, p6, mean.detach())
-    preds_3 = make_pred(image_3, colons, nets[2], p1, p2, p4, p5, p6, mean.detach())
-    preds_4 = make_pred(image_4, colons, nets[0], p1, p2, p3, p5, p6, mean.detach())
-    preds_5 = make_pred(image_5, colons, nets[1], p1, p2, p3, p4, p6, mean.detach())
-    preds_6 = make_pred(image_6, colons, nets[2], p1, p2, p3, p4, p5, mean.detach())
+    embedings_1, preds_1 = make_pred(image_1, colons, nets[0], p2, p3, p4, p5, p6, mean.detach())
+    embedings_2, preds_2 = make_pred(image_2, colons, nets[1], p1, p3, p4, p5, p6, mean.detach())
+    embedings_3, preds_3 = make_pred(image_3, colons, nets[2], p1, p2, p4, p5, p6, mean.detach())
+    embedings_4, preds_4 = make_pred(image_4, colons, nets[0], p1, p2, p3, p5, p6, mean.detach())
+    embedings_5, preds_5 = make_pred(image_5, colons, nets[1], p1, p2, p3, p4, p6, mean.detach())
+    embedings_6, preds_6 = make_pred(image_6, colons, nets[2], p1, p2, p3, p4, p5, mean.detach())
 
     # original_image_cuda = original_image.to("cuda")
     # image_6 = colons[-1](original_image_cuda, preds_1).reshape(BATCH_SIZE_DEFAULT, SIZE, SIZE).unsqueeze(1)
     # preds_6 = colons[nets[2]](image_6, p1, p2, p3, p4, p5)
 
-    return preds_1, preds_2, preds_3, preds_4, preds_5, preds_6, original_image, original_image, ids
+    return preds_1, preds_2, preds_3, preds_4, preds_5, preds_6, original_image, original_image, ids, embedings_1, embedings_2, embedings_3, embedings_4, embedings_5, embedings_6
 
 
 def make_pred(image, colons, net, p1, p2, p3, p4, p5, mean):
     image = image.to('cuda')
-    _, pred = colons[net](image, p1, p2, p3, p4, p5, mean)
+    embedings, pred = colons[net](image, p1, p2, p3, p4, p5, mean)
     del image
     torch.cuda.empty_cache()
 
-    return pred
+    return embedings, pred
 
 
 def rgb2gray(rgb):
@@ -233,12 +237,12 @@ def calc_distance(out, y):
 
 
 def forward_block(X, ids, colons, optimizers, train, to_tensor_size, total_mean,
-                  p1=torch.zeros([BATCH_SIZE_DEFAULT, NUMBER_CLASSES]),
-                  p2=torch.zeros([BATCH_SIZE_DEFAULT, NUMBER_CLASSES]),
-                  p3=torch.zeros([BATCH_SIZE_DEFAULT, NUMBER_CLASSES]),
-                  p4=torch.zeros([BATCH_SIZE_DEFAULT, NUMBER_CLASSES]),
-                  p5=torch.zeros([BATCH_SIZE_DEFAULT, NUMBER_CLASSES]),
-                  p6=torch.zeros([BATCH_SIZE_DEFAULT, NUMBER_CLASSES])
+                  p1=torch.zeros([BATCH_SIZE_DEFAULT, EMBEDED_LAYER]),
+                  p2=torch.zeros([BATCH_SIZE_DEFAULT, EMBEDED_LAYER]),
+                  p3=torch.zeros([BATCH_SIZE_DEFAULT, EMBEDED_LAYER]),
+                  p4=torch.zeros([BATCH_SIZE_DEFAULT, EMBEDED_LAYER]),
+                  p5=torch.zeros([BATCH_SIZE_DEFAULT, EMBEDED_LAYER]),
+                  p6=torch.zeros([BATCH_SIZE_DEFAULT, EMBEDED_LAYER])
                   ):
 
     x_train = X[ids, :]
@@ -253,7 +257,7 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size, total_mean,
     if random.uniform(0, 1) > 0.5:
         replace = False
 
-    preds_1, preds_2, preds_3, preds_4, preds_5, preds_6, image_6, orig_image, aug_ids = encode_4_patches(images, colons, replace, total_mean, p1, p2, p3, p4, p5, p6)
+    preds_1, preds_2, preds_3, preds_4, preds_5, preds_6, image_6, orig_image, aug_ids, embedings_1, embedings_2, embedings_3, embedings_4, embedings_5, embedings_6 = encode_4_patches(images, colons, replace, total_mean, p1, p2, p3, p4, p5, p6)
 
     # flatten_image = torch.flatten(image_6, 1)
     # H_image = - (flatten_image * torch.log(flatten_image)).sum(dim=1).mean(dim=0)
@@ -384,7 +388,7 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size, total_mean,
         total_loss.backward(retain_graph=True)
         optimizers[0].step()
 
-    return preds_1, preds_2, preds_3, preds_4, preds_5, preds_6, total_loss, total_mean, image_6, orig_image, aug_ids
+    return preds_1, preds_2, preds_3, preds_4, preds_5, preds_6, total_loss, total_mean, image_6, orig_image, aug_ids, embedings_1, embedings_2, embedings_3, embedings_4, embedings_5, embedings_6
 
 
 def entropies_loss(pred, coeff):
@@ -432,27 +436,27 @@ def measure_acc_augments(X_test, colons, targets, total_mean):
     avg_loss = 0
 
     augments = {0: "horizontal flip",
-                1: "original",
-                2: "scale",
-                3: "rotate",
-                4: "counter rotate",
-                5: "random_erease",
-                6: "sobel x",
-                7: "sobel y",
-                8: "sobel total",
-                9: "sobel x fliped",
-                10: "sobel y fliped",
-                11: "sobel total fliped",
-                12: "binary(original_image)",
-                13: "binary(horizontal_flip)",
-                14: "binary(scale_rot)",
-                15: "binary(scale_rev_rot)",
-                16: "soft_bin",
-                17: "rev_soft_bin",
-                18: "soft_bin_hf",
-                19: "rev_soft_bin_hf",
-                20: " torch.abs(1-original_image)"
-                #16: "center_crop",
+
+                1: "scale",
+                2: "rotate",
+                3: "counter rotate",
+                4: "random_erease",
+                5: "sobel x",
+                6: "sobel y",
+                7: "sobel total",
+                8: "sobel x fliped",
+                9: "sobel y fliped",
+                10: "sobel total fliped",
+                # 12: "binary(original_image)",
+                # 13: "binary(horizontal_flip)",
+                # 14: "binary(scale_rot)",
+                # 15: "binary(scale_rev_rot)",
+                11: "soft_bin",
+                12: "rev_soft_bin",
+                13: "soft_bin_hf",
+                14: "rev_soft_bin_hf",
+                15: " torch.abs(1-original_image)"
+
                 }
 
     print("total mean:     ", total_mean.data.cpu().numpy())
@@ -461,8 +465,8 @@ def measure_acc_augments(X_test, colons, targets, total_mean):
     for j in range(runs):
         test_ids = range(j * BATCH_SIZE_DEFAULT, (j + 1) * BATCH_SIZE_DEFAULT)
         optimizers = []
-        p1, p2, p3, p4, p5, p6, mim, total_mean, _, orig_image, aug_ids = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, total_mean)
-        p1, p2, p3, p4, p5, p6, mim, total_mean, _, orig_image, aug_ids = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, total_mean, p1, p2, p3, p4, p5, p6)
+        p1, p2, p3, p4, p5, p6, mim, total_mean, _, orig_image, aug_ids, embedings_1, embedings_2, embedings_3, embedings_4, embedings_5, embedings_6 = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, total_mean)
+        p1, p2, p3, p4, p5, p6, mim, total_mean, _, orig_image, aug_ids, embedings_1, embedings_2, embedings_3, embedings_4, embedings_5, embedings_6 = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, total_mean, embedings_1, embedings_2, embedings_3, embedings_4, embedings_5, embedings_6)
 
         if j == 0:
             print("a prediction 1: ", p1[0].data.cpu().numpy(), " ", augments[aug_ids[0]])
@@ -622,7 +626,7 @@ def train():
     most_clusters_iter = 0
 
     print(colons[0])
-    total_mean = torch.ones([NUMBER_CLASSES]) * 0.1
+    total_mean = torch.ones([NUMBER_CLASSES]) * (1/NUMBER_CLASSES)
     total_mean = total_mean.to('cuda')
     print(total_mean)
     print(total_mean.shape)
@@ -647,8 +651,8 @@ def train():
         ids = np.random.choice(len(X_train), size=BATCH_SIZE_DEFAULT, replace=False)
 
         train = True
-        p1, p2, p3, p4, p5, p6, mim, total_mean, image_6, orig_image, aug_ids = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, total_mean)
-        p1, p2, p3, p4, p5, p6, mim, total_mean, image_6, orig_image, aug_ids = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, total_mean, p1, p2, p3, p4, p5, p6)
+        p1, p2, p3, p4, p5, p6, mim, total_mean, image_6, orig_image, aug_ids, embedings_1, embedings_2, embedings_3, embedings_4, embedings_5, embedings_6 = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, total_mean)
+        p1, p2, p3, p4, p5, p6, mim, total_mean, image_6, orig_image, aug_ids, embedings_1, embedings_2, embedings_3, embedings_4, embedings_5, embedings_6 = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, total_mean, embedings_1, embedings_2, embedings_3, embedings_4, embedings_5, embedings_6)
 
         if iteration % EVAL_FREQ_DEFAULT == 0:
             print("iteration: ", iteration,
@@ -666,23 +670,23 @@ def train():
 
             #test_ids = np.random.choice(len(X_test), size=BATCH_SIZE_DEFAULT, replace=False)
             print()
-            p1, p2, p3, p4, p5, p6, mim, total_mean, image_6, orig_image, aug_ids = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, total_mean)
-            p1, p2, p3,  p4, p5, p6, mim, total_mean, image_6, orig_image, aug_ids = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, total_mean, p1, p2, p3, p4, p5, p6)
+            p1, p2, p3, p4, p5, p6, mim, total_mean, image_6, orig_image, aug_ids, embedings_1, embedings_2, embedings_3, embedings_4, embedings_5, embedings_6 = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, total_mean)
+            p1, p2, p3,  p4, p5, p6, mim, total_mean, image_6, orig_image, aug_ids, embedings_1, embedings_2, embedings_3, embedings_4, embedings_5, embedings_6 = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, total_mean, embedings_1, embedings_2, embedings_3, embedings_4, embedings_5, embedings_6)
             #print("loss 2: ", mim.item())
 
             image_dict = print_info(p1, p2, p3, p4, p5, p6, targets, test_ids)
 
             loss, clusters = measure_acc_augments(X_test, colons, targets, total_mean)
 
-            if iteration > 200 and clusters >= MIN_CLUSTERS_TO_SAVE:
-                for i in image_dict.keys():
-                    numpy_cluster = torch.zeros([len(image_dict[i]), 1, SIZE, SIZE])
-                    counter = 0
-                    for index in image_dict[i]:
-                        numpy_cluster[counter] = orig_image.cpu().detach()[index]
-                        counter += 1
-                    if counter > 0:
-                        save_cluster(numpy_cluster, i, iteration)
+            # if iteration > 200 and clusters >= MIN_CLUSTERS_TO_SAVE:
+            #     for i in image_dict.keys():
+            #         numpy_cluster = torch.zeros([len(image_dict[i]), 1, SIZE, SIZE])
+            #         counter = 0
+            #         for index in image_dict[i]:
+            #             numpy_cluster[counter] = orig_image.cpu().detach()[index]
+            #             counter += 1
+            #         if counter > 0:
+            #             save_cluster(numpy_cluster, i, iteration)
 
                 # for i in image_dict.keys():
                 #     for index in image_dict[i]:
@@ -742,7 +746,7 @@ def print_info(p1, p2, p3, p4, p5, p6, targets, test_ids):
         string = str(index.data.cpu().numpy()) + " " + str(index2.data.cpu().numpy()) + " " + str(
             index3.data.cpu().numpy()) + " " + str(index4.data.cpu().numpy()) + " " + str(index5.data.cpu().numpy()) + " " + str(index6.data.cpu().numpy()) + ", "
 
-        image_dict[verdict].append(counter)
+       # image_dict[verdict].append(counter)
         counter += 1
         label = targets[test_ids[i]]
         if label == 10:

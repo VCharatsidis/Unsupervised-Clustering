@@ -18,7 +18,7 @@ import random
 # Default constants
 LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 30000
-BATCH_SIZE_DEFAULT = 160
+BATCH_SIZE_DEFAULT = 100
 EVAL_FREQ_DEFAULT = 200
 
 FLAGS = None
@@ -75,7 +75,7 @@ def forward_block(X, ids, colons, optimizers, train, to_tensor_size, mean,
 
     pred_1, pred_2, pred_3, pred_4, i_4 = encode_4_patches(images, colons, p1, p2, p3, p4)
 
-    product = pred_1 * pred_2 * pred_3 * pred_4
+    product = pred_1 * pred_2 * pred_3 #* pred_4
     product = product.mean(dim=0)
     log_product = torch.log(product)
     loss = -log_product.mean(dim=0)
@@ -240,7 +240,7 @@ def train():
 
         train = True
         p1, p2, p3, p4, mim, mean = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, mean)
-        p1, p2, p3, p4, mim, mean = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, mean, p1, p2, p3, p4)
+        #p1, p2, p3, p4, mim, mean = forward_block(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, mean, p1, p2, p3, p4)
         # p1, p2, p3, p4, mim, i_4 = second_guess(X_train, ids, colons, optimizers, train, BATCH_SIZE_DEFAULT, p1, p2, p3, p4)
 
         if iteration % EVAL_FREQ_DEFAULT == 0:
@@ -251,9 +251,9 @@ def train():
 
             print("mean: ", mean)
             print("loss 1", mim.item())
-            p1, p2, p3, p4, mim, mean = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, mean, p1, p2, p3, p4)
-            print("mean: ", mean)
-            print("loss 2", mim.item())
+            # p1, p2, p3, p4, mim, mean = forward_block(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, mean, p1, p2, p3, p4)
+            # print("mean: ", mean)
+            # print("loss 2", mim.item())
             # p1, p2, p3, p4, mim, i_4 = second_guess(X_test, test_ids, colons, optimizers, False, BATCH_SIZE_DEFAULT, p1, p2, p3, p4)
 
             # if iteration > 1200:

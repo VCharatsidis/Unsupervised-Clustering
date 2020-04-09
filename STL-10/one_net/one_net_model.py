@@ -107,7 +107,8 @@ class OneNet(nn.Module):
             # nn.Linear(600, 300),
             # nn.Tanh(),
 
-            nn.Linear(n_inputs, 256),
+            nn.Linear(n_inputs, 128),
+            nn.ReLU()
         )
 
         self.linear = nn.Sequential(
@@ -117,7 +118,7 @@ class OneNet(nn.Module):
             # nn.Linear(600, 300),
             # nn.Tanh(),
 
-            nn.Linear(256, number_classes),
+            nn.Linear(128, number_classes),
             nn.Softmax(dim=1)
         )
 

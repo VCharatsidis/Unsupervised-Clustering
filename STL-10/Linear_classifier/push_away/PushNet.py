@@ -6,7 +6,7 @@ import torch
 
 
 
-class UnsupervisedNet(nn.Module):
+class PushNet(nn.Module):
     """
     This class implements a Multi-layer Perceptron in PyTorch.
     It handles the different layers and parameters of the model.
@@ -26,7 +26,7 @@ class UnsupervisedNet(nn.Module):
                      This number is required in order to specify the
                      output dimensions of the MLP
         """
-        super(UnsupervisedNet, self).__init__()
+        super(PushNet, self).__init__()
 
         self.conv = nn.Sequential(
             nn.Conv2d(n_channels, 64, kernel_size=3, stride=1, padding=1),
@@ -89,42 +89,34 @@ class UnsupervisedNet(nn.Module):
             #nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
             #nn.AvgPool2d(kernel_size=(1, 1), stride=1, padding=0),
         )
-
+        self.T = 1
         self.head_input = 128
         self.embeding_linear = nn.Sequential(
             nn.Linear(n_inputs, self.head_input),
             nn.ReLU(),
         )
 
-
-
         self.test_linear = nn.Sequential(
-
             nn.Linear(self.head_input, classes[0]),
-            nn.Softmax(dim=1)
         )
 
         self.help_linear1 = nn.Sequential(
-
             nn.Linear(self.head_input, classes[1]),
-            nn.Softmax(dim=1)
         )
 
         self.help_linear2 = nn.Sequential(
-
             nn.Linear(self.head_input, classes[2]),
-            nn.Softmax(dim=1)
         )
 
         self.help_linear3 = nn.Sequential(
-
             nn.Linear(self.head_input, classes[3]),
-            nn.Softmax(dim=1)
         )
 
         self.help_linear4 = nn.Sequential(
-
             nn.Linear(self.head_input, classes[4]),
+        )
+
+        self.softmax = nn.Sequential(
             nn.Softmax(dim=1)
         )
 
@@ -142,11 +134,14 @@ class UnsupervisedNet(nn.Module):
         encoding = torch.flatten(conv, 1)
         embeddings = self.embeding_linear(encoding)
 
-        test_preds = self.test_linear(embeddings)
+        T = 0.1
+        test_preds = self.softmax(self.test_linear(embeddings)/ T)
 
-        help_preds1 = self.help_linear1(embeddings)
-        help_preds2 = self.help_linear2(embeddings)
-        help_preds3 = self.help_linear3(embeddings)
-        help_preds4 = self.help_linear4(embeddings)
+        help_preds1 = self.softmax(self.help_linear1(embeddings)/ T)
+        help_preds2 = self.softmax(self.help_linear2(embeddings)/ T)
+        help_preds3 = self.softmax(self.help_linear3(embeddings)/ T)
+        help_preds4 = self.softmax(self.help_linear4(embeddings)/ T)
+
+
 
         return embeddings, test_preds, help_preds1, help_preds2, help_preds3, help_preds4

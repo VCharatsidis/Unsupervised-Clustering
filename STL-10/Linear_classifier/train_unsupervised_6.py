@@ -16,15 +16,16 @@ import matplotlib
 LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 300000
 
-BATCH_SIZE_DEFAULT = 90
-INPUT_NET = 6272
-SIZE = 44
+BATCH_SIZE_DEFAULT = 80
+INPUT_NET = 8192
+SIZE = 36
 NETS = 1
 UNSUPERVISED = True
 DROPOUT = [0.0, 0.0, 0.0, 0.0, 0.0]
-CLASSES = [12, 12, 12, 12, 12]
+CLASSES = [20, 20, 20, 20, 20]
 DESCRIPTION = " Image size: "+str(SIZE) + " , Dropout2d: "+str(DROPOUT)+" , Classes: "+str(CLASSES)
 
+SHOW = False
 EVAL_FREQ_DEFAULT = 500
 MIN_CLUSTERS_TO_SAVE = 10
 np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
@@ -62,79 +63,88 @@ def encode_4_patches(image, encoder):
     pad = (96 - SIZE) // 2
     image /= 255
 
-    image_soft_bin = binary(image)
-    soft_bin = scale(image_soft_bin, SIZE, pad, BATCH_SIZE_DEFAULT)
+    sobeled = sobel_total(image, BATCH_SIZE_DEFAULT)
+    # crop_size = 66
+    # crop_pad = (96 - crop_size) // 2
+    # crop_preparation = scale(image, crop_size, crop_pad, BATCH_SIZE_DEFAULT)
+    # crop_preparation = crop_preparation[:, :, crop_pad:96 - crop_pad, crop_pad:96 - crop_pad]
+    # crop_prep_horizontal = horizontal_flip(crop_preparation)
 
-    soft_bin = soft_bin[:, :, pad:96 - pad, pad:96 - pad]
-    rev_soft_bin = torch.abs(1 - soft_bin)
+    # image_soft_bin = binary(image)
+    # soft_bin = scale(image_soft_bin, SIZE, pad, BATCH_SIZE_DEFAULT)
+    # soft_bin = soft_bin[:, :, pad:96 - pad, pad:96 - pad]
+    # rev_soft_bin = torch.abs(1 - soft_bin)
 
     horiz_f = horizontal_flip(image, BATCH_SIZE_DEFAULT)
-    soft_bin_hf = binary(horiz_f)
-    soft_bin_hf = scale(soft_bin_hf, SIZE, pad, BATCH_SIZE_DEFAULT)
-    soft_bin_hf = soft_bin_hf[:, :, pad:96 - pad, pad:96 - pad]
 
-    rev_soft_bin_hf = torch.abs(1 - soft_bin_hf)
+    # soft_bin_hf = binary(horiz_f)
+    # soft_bin_hf = scale(soft_bin_hf, SIZE, pad, BATCH_SIZE_DEFAULT)
+    # soft_bin_hf = soft_bin_hf[:, :, pad:96 - pad, pad:96 - pad]
+    # rev_soft_bin_hf = torch.abs(1 - soft_bin_hf)
 
-    rot = rotate(image, 24, BATCH_SIZE_DEFAULT)
-    scale_rot = scale(rot, SIZE, pad, BATCH_SIZE_DEFAULT)
-    scale_rot = scale_rot[:, :, pad:96 - pad, pad:96 - pad]
+    # rot = rotate(image, 26, BATCH_SIZE_DEFAULT)
+    # scale_rot = scale(rot, SIZE, pad, BATCH_SIZE_DEFAULT)
+    # scale_rot = scale_rot[:, :, pad:96 - pad, pad:96 - pad]
 
-    rev_rot = rotate(image, -24, BATCH_SIZE_DEFAULT)
-    scale_rev_rot = scale(rev_rot, SIZE, pad, BATCH_SIZE_DEFAULT)
-    scale_rev_rot = scale_rev_rot[:, :, pad:96 - pad, pad:96 - pad]
+    rotate_image = rotate(horiz_f, 35, BATCH_SIZE_DEFAULT)
+    rotate_image = scale(rotate_image, SIZE, pad, BATCH_SIZE_DEFAULT)
+    rotate_image = rotate_image[:, :, pad:96 - pad, pad:96 - pad]
 
     original_image = scale(image, SIZE, pad, BATCH_SIZE_DEFAULT)
-    original_image = original_image[:, :, pad:96-pad, pad:96-pad]
+    original_image = original_image[:, :, pad:96 - pad, pad:96 - pad]
 
     original_hfliped = horizontal_flip(original_image, BATCH_SIZE_DEFAULT)
 
-    augments = {0: original_hfliped,
-                1: scale(original_image, SIZE-8, 4, BATCH_SIZE_DEFAULT),
-                2: scale_rot,
-                3: scale_rev_rot,
-                4: random_erease(original_image, BATCH_SIZE_DEFAULT),
-                5: sobel_filter_x(original_image, BATCH_SIZE_DEFAULT),
-                6: sobel_filter_y(original_image, BATCH_SIZE_DEFAULT),
-                7: sobel_total(original_image, BATCH_SIZE_DEFAULT),
-                8: sobel_filter_x(original_hfliped, BATCH_SIZE_DEFAULT),
-                9: sobel_filter_y(original_hfliped, BATCH_SIZE_DEFAULT),
-                10: sobel_total(original_hfliped, BATCH_SIZE_DEFAULT),
-                # 11: binary(original_image),
-                # 12: binary(horizontal_flip(original_image, BATCH_SIZE_DEFAULT)),
-                # 13: binary(scale_rot),
-                # 14: binary(scale_rev_rot),
-                11: soft_bin,
-                12: rev_soft_bin,
-                13: soft_bin_hf,
-                14: rev_soft_bin_hf,
-                15: torch.abs(1 - original_image),
-                16: rotate(original_hfliped, -15, BATCH_SIZE_DEFAULT),
-                17: rotate(original_hfliped, 15, BATCH_SIZE_DEFAULT),
-                18: scale(original_hfliped, SIZE - 10, 5, BATCH_SIZE_DEFAULT),
-                19: scale(original_image, SIZE - 12, 6, BATCH_SIZE_DEFAULT),
-                20: center_crop(image, SIZE, BATCH_SIZE_DEFAULT),
-                21: random_crop(image, SIZE, BATCH_SIZE_DEFAULT),
-                22: random_crop(image, SIZE, BATCH_SIZE_DEFAULT),
-                23: random_crop(image, SIZE, BATCH_SIZE_DEFAULT),
-                24: random_crop(image, SIZE, BATCH_SIZE_DEFAULT),
-                25: random_crop(image, SIZE, BATCH_SIZE_DEFAULT)
-                }
+    # augments = {0: original_hfliped,
+    #             1: scale(original_image, SIZE-8, 4, BATCH_SIZE_DEFAULT),
+    #             2: scale_rot,
+    #             3: scale_rev_rot,
+    #             4: random_erease(original_image, BATCH_SIZE_DEFAULT),
+    #             5: sobel_filter_x(original_image, BATCH_SIZE_DEFAULT),
+    #             6: sobel_filter_y(original_image, BATCH_SIZE_DEFAULT),
+    #             7: sobel_total(original_image, BATCH_SIZE_DEFAULT),
+    #             8: sobel_filter_x(original_hfliped, BATCH_SIZE_DEFAULT),
+    #             9: sobel_filter_y(original_hfliped, BATCH_SIZE_DEFAULT),
+    #             10: sobel_total(original_hfliped, BATCH_SIZE_DEFAULT),
+    #             # 11: binary(original_image),
+    #             # 12: binary(horizontal_flip(original_image, BATCH_SIZE_DEFAULT)),
+    #             # 13: binary(scale_rot),
+    #             # 14: binary(scale_rev_rot),
+    #             11: soft_bin,
+    #             12: rev_soft_bin,
+    #             13: soft_bin_hf,
+    #             14: rev_soft_bin_hf,
+    #             15: torch.abs(1 - original_image),
+    #             16: rotate(original_hfliped, -15, BATCH_SIZE_DEFAULT),
+    #             17: rotate(original_hfliped, 15, BATCH_SIZE_DEFAULT),
+    #             18: scale(original_hfliped, SIZE - 10, 5, BATCH_SIZE_DEFAULT),
+    #             19: scale(original_image, SIZE - 12, 6, BATCH_SIZE_DEFAULT),
+    #             20: random_crop(crop_preparation, SIZE, BATCH_SIZE_DEFAULT),
+    #             21: random_crop(crop_preparation, SIZE, BATCH_SIZE_DEFAULT),
+    #             22: random_crop(crop_preparation, SIZE, BATCH_SIZE_DEFAULT),
+    #             23: random_crop(crop_prep_horizontal, SIZE, BATCH_SIZE_DEFAULT),
+    #             24: random_crop(crop_prep_horizontal, SIZE, BATCH_SIZE_DEFAULT),
+    #             25: random_crop(crop_prep_horizontal, SIZE, BATCH_SIZE_DEFAULT),
+    #             26: original_image
+    #             }
 
-    ids = np.random.choice(len(augments), size=6, replace=False)
 
-    image_1 = original_image
-    image_2 = augments[ids[1]]
-    image_3 = augments[ids[2]]
-    image_4 = augments[ids[3]]
-    image_5 = augments[ids[4]]
-    image_6 = augments[ids[5]]
+    ids = np.random.choice(10, size=6, replace=False)
 
-    # show_gray(image_1)
-    # show_gray(image_2)
-    # show_gray(image_3)
-    # show_gray(image_4)
-    # show_gray(image_5)
-    # show_gray(image_6)
+    image_1 = random_crop(horiz_f, SIZE, BATCH_SIZE_DEFAULT)  # augments[ids[0]]
+    image_2 = random_crop(horiz_f, SIZE, BATCH_SIZE_DEFAULT)
+    image_3 = random_crop(horiz_f, SIZE, BATCH_SIZE_DEFAULT)
+    image_4 = random_crop(image, SIZE, BATCH_SIZE_DEFAULT)
+    image_5 = original_image
+    image_6 = random_crop(image, SIZE, BATCH_SIZE_DEFAULT)
+
+    if SHOW:
+        show_gray(image_1)
+        show_gray(image_2)
+        show_gray(image_3)
+        show_gray(image_4)
+        show_gray(image_5)
+        show_gray(image_6)
 
     _, test_preds_1, help_preds_1_1, help_preds_1_2,  help_preds_1_3, help_preds_1_4 = encoder(image_1.to('cuda'))
     _, test_preds_2, help_preds_2_1, help_preds_2_2,  help_preds_2_3, help_preds_2_4 = encoder(image_2.to('cuda'))
@@ -161,10 +171,19 @@ def entropy_minmax_loss(targets, preds_1, preds_2, preds_3, preds_4, preds_5, pr
 
     help_batch_loss_1 = help_batch_pred_1_1 + help_batch_pred_2_1 + help_batch_pred_3_1 + help_batch_pred_4_1 + help_batch_pred_5_1 + help_batch_pred_6_1
 
+    # entropy_pred_1_1 = -(preds_1 * torch.log(preds_1)).sum(dim=1).mean(dim=0)
+    # entropy_pred_2_1 = -(preds_2 * torch.log(preds_2)).sum(dim=1).mean(dim=0)
+    # entropy_pred_3_1 = -(preds_3 * torch.log(preds_3)).sum(dim=1).mean(dim=0)
+    # entropy_pred_4_1 = -(preds_4 * torch.log(preds_4)).sum(dim=1).mean(dim=0)
+    # entropy_pred_5_1 = -(preds_5 * torch.log(preds_5)).sum(dim=1).mean(dim=0)
+    # entropy_pred_6_1 = -(preds_6 * torch.log(preds_6)).sum(dim=1).mean(dim=0)
+    #
+    # H = entropy_pred_1_1 + entropy_pred_2_1 + entropy_pred_3_1 + entropy_pred_4_1 + entropy_pred_5_1 + entropy_pred_6_1
+
     help_product_1 = preds_1 * preds_2 * preds_3 * preds_4 * preds_5 * preds_6
     help_mean_1 = help_product_1.mean(dim=0)
     help_log_1 = torch.log(help_mean_1)
-    total_loss = - (targets * help_log_1).mean() - help_batch_loss_1
+    total_loss = -  help_log_1.mean() - help_batch_loss_1 #+ H
 
     return total_loss
 
@@ -206,7 +225,7 @@ def forward_block(X, ids, encoder, optimizer, train, total_mean):
 
 def batch_entropy(pred, targets):
     batch_mean_preds = pred.mean(dim=0)
-    H_batch = (targets.detach() * torch.log(batch_mean_preds)).sum()
+    H_batch = torch.log(batch_mean_preds).mean()
 
     return H_batch
 
@@ -228,41 +247,49 @@ def measure_acc_augments(X_test, colons, targets, total_mean):
     runs = len(X_test)//BATCH_SIZE_DEFAULT
     avg_loss = 0
 
-    augments = {0: "horizontal flip",
-                1: "scale",
-                2: "rotate",
-                3: "counter rotate",
-                4: "random_erease",
-                5: "sobel x",
-                6: "sobel y",
-                7: "sobel total",
-                8: "sobel x fliped",
-                9: "sobel y fliped",
-                10: "sobel total fliped",
-                # 11: "binary(original_image)",
-                # 12: "binary(horizontal_flip)",
-                # 13: "binary(scale_rot)",
-                # 14: "binary(scale_rev_rot)",
-                11: "soft_bin",
-                12: "rev_soft_bin",
-                13: "soft_bin_hf",
-                14: "rev_soft_bin_hf",
-                15: "torch.abs(1-original_image)",
-                16: "rotate counter horizontal_flip",
-                17: "rotate horizontal_flip",
-                18: "scale hf 10",
-                19: "scale 12",
-                20: "center_crop",
-                21: "random crop",
-                22: "random crop",
-                23: "random crop",
-                24: "random crop",
-                25: "random crop",
+    augments = {
+                0: "scale(original_image, SIZE - 12, 6, BATCH_SIZE_DEFAULT)",
+
+                1: "rev_soft_bin_hf",
+                2: "random_crop(crop_preparation, SIZE, BATCH_SIZE_DEFAULT)",
+                3: "random_crop(crop_prep_horizontal, SIZE, BATCH_SIZE_DEFAULT)",
+                4: "original_image",
+                5: "scale_rev_rot",
+                # 8: "sobel_filter_y(original_hfliped, BATCH_SIZE_DEFAULT)",
+                # 1: "sobel_filter_x(original_image, BATCH_SIZE_DEFAULT)",
+                # 2: "sobel_total(original_image, BATCH_SIZE_DEFAULT)",
                 }
+
+    # augments = {0: "horizontal flip",
+    #             1: "scale",
+    #             2: "rotate",
+    #             3: "counter rotate",
+    #             4: "random_erease",
+    #             5: "sobel x",
+    #             6: "sobel y",
+    #             7: "sobel total",
+    #             8: "sobel x fliped",
+    #             9: "sobel y fliped",
+    #             10: "sobel total fliped",
+    #             # 11: "binary(original_image)",
+    #             # 12: "binary(horizontal_flip)",
+    #             # 13: "binary(scale_rot)",
+    #             # 14: "binary(scale_rev_rot)",
+    #             11: "soft_bin",
+    #             12: "rev_soft_bin",
+    #             13: "soft_bin_hf",
+    #             14: "rev_soft_bin_hf",
+    #             15: "torch.abs(1-original_image)",
+    #             16: "rotate counter horizontal_flip",
+    #             17: "rotate horizontal_flip",
+    #             18: "scale hf 10",
+    #             19: "scale 12",
+    #             }
 
     print()
     print("total mean:     ", total_mean.data.cpu().numpy())
     print()
+
 
     for j in range(runs):
         test_ids = range(j * BATCH_SIZE_DEFAULT, (j + 1) * BATCH_SIZE_DEFAULT)
@@ -270,21 +297,21 @@ def measure_acc_augments(X_test, colons, targets, total_mean):
         p1, p2, p3, p4, p5, p6, mim, total_mean, orig_image, aug_ids = forward_block(X_test, test_ids, colons, optimizers, False, total_mean)
 
         if j == 0:
-            print("a prediction 1: ", p1[0].data.cpu().numpy(), " ", "original image")
-            print("a prediction 2: ", p2[0].data.cpu().numpy(), " ", augments[aug_ids[1]])
-            print("a prediction 3: ", p3[0].data.cpu().numpy(), " ", augments[aug_ids[2]])
-            print("a prediction 4: ", p4[0].data.cpu().numpy(), " ", augments[aug_ids[3]])
-            print("a prediction 5: ", p5[0].data.cpu().numpy(), " ", augments[aug_ids[4]])
-            print("a prediction 6: ", p6[0].data.cpu().numpy(), " ", augments[aug_ids[5]])
+            print("a prediction 1: ", p1[0].data.cpu().numpy(), " ", "random_crop(image)")
+            print("a prediction 2: ", p2[0].data.cpu().numpy(), " ", "random_crop(horiz_f)")
+            print("a prediction 3: ", p3[0].data.cpu().numpy(), " ", "random_crop(sobeled)")
+            print("a prediction 4: ", p4[0].data.cpu().numpy(), " ", "rotate_image")
+            print("a prediction 5: ", p5[0].data.cpu().numpy(), " ", "original_image")
+            print("a prediction 6: ", p6[0].data.cpu().numpy(), " ", "random_crop(sobel_x)")
 
             print()
 
-            print("a prediction 1: ", p1[50].data.cpu().numpy(), " ", "original image")
-            print("a prediction 2: ", p2[50].data.cpu().numpy(), " ", augments[aug_ids[1]])
-            print("a prediction 3: ", p3[50].data.cpu().numpy(), " ", augments[aug_ids[2]])
-            print("a prediction 4: ", p4[50].data.cpu().numpy(), " ", augments[aug_ids[3]])
-            print("a prediction 5: ", p5[50].data.cpu().numpy(), " ", augments[aug_ids[4]])
-            print("a prediction 6: ", p6[50].data.cpu().numpy(), " ", augments[aug_ids[5]])
+            print("a prediction 1: ", p1[50].data.cpu().numpy(), " ", "random_crop(image)")
+            print("a prediction 2: ", p2[50].data.cpu().numpy(), " ", "random_crop(horiz_f)")
+            print("a prediction 3: ", p3[50].data.cpu().numpy(), " ", "random_crop(sobeled)")
+            print("a prediction 4: ", p4[50].data.cpu().numpy(), " ", "rotate_image")
+            print("a prediction 5: ", p5[50].data.cpu().numpy(), " ", "original_image")
+            print("a prediction 6: ", p6[50].data.cpu().numpy(), " ", "random_crop(sobel_x)")
 
         avg_loss += mim.item()
         for i in range(p1.shape[0]):

@@ -5,7 +5,7 @@ from __future__ import print_function
 import argparse
 import os
 from stl10_input import read_all_images, read_labels
-from UnsupervisedEncoder import UnsupervisedNet
+from PushNet import PushNet
 from stl_utils import *
 import random
 import sys
@@ -17,14 +17,14 @@ import matplotlib
 LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 300000
 
-BATCH_SIZE_DEFAULT = 90
-INPUT_NET = 6912
+BATCH_SIZE_DEFAULT = 100
+INPUT_NET = 8192
 SIZE = 44
 NETS = 1
 UNSUPERVISED = True
 #DROPOUT = [0.90, 0.90, 0.90, 0.90, 0.90]
 DROPOUT = [0.0, 0.0, 0.0, 0.0, 0.0]
-class_n = BATCH_SIZE_DEFAULT
+class_n = 20
 CLASSES = [class_n, class_n, class_n, class_n, class_n]
 DESCRIPTION = " Image size: "+str(SIZE) + " , Dropout2d: "+str(DROPOUT)+" , Classes: "+str(CLASSES)
 
@@ -105,7 +105,7 @@ def encode_4_patches(image, encoder):
     pad = (96 - SIZE) // 2
     image /= 255
 
-    crop_size = 60
+    crop_size = 68
     crop_pad = (96 - crop_size) // 2
     crop_preparation = scale(image, crop_size, crop_pad, BATCH_SIZE_DEFAULT)
     crop_preparation = crop_preparation[:, :, crop_pad:96 - crop_pad, crop_pad:96 - crop_pad]
@@ -126,14 +126,14 @@ def encode_4_patches(image, encoder):
     # scale_rot = scale(rot, SIZE, pad, BATCH_SIZE_DEFAULT)
     # scale_rot = scale_rot[:, :, pad:96 - pad, pad:96 - pad]
 
-    rev_rot = rotate(image, 30, BATCH_SIZE_DEFAULT)
-    scale_rev_rot = scale(rev_rot, SIZE, pad, BATCH_SIZE_DEFAULT)
-    scale_rev_rot = scale_rev_rot[:, :, pad:96 - pad, pad:96 - pad]
+    # rev_rot = rotate(image, 30, BATCH_SIZE_DEFAULT)
+    # scale_rev_rot = scale(rev_rot, SIZE, pad, BATCH_SIZE_DEFAULT)
+    # scale_rev_rot = scale_rev_rot[:, :, pad:96 - pad, pad:96 - pad]
 
     original_image = scale(image, SIZE, pad, BATCH_SIZE_DEFAULT)
     original_image = original_image[:, :, pad:96-pad, pad:96-pad]
 
-    original_hfliped = horizontal_flip(original_image, BATCH_SIZE_DEFAULT)
+    # original_hfliped = horizontal_flip(original_image, BATCH_SIZE_DEFAULT)
 
     # augments = {0: original_hfliped,
     #             1: scale(original_image, SIZE-8, 4, BATCH_SIZE_DEFAULT),
@@ -168,22 +168,23 @@ def encode_4_patches(image, encoder):
     #             26: original_image
     #             }
 
-    augments = {
-                0: scale(original_hfliped, SIZE - 12, 6, BATCH_SIZE_DEFAULT),
-                1: random_crop(crop_preparation, SIZE, BATCH_SIZE_DEFAULT),
-                2: random_crop(crop_prep_horizontal, SIZE, BATCH_SIZE_DEFAULT),
-                3: original_image,
-                4: scale_rev_rot,
-                # 5: sobel_filter_x(original_image, BATCH_SIZE_DEFAULT),
-                # 6: sobel_total(original_image, BATCH_SIZE_DEFAULT),
-                # 7: sobel_filter_y(original_hfliped, BATCH_SIZE_DEFAULT)
-                }
+    # augments = {
+    #             0: random_crop(crop_preparation, SIZE, BATCH_SIZE_DEFAULT),
+    #             1: random_crop(crop_preparation, SIZE, BATCH_SIZE_DEFAULT),
+    #             2: random_crop(crop_prep_horizontal, SIZE, BATCH_SIZE_DEFAULT),
+    #             3: original_image,
+    #             4: random_crop(crop_prep_horizontal, SIZE, BATCH_SIZE_DEFAULT),
+    #             # 5: sobel_filter_x(original_image, BATCH_SIZE_DEFAULT),
+    #             # 6: sobel_total(original_image, BATCH_SIZE_DEFAULT),
+    #             # 7: sobel_filter_y(original_hfliped, BATCH_SIZE_DEFAULT)
+    #             }
+    #
+    #ids = np.random.choice(len(augments), size=len(augments.keys()), replace=False)
+    ids = np.random.choice(4, 4, replace=False)
 
-    ids = np.random.choice(len(augments), size=len(augments.keys()), replace=False)
-
-    image_1 = sobel_filter_x(augments[ids[0]], BATCH_SIZE_DEFAULT)  # augments[ids[0]]
-    image_2 = sobel_filter_x(augments[ids[1]], BATCH_SIZE_DEFAULT)
-    image_3 = sobel_filter_y(augments[ids[2]], BATCH_SIZE_DEFAULT)
+    image_1 = sobel_filter_x(random_crop(crop_preparation, SIZE, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT)  # augments[ids[0]]
+    image_2 = random_crop(crop_prep_horizontal, SIZE, BATCH_SIZE_DEFAULT)
+    image_3 = sobel_filter_y(original_image, BATCH_SIZE_DEFAULT)
 
     # image_1 = augments[ids[0]]
     # image_2 = augments[ids[1]]
@@ -205,6 +206,35 @@ def encode_4_patches(image, encoder):
            original_image, ids
 
 
+def push_away_loss(preds_1, preds_2, preds_3):
+    return push_away_sum(preds_1, preds_2, preds_3, 10)
+
+
+def push_away_sum(preds_1, preds_2, preds_3, n):
+    total_sum = 0
+    for i in range(n):
+        perm = torch.randperm(preds_1.shape[0])
+        permed = preds_1[perm, :]
+        total_sum += (preds_1 * permed).sum()
+
+        # perm = torch.randperm(preds_1.shape[0])
+        permed = preds_2[perm, :]
+        total_sum += (preds_2 * permed).sum()
+
+        # perm = torch.randperm(preds_1.shape[0])
+        permed = preds_3[perm, :]
+        total_sum += (preds_3 * permed).sum()
+
+    return total_sum
+
+
+def prod_loss(preds_1, preds_2):
+    product = preds_1 * preds_2
+    product = product.mean(dim=0)
+    log_product = torch.log(product)
+    return -log_product.mean(dim=0)
+
+
 def entropy_minmax_loss(targets, preds_1, preds_2, preds_3):
     # batch_cross_entropy_1 = batch_entropy(preds_1, targets)
     # batch_cross_entropy_2 = batch_entropy(preds_2, targets)
@@ -212,14 +242,11 @@ def entropy_minmax_loss(targets, preds_1, preds_2, preds_3):
     #
     # total_batch_cross_entropy = batch_cross_entropy_1 + batch_cross_entropy_2 + batch_cross_entropy_3
 
-    product = preds_1 * preds_2 * preds_3
-    product = product.mean(dim=0)
-    log_product = torch.log(product)
-    class_mean = - log_product.mean(dim=0)
+    product = (preds_1 * preds_2).sum() + (preds_1 * preds_3).sum() + (preds_2 * preds_3).sum()
 
-    total_loss = class_mean #- total_batch_cross_entropy
+    push_loss = push_away_loss(preds_1, preds_2, preds_3)
 
-    return total_loss
+    return push_loss - product
 
 
 def forward_block(X, ids, encoder, optimizer, train, total_mean):
@@ -237,6 +264,8 @@ def forward_block(X, ids, encoder, optimizer, train, total_mean):
     help_preds_1_3, help_preds_2_3, help_preds_3_3, \
     help_preds_1_4, help_preds_2_4, help_preds_3_4,\
     orig_image, aug_ids = encode_4_patches(images, encoder)
+
+    push_loss = push_away_loss(test_preds_1, test_preds_2, test_preds_3)
 
     test_total_loss = entropy_minmax_loss(get_targets(CLASSES[0]), test_preds_1, test_preds_2, test_preds_3)
     help_total_loss_1 = entropy_minmax_loss(get_targets(CLASSES[1]), help_preds_1_1, help_preds_2_1, help_preds_3_1)
@@ -413,10 +442,10 @@ def print_params(model):
 
 
 def train():
-    train_path = "..\\data\\stl10_binary\\train_X.bin"
+    train_path = "..\\..\\data\\stl10_binary\\train_X.bin"
 
     if UNSUPERVISED:
-        train_path = "..\\data_2\\stl10_binary\\unlabeled_X.bin"
+        train_path = "..\\..\\data_2\\stl10_binary\\unlabeled_X.bin"
 
     print(train_path)
     X_train = read_all_images(train_path)
@@ -425,23 +454,23 @@ def train():
     # y_train = read_labels(train_y_File)
 
     ########### test ##############################
-    testFile = "..\\data\\stl10_binary\\test_X.bin"
+    testFile = "..\\..\\data\\stl10_binary\\test_X.bin"
     X_test = read_all_images(testFile)
 
-    test_y_File = "..\\data\\stl10_binary\\test_y.bin"
+    test_y_File = "..\\..\\data\\stl10_binary\\test_y.bin"
     targets = read_labels(test_y_File)
 
     ###############################################
 
     script_directory = os.path.split(os.path.abspath(__file__))[0]
 
-    filepath = 'most_clusters_encoder' + '.model'
+    filepath = '..\\most_clusters_encoder' + '.model'
     clusters_net_path = os.path.join(script_directory, filepath)
 
-    filepath = 'best_loss_encoder' + '.model'
+    filepath = '..\\best_loss_encoder' + '.model'
     loss_net_path = os.path.join(script_directory, filepath)
 
-    encoder = UnsupervisedNet(1, INPUT_NET, DROPOUT, CLASSES).to('cuda')
+    encoder = PushNet(1, INPUT_NET, DROPOUT, CLASSES).to('cuda')
     optimizer = torch.optim.Adam(encoder.parameters(), lr=LEARNING_RATE_DEFAULT)
 
     max_loss = 1999

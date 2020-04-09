@@ -17,7 +17,7 @@ def rotate(X, degrees, batch_size=BATCH_SIZE_DEFAULT):
     X_copy = Variable(torch.FloatTensor(X_copy))
 
     for i in range(X_copy.shape[0]):
-        transformation = transforms.RandomRotation(degrees=[degrees-4, degrees+4])
+        transformation = transforms.RandomRotation(degrees=[-degrees, degrees])
         trans = transforms.Compose([transformation, transforms.ToTensor()])
         a = F.to_pil_image(X_copy[i])
         trans_image = trans(a)
@@ -44,7 +44,6 @@ def rgb2gray(rgb):
 def scale(X, size, pad, batch_size=BATCH_SIZE_DEFAULT):
     X_copy = copy.deepcopy(X)
 
-    # X_copy = to_Tensor(X_copy, batch_size)
     X_copy = Variable(torch.FloatTensor(X_copy))
 
     # if random.uniform(0, 1) > 0.5:
@@ -128,20 +127,6 @@ def horizontal_flip(X, batch_size=BATCH_SIZE_DEFAULT):
     return X_copy
 
 
-def vertical_flip(X, batch_size=BATCH_SIZE_DEFAULT):
-    X_copy = copy.deepcopy(X)
-    X_copy = Variable(torch.FloatTensor(X_copy))
-
-    for i in range(X_copy.shape[0]):
-        transformation = transforms.RandomVerticalFlip(1)
-        trans = transforms.Compose([transformation, transforms.ToTensor()])
-        a = F.to_pil_image(X_copy[i])
-        trans_image = trans(a)
-        X_copy[i] = trans_image
-
-    return X_copy
-
-
 def to_grayscale(X, channels, batch_size=BATCH_SIZE_DEFAULT):
     X_copy = copy.deepcopy(X)
     X_copy = Variable(torch.FloatTensor(X_copy))
@@ -186,6 +171,17 @@ def center_crop(X, size, batch_size):
         X_res[i] = trans_image
 
     return X_res
+
+
+# def add_noise(X, batch_size=BATCH_SIZE_DEFAULT, max_noise_percentage=0.5):
+#     X_copy = copy.deepcopy(X)
+#     threshold = random.uniform(0.4, max_noise_percentage)
+#
+#     for i in range(X_copy.shape[0]):
+#         nums = np.random.uniform(low=0, high=1, size=(X_copy[i].shape[0],))
+#         X_copy[i] = np.where(nums > threshold, X_copy[i], 0)
+#
+#     return to_tensor(X_copy, batch_size)
 
 
 def random_crop(X, size, batch_size):
@@ -249,3 +245,6 @@ def show_mnist(first_image, w, h):
     pixels = first_image
     plt.imshow(pixels)
     plt.show()
+
+
+
