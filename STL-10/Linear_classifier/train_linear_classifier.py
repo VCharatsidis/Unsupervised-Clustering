@@ -33,11 +33,11 @@ FLAGS = None
 
 
 ############ UNSUPERVISED INFO #############################
-classes_encoder = 30
+classes_encoder = 20
 
-conv_layers_encoder = 3
-number_filters = 256
-linear_layers_encoder = 2
+conv_layers_encoder = 4
+number_filters = 512
+linear_layers_encoder = 1
 
 batch_size = 100
 lr = 1e-4
@@ -65,7 +65,7 @@ DESCRIPTION = ["RANDOM NET"]
 
 DESCRIPTION = ["RANDOM NET: ", " Image size: " + str(SIZE)\
               +",  BATCH SIZE: " + str(batch_size)\
-              +",  lr: " + str(lr) + ",  train iters: 22500"
+              +",  lr: " + str(lr) + ",  train iters: 75000"
               ,",  Classes: " + str(classes_encoder)\
               ,",  embedding dim: " + str(INPUT_NET)\
               +",  conv layers: " + str(conv_layers_encoder)\
@@ -73,7 +73,7 @@ DESCRIPTION = ["RANDOM NET: ", " Image size: " + str(SIZE)\
               ,",  number filters: " + str(number_filters)\
               ,",  augments compared: " + str(augments_compared)\
               +",  heads: " + str(heads)\
-              +",  Augments policy: 8 augments " + "  " + encoder_name]
+              +",  Augments policy: only rc and then sobels_x_y. push loss n=10 " + "  " + encoder_name]
 
 
 def encode(image):
@@ -83,7 +83,7 @@ def encode(image):
 
     #show_gray(original_image)
 
-    original_image = sobel_total(original_image, BATCH_SIZE_DEFAULT)
+    original_image = sobel_filter_y(original_image, BATCH_SIZE_DEFAULT)
     original_image = original_image.to('cuda')
 
     encoding, _, _, _, _, _ = encoder(original_image)
