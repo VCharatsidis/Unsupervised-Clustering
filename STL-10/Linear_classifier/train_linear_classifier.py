@@ -7,14 +7,11 @@ import os
 
 from stl10_input import read_all_images, read_labels
 
-import sys
 from stl_utils import *
 
 from torchvision.utils import make_grid
 import matplotlib
 from linear_net import LinearNet
-from RandomNet import RandomNet
-from SupervisedClassifier import SupervisedClassifier
 
 # Default constants
 
@@ -23,7 +20,7 @@ MAX_STEPS_DEFAULT = 300000
 
 BATCH_SIZE_DEFAULT = 200
 INPUT_NET = 128
-SIZE = 44
+SIZE = 36
 NETS = 1
 EVAL_FREQ_DEFAULT = 50
 PATIENCE = 20
@@ -42,12 +39,14 @@ linear_layers_encoder = 1
 batch_size = 100
 lr = 1e-4
 
-augments_compared = 3
+augments_compared = 6
 heads = 5
 
-encoder_name = "best_loss"
-encoder_name = "most_clusters"
-encoder = torch.load(encoder_name+"_encoder.model")
+# encoder_name = "push_best_loss"
+# encoder_name = "push_most_clusters"
+#encoder_name = "best_loss"
+encoder_name = "supervised"
+encoder = torch.load("models\\"+encoder_name+"_encoder.model")
 
 # encoder_name = "one_net_best_loss.model"
 # encoder = torch.load(encoder_name)
@@ -63,9 +62,9 @@ encoder.eval()
 
 DESCRIPTION = ["RANDOM NET"]
 
-DESCRIPTION = ["RANDOM NET: ", " Image size: " + str(SIZE)\
+DESCRIPTION = ["LOSS: product loss ", " Image size: " + str(SIZE)\
               +",  BATCH SIZE: " + str(batch_size)\
-              +",  lr: " + str(lr) + ",  train iters: 75000"
+              +",  lr: " + str(lr) + ",  train iters: 72000"
               ,",  Classes: " + str(classes_encoder)\
               ,",  embedding dim: " + str(INPUT_NET)\
               +",  conv layers: " + str(conv_layers_encoder)\
@@ -73,7 +72,7 @@ DESCRIPTION = ["RANDOM NET: ", " Image size: " + str(SIZE)\
               ,",  number filters: " + str(number_filters)\
               ,",  augments compared: " + str(augments_compared)\
               +",  heads: " + str(heads)\
-              +",  Augments policy: only rc and then sobels_x_y. push loss n=10 " + "  " + encoder_name]
+              +",  Augments policy: Jitter all: rc and then 1 original and 1 random augment" + "  " + encoder_name]
 
 
 def encode(image):
@@ -81,87 +80,14 @@ def encode(image):
     original_image = scale(image, SIZE, pad, BATCH_SIZE_DEFAULT)
     original_image = original_image[:, :, pad:96 - pad, pad:96 - pad]
 
-    #show_gray(original_image)
+    # show_gray(original_image)
 
-    original_image = sobel_filter_y(original_image, BATCH_SIZE_DEFAULT)
     original_image = original_image.to('cuda')
 
-    encoding, _, _, _, _, _ = encoder(original_image)
+    encoding, _ = encoder(original_image)
+    #encoding, _, _, _, _, _ = encoder(original_image)
     #encoding = encode_one_net(image)
 
-    return encoding
-
-
-def encode_one_net(image):
-    pad = (96 - SIZE) // 2
-    image /= 255
-
-    crop_pad = 22
-    crop_preparation = scale(image, 52, crop_pad, BATCH_SIZE_DEFAULT)
-    crop_preparation = crop_preparation[:, :, crop_pad:96 - crop_pad, crop_pad:96 - crop_pad]
-    crop_prep_horizontal = horizontal_flip(crop_preparation)
-
-    soft_bin = binary(image)
-    soft_bin = scale(soft_bin, SIZE, pad, BATCH_SIZE_DEFAULT)
-
-    soft_bin = soft_bin[:, :, pad:96 - pad, pad:96 - pad]
-    rev_soft_bin = torch.abs(1 - soft_bin)
-
-    horiz_f = horizontal_flip(image, BATCH_SIZE_DEFAULT)
-    soft_bin_hf = binary(horiz_f)
-    soft_bin_hf = scale(soft_bin_hf, SIZE, pad, BATCH_SIZE_DEFAULT)
-    soft_bin_hf = soft_bin_hf[:, :, pad:96 - pad, pad:96 - pad]
-
-    rev_soft_bin_hf = torch.abs(1 - soft_bin_hf)
-
-    # image = sobel_total(image, BATCH_SIZE_DEFAULT)
-    rot = rotate(image, 20, BATCH_SIZE_DEFAULT)
-    scale_rot = scale(rot, SIZE, pad, BATCH_SIZE_DEFAULT)
-    scale_rot = scale_rot[:, :, pad:96 - pad, pad:96 - pad]
-
-    rev_rot = rotate(image, -20, BATCH_SIZE_DEFAULT)
-    scale_rev_rot = scale(rev_rot, SIZE, pad, BATCH_SIZE_DEFAULT)
-    scale_rev_rot = scale_rev_rot[:, :, pad:96 - pad, pad:96 - pad]
-
-    original_image = scale(image, SIZE, pad, BATCH_SIZE_DEFAULT)
-    original_image = original_image[:, :, pad:96 - pad, pad:96 - pad]
-
-    augments = {0: horizontal_flip(original_image, BATCH_SIZE_DEFAULT),
-
-                1: scale(original_image, SIZE - 8, 4, BATCH_SIZE_DEFAULT),
-                2: scale_rot,
-                3: scale_rev_rot,
-                4: random_erease(original_image, BATCH_SIZE_DEFAULT),
-                5: sobel_filter_x(original_image, BATCH_SIZE_DEFAULT),
-                6: sobel_filter_y(original_image, BATCH_SIZE_DEFAULT),
-                7: sobel_total(original_image, BATCH_SIZE_DEFAULT),
-                8: sobel_filter_x(horizontal_flip(original_image, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT),
-                9: sobel_filter_y(horizontal_flip(original_image, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT),
-                10: sobel_total(horizontal_flip(original_image, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT),
-                # 12: binary(original_image),
-                # 13: binary(horizontal_flip(original_image, BATCH_SIZE_DEFAULT)),
-                # 14: binary(scale_rot),
-                # 15: binary(scale_rev_rot),
-                11: soft_bin,
-                12: rev_soft_bin,
-                13: soft_bin_hf,
-                14: rev_soft_bin_hf,
-                15: torch.abs(1 - original_image)
-                # 16: center_crop(image, SIZE, BATCH_SIZE_DEFAULT),
-                }
-
-    ids = np.random.choice(len(augments), size=6, replace=False)
-
-    p = torch.zeros([BATCH_SIZE_DEFAULT, INPUT_NET]).to('cuda')
-    mean = torch.zeros([BATCH_SIZE_DEFAULT, classes_encoder])
-
-    encoding1, _ = encoder(random_crop(crop_preparation, SIZE, BATCH_SIZE_DEFAULT).to('cuda'), p, p, p, p, p, mean)
-    encoding2, _ = encoder(random_crop(crop_prep_horizontal, SIZE, BATCH_SIZE_DEFAULT).to('cuda'), p, p, p, p, p, mean)
-    encoding3, _ = encoder(augments[ids[3]].to('cuda'), p, p, p, p, p, mean)
-    encoding4, _ = encoder(augments[ids[4]].to('cuda'), p, p, p, p, p, mean)
-    encoding5, _ = encoder(augments[ids[5]].to('cuda'), p, p, p, p, p, mean)
-
-    encoding, _ = encoder(original_image.to('cuda'), encoding1, encoding2, encoding3, encoding4, encoding5, mean)
     return encoding
 
 
@@ -286,9 +212,6 @@ def train():
     linearClassifier = LinearNet(INPUT_NET).to('cuda')
     optimizer = torch.optim.Adam(linearClassifier.parameters(), lr=LEARNING_RATE_DEFAULT)
 
-    # linearClassifier = SupervisedClassifier(INPUT_NET).to('cuda')
-    # optimizer = torch.optim.Adam(linearClassifier.parameters(), lr=LEARNING_RATE_DEFAULT)
-
     best_accuracy = 0
     iter_acc = 0
     patience = 50
@@ -319,6 +242,7 @@ def train():
                 best_accuracy = acc
                 iter_acc = iteration
                 patience = 0
+
                 print("models saved iter: " + str(iteration))
             else:
                 patience += 1
@@ -339,7 +263,6 @@ def train():
 
 
 def to_tensor(X):
-    #X = np.reshape(X, (batch_size, 1, 96, 96))
     with torch.no_grad():
         X = Variable(torch.FloatTensor(X))
 
@@ -370,3 +293,76 @@ if __name__ == '__main__':
     FLAGS, unparsed = parser.parse_known_args()
 
     main()
+
+
+def encode_one_net(image):
+    pad = (96 - SIZE) // 2
+    image /= 255
+
+    crop_pad = 22
+    crop_preparation = scale(image, 52, crop_pad, BATCH_SIZE_DEFAULT)
+    crop_preparation = crop_preparation[:, :, crop_pad:96 - crop_pad, crop_pad:96 - crop_pad]
+    crop_prep_horizontal = horizontal_flip(crop_preparation)
+
+    soft_bin = binary(image)
+    soft_bin = scale(soft_bin, SIZE, pad, BATCH_SIZE_DEFAULT)
+
+    soft_bin = soft_bin[:, :, pad:96 - pad, pad:96 - pad]
+    rev_soft_bin = torch.abs(1 - soft_bin)
+
+    horiz_f = horizontal_flip(image, BATCH_SIZE_DEFAULT)
+    soft_bin_hf = binary(horiz_f)
+    soft_bin_hf = scale(soft_bin_hf, SIZE, pad, BATCH_SIZE_DEFAULT)
+    soft_bin_hf = soft_bin_hf[:, :, pad:96 - pad, pad:96 - pad]
+
+    rev_soft_bin_hf = torch.abs(1 - soft_bin_hf)
+
+    # image = sobel_total(image, BATCH_SIZE_DEFAULT)
+    rot = rotate(image, 20, BATCH_SIZE_DEFAULT)
+    scale_rot = scale(rot, SIZE, pad, BATCH_SIZE_DEFAULT)
+    scale_rot = scale_rot[:, :, pad:96 - pad, pad:96 - pad]
+
+    rev_rot = rotate(image, -20, BATCH_SIZE_DEFAULT)
+    scale_rev_rot = scale(rev_rot, SIZE, pad, BATCH_SIZE_DEFAULT)
+    scale_rev_rot = scale_rev_rot[:, :, pad:96 - pad, pad:96 - pad]
+
+    original_image = scale(image, SIZE, pad, BATCH_SIZE_DEFAULT)
+    original_image = original_image[:, :, pad:96 - pad, pad:96 - pad]
+
+    augments = {0: horizontal_flip(original_image, BATCH_SIZE_DEFAULT),
+
+                1: scale(original_image, SIZE - 8, 4, BATCH_SIZE_DEFAULT),
+                2: scale_rot,
+                3: scale_rev_rot,
+                4: random_erease(original_image, BATCH_SIZE_DEFAULT),
+                5: sobel_filter_x(original_image, BATCH_SIZE_DEFAULT),
+                6: sobel_filter_y(original_image, BATCH_SIZE_DEFAULT),
+                7: sobel_total(original_image, BATCH_SIZE_DEFAULT),
+                8: sobel_filter_x(horizontal_flip(original_image, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT),
+                9: sobel_filter_y(horizontal_flip(original_image, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT),
+                10: sobel_total(horizontal_flip(original_image, BATCH_SIZE_DEFAULT), BATCH_SIZE_DEFAULT),
+                # 12: binary(original_image),
+                # 13: binary(horizontal_flip(original_image, BATCH_SIZE_DEFAULT)),
+                # 14: binary(scale_rot),
+                # 15: binary(scale_rev_rot),
+                11: soft_bin,
+                12: rev_soft_bin,
+                13: soft_bin_hf,
+                14: rev_soft_bin_hf,
+                15: torch.abs(1 - original_image)
+                # 16: center_crop(image, SIZE, BATCH_SIZE_DEFAULT),
+                }
+
+    ids = np.random.choice(len(augments), size=6, replace=False)
+
+    p = torch.zeros([BATCH_SIZE_DEFAULT, INPUT_NET]).to('cuda')
+    mean = torch.zeros([BATCH_SIZE_DEFAULT, classes_encoder])
+
+    encoding1, _ = encoder(random_crop(crop_preparation, SIZE, BATCH_SIZE_DEFAULT).to('cuda'), p, p, p, p, p, mean)
+    encoding2, _ = encoder(random_crop(crop_prep_horizontal, SIZE, BATCH_SIZE_DEFAULT).to('cuda'), p, p, p, p, p, mean)
+    encoding3, _ = encoder(augments[ids[3]].to('cuda'), p, p, p, p, p, mean)
+    encoding4, _ = encoder(augments[ids[4]].to('cuda'), p, p, p, p, p, mean)
+    encoding5, _ = encoder(augments[ids[5]].to('cuda'), p, p, p, p, p, mean)
+
+    encoding, _ = encoder(original_image.to('cuda'), encoding1, encoding2, encoding3, encoding4, encoding5, mean)
+    return encoding

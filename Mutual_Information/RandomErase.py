@@ -21,7 +21,7 @@ class RandomErasing(object):
     -------------------------------------------------------------------------------------
     '''
 
-    def __init__(self, probability=1, sl=0.02, sh=0.4, r1=0.4, mean=[0, 0, 0]):
+    def __init__(self, probability=1, sl=0.02, sh=0.3, r1=0.3, mean=[0, 0, 0]):
         self.probability = probability
         self.mean = mean
         self.sl = sl

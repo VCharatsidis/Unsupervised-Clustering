@@ -8,6 +8,7 @@ import torch
 from Mutual_Information.RandomErase import RandomErasing
 import torch.nn as nn
 import matplotlib.pyplot as plt
+import random
 BATCH_SIZE_DEFAULT = 100
 
 
@@ -39,6 +40,20 @@ def rgb2gray(rgb):
     gray = 0.2989 * r + 0.5870 * g + 0.1140 * b
 
     return gray
+
+
+def random_derangement(n):
+    while True:
+        v = list(range(n))
+        for j in list(range(n - 1, -1, -1)):
+            p = random.randint(0, j)
+            if v[p] == j:
+                break
+            else:
+                v[j], v[p] = v[p], v[j]
+        else:
+            if v[0] != 0:
+                return tuple(v)
 
 
 def scale(X, size, pad, batch_size=BATCH_SIZE_DEFAULT):
@@ -173,15 +188,22 @@ def center_crop(X, size, batch_size):
     return X_res
 
 
-# def add_noise(X, batch_size=BATCH_SIZE_DEFAULT, max_noise_percentage=0.5):
-#     X_copy = copy.deepcopy(X)
-#     threshold = random.uniform(0.4, max_noise_percentage)
-#
-#     for i in range(X_copy.shape[0]):
-#         nums = np.random.uniform(low=0, high=1, size=(X_copy[i].shape[0],))
-#         X_copy[i] = np.where(nums > threshold, X_copy[i], 0)
-#
-#     return to_tensor(X_copy, batch_size)
+def add_noise(X, batch_size=BATCH_SIZE_DEFAULT, max_noise_percentage=0.3):
+    X_copy = copy.deepcopy(X)
+    threshold = random.uniform(0.1, max_noise_percentage)
+
+    for i in range(X_copy.shape[0]):
+        nums = np.random.uniform(low=0, high=1, size=(X_copy[i].shape[0],))
+        X_copy[i] = np.where(nums > threshold, X_copy[i], 0)
+
+    return to_tensor(X_copy)
+
+
+def to_tensor(X):
+    with torch.no_grad():
+        X = Variable(torch.FloatTensor(X))
+
+    return X
 
 
 def random_crop(X, size, batch_size):
@@ -200,12 +222,12 @@ def random_crop(X, size, batch_size):
     return X_res
 
 
-def color_jitter(X, batch_size):
+def color_jitter(X):
     X_copy = copy.deepcopy(X)
     X_copy = Variable(torch.FloatTensor(X_copy))
 
     for i in range(X_copy.shape[0]):
-        transformation = transforms.ColorJitter(brightness=1)
+        transformation = transforms.ColorJitter(brightness=0.9, contrast=0.9, saturation=0.9, hue=0.45)
         trans = transforms.Compose([transformation, transforms.ToTensor()])
         a = F.to_pil_image(X_copy[i])
         trans_image = trans(a)

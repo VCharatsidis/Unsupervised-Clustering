@@ -29,35 +29,25 @@ class SupervisedClassifier(nn.Module):
         super(SupervisedClassifier, self).__init__()
 
         self.conv = nn.Sequential(
-            nn.Conv2d(1, 32, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(32),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
-            #
-            nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(64),
+            nn.Conv2d(1, 64, kernel_size=3, stride=1, padding=1),
+            #nn.BatchNorm2d(64),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
             #
             nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
+            #nn.BatchNorm2d(128),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
+            #
+            nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
             #nn.BatchNorm2d(256),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
-
-            # nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1),
-            # nn.BatchNorm2d(512),
-            # nn.ReLU(),
-            # nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
             #
-            # nn.Conv2d(512, 768, kernel_size=3, stride=1, padding=1),
-            # nn.BatchNorm2d(768),
-            # nn.ReLU(),
-            # nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
-            #
-            # nn.Conv2d(768, 512, kernel_size=3, stride=1, padding=1),
-            # nn.BatchNorm2d(512),
-            # nn.ReLU(),
-            # nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
+            nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1),
+            #nn.BatchNorm2d(512),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
 
 
             # nn.Conv2d(n_channels, 64, kernel_size=(3, 3), stride=1, padding=1),
@@ -102,17 +92,15 @@ class SupervisedClassifier(nn.Module):
             # nn.AvgPool2d(kernel_size=(1, 1), stride=1, padding=0),
         )
 
-        # self.embeding_linear = nn.Sequential(
-        #     nn.Linear(n_inputs, 256),
-        #     nn.ReLU(),
-        #     #nn.Linear(512, 256)
-        # )
-
-        self.test_linear = nn.Sequential(
-            nn.Linear(n_inputs, 10),
-            nn.Softmax(dim=1)
+        self.embeding_linear = nn.Sequential(
+            nn.Linear(n_inputs, 128),
+            nn.ReLU(),
         )
 
+        self.test_linear = nn.Sequential(
+            nn.Linear(128, 10),
+            nn.Softmax(dim=1)
+        )
 
 
     def forward(self, x):
@@ -127,7 +115,8 @@ class SupervisedClassifier(nn.Module):
 
         conv = self.conv(x)
         encoding = torch.flatten(conv, 1)
+        embedding = self.embeding_linear(encoding)
 
-        test_preds = self.test_linear(encoding)
+        test_preds = self.test_linear(embedding)
 
-        return test_preds
+        return embedding, test_preds

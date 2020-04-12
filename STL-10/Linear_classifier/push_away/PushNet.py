@@ -89,7 +89,7 @@ class PushNet(nn.Module):
             #nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
             #nn.AvgPool2d(kernel_size=(1, 1), stride=1, padding=0),
         )
-        self.T = 1
+
         self.head_input = 128
         self.embeding_linear = nn.Sequential(
             nn.Linear(n_inputs, self.head_input),
@@ -134,14 +134,12 @@ class PushNet(nn.Module):
         encoding = torch.flatten(conv, 1)
         embeddings = self.embeding_linear(encoding)
 
-        T = 0.1
-        test_preds = self.softmax(self.test_linear(embeddings)/ T)
+        T = 1
+        test_preds = self.softmax(self.test_linear(embeddings) / T)
 
-        help_preds1 = self.softmax(self.help_linear1(embeddings)/ T)
-        help_preds2 = self.softmax(self.help_linear2(embeddings)/ T)
-        help_preds3 = self.softmax(self.help_linear3(embeddings)/ T)
-        help_preds4 = self.softmax(self.help_linear4(embeddings)/ T)
-
-
+        help_preds1 = self.softmax(self.help_linear1(embeddings) / T)
+        help_preds2 = self.softmax(self.help_linear2(embeddings) / T)
+        help_preds3 = self.softmax(self.help_linear3(embeddings) / T)
+        help_preds4 = self.softmax(self.help_linear4(embeddings) / T)
 
         return embeddings, test_preds, help_preds1, help_preds2, help_preds3, help_preds4
