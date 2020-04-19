@@ -12,17 +12,40 @@ import random
 BATCH_SIZE_DEFAULT = 100
 
 
-def rotate(X, degrees, batch_size=BATCH_SIZE_DEFAULT):
+class AddGaussianNoise(object):
+    def __init__(self, mean=0., std=1.):
+        self.std = std
+        self.mean = mean
+
+    def __call__(self, tensor):
+        return tensor + torch.randn(tensor.size()) * self.std + self.mean
+
+    def __repr__(self):
+        return self.__class__.__name__ + '(mean={0}, std={1})'.format(self.mean, self.std)
+
+
+def guassian_noise(X):
     X_copy = copy.deepcopy(X)
-    #X_copy = to_Tensor(X_copy, batch_size)
     X_copy = Variable(torch.FloatTensor(X_copy))
 
     for i in range(X_copy.shape[0]):
-        transformation = transforms.RandomRotation(degrees=[-degrees, degrees])
+        transformation = AddGaussianNoise(0., 0.01)
+        trans = transforms.Compose([transforms.ToTensor(), transformation])
+        a = F.to_pil_image(X_copy[i])
+        X_copy[i] = trans(a)
+
+    return X_copy
+
+
+def rotate(X, degrees):
+    X_copy = copy.deepcopy(X)
+    X_copy = Variable(torch.FloatTensor(X_copy))
+
+    for i in range(X_copy.shape[0]):
+        transformation = transforms.RandomRotation(degrees=[-degrees, degrees],  fill=(0,))
         trans = transforms.Compose([transformation, transforms.ToTensor()])
         a = F.to_pil_image(X_copy[i])
-        trans_image = trans(a)
-        X_copy[i] = trans_image
+        X_copy[i] = trans(a)
 
     return X_copy
 
@@ -54,6 +77,19 @@ def random_derangement(n):
         else:
             if v[0] != 0:
                 return tuple(v)
+
+
+def upscale(X, size):
+    X_copy = Variable(torch.FloatTensor(BATCH_SIZE_DEFAULT, 3, 224, 224))
+
+    for i in range(X_copy.shape[0]):
+        transformation = transforms.Resize(224)
+        trans = transforms.Compose([transformation, transforms.ToTensor(), transforms.Normalize(mean = [0.485, 0.456, 0.406], std  = [0.229, 0.224, 0.225])])
+        a = F.to_pil_image(X_copy[i])
+        trans_image = trans(a)
+        X_copy[i] = trans_image
+
+    return X_copy
 
 
 def scale(X, size, pad, batch_size=BATCH_SIZE_DEFAULT):
@@ -227,7 +263,7 @@ def color_jitter(X):
     X_copy = Variable(torch.FloatTensor(X_copy))
 
     for i in range(X_copy.shape[0]):
-        transformation = transforms.ColorJitter(brightness=0.9, contrast=0.9, saturation=0.9, hue=0.45)
+        transformation = transforms.ColorJitter(brightness=0.6, contrast=0.6, saturation=0.6, hue=0.45)
         trans = transforms.Compose([transformation, transforms.ToTensor()])
         a = F.to_pil_image(X_copy[i])
         trans_image = trans(a)

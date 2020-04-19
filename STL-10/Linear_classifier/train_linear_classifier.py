@@ -19,8 +19,8 @@ LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 300000
 
 BATCH_SIZE_DEFAULT = 200
-INPUT_NET = 128
-SIZE = 36
+INPUT_NET = 740
+SIZE = 32
 NETS = 1
 EVAL_FREQ_DEFAULT = 50
 PATIENCE = 20
@@ -40,31 +40,43 @@ batch_size = 100
 lr = 1e-4
 
 augments_compared = 6
-heads = 5
+heads = 1
 
 # encoder_name = "push_best_loss"
 # encoder_name = "push_most_clusters"
-#encoder_name = "best_loss"
-encoder_name = "supervised"
-encoder = torch.load("models\\"+encoder_name+"_encoder.model")
+encoder_name = "most_clusters_encoder_c20_multisizecrop"
+#encoder_name = "most_clusters"
+#encoder_name = "supervised"
+encoder = torch.load("models\\"+encoder_name+".model")
 
 # encoder_name = "one_net_best_loss.model"
 # encoder = torch.load(encoder_name)
 
 encoder.eval()
 
-# random_net = "random_encoder.model"
-# encoder = RandomNet().to('cuda')
-# torch.save(encoder, random_net)
-# encoder = torch.load(random_net)
-# encoder.eval()
+
+encoder_name2 = "most_clusters_encoder_c30_crop_96"
+encoder2 = torch.load("models\\"+encoder_name2+".model")
+encoder2.eval()
+
+encoder_name3 = "best_loss_encoder_c30_crop_96"
+encoder3 = torch.load("models\\"+encoder_name3+".model")
+encoder3.eval()
+
+encoder_name4 = "best_loss_encoder_c10_multicrop"
+encoder4 = torch.load("models\\"+encoder_name4+".model")
+encoder4.eval()
+
+encoder_name5 = "most_clusters_encoder_c10_multicrop"
+encoder5 = torch.load("models\\"+encoder_name5+".model")
+encoder5.eval()
 
 
 DESCRIPTION = ["RANDOM NET"]
 
-DESCRIPTION = ["LOSS: product loss ", " Image size: " + str(SIZE)\
+DESCRIPTION = ["LOSS: product loss multiplied by mean ", " Image size: " + str(SIZE)\
               +",  BATCH SIZE: " + str(batch_size)\
-              +",  lr: " + str(lr) + ",  train iters: 72000"
+              +",  lr: " + str(lr) + ",  train iters: 90000"
               ,",  Classes: " + str(classes_encoder)\
               ,",  embedding dim: " + str(INPUT_NET)\
               +",  conv layers: " + str(conv_layers_encoder)\
@@ -72,7 +84,7 @@ DESCRIPTION = ["LOSS: product loss ", " Image size: " + str(SIZE)\
               ,",  number filters: " + str(number_filters)\
               ,",  augments compared: " + str(augments_compared)\
               +",  heads: " + str(heads)\
-              +",  Augments policy: Jitter all: rc and then 1 original and 1 random augment" + "  " + encoder_name]
+              +",  Policy: Ensembe 10c, 20c, 30c and their preds " + "  " + encoder_name]
 
 
 def encode(image):
@@ -84,9 +96,20 @@ def encode(image):
 
     original_image = original_image.to('cuda')
 
-    encoding, _ = encoder(original_image)
-    #encoding, _, _, _, _, _ = encoder(original_image)
+    if encoder_name == "supervised":
+        encoding1, _ = encoder(original_image)
+
+    else:
+        encoding1, pred, _, _, _, _ = encoder(original_image)
+
     #encoding = encode_one_net(image)
+
+    encoding2, pred2, _, _, _, _ = encoder2(original_image)
+    encoding3, pred3, _, _, _, _ = encoder3(original_image)
+    encoding4, pred4, _, _, _, _ = encoder4(original_image)
+    encoding5, pred5, _, _, _, _ = encoder5(original_image)
+
+    encoding = torch.cat([encoding1, encoding2, encoding3, encoding4, encoding5, pred, pred2, pred3, pred4, pred5], dim=1)
 
     return encoding
 
@@ -114,8 +137,10 @@ def forward_block(X, ids, classifier, optimizer, train, targets):
     # original_image = original_image.to('cuda')
     # preds = classifier(original_image)
 
-    tensor_targets = torch.LongTensor(targets[ids]).unsqueeze(dim=1).to('cuda')
-    y_onehot = torch.FloatTensor(BATCH_SIZE_DEFAULT, 10).to('cuda')
+    t = [x%10 for x in targets[ids]]
+
+    tensor_targets = torch.LongTensor(t).unsqueeze(dim=1).cuda()
+    y_onehot = torch.FloatTensor(BATCH_SIZE_DEFAULT, 10).cuda()
     y_onehot.zero_()
     y_onehot.scatter_(1, tensor_targets, 1)
 
@@ -129,7 +154,7 @@ def forward_block(X, ids, classifier, optimizer, train, targets):
             p.requires_grad = False
 
         optimizer.zero_grad()
-        cross_entropy_loss.backward(retain_graph=True)
+        cross_entropy_loss.backward()
         optimizer.step()
 
     return preds, cross_entropy_loss
@@ -209,7 +234,7 @@ def train():
     filepath = 'encoders\\encoder_' + str(0) + '.model'
     path_to_model = os.path.join(script_directory, filepath)
 
-    linearClassifier = LinearNet(INPUT_NET).to('cuda')
+    linearClassifier = LinearNet(INPUT_NET).cuda()
     optimizer = torch.optim.Adam(linearClassifier.parameters(), lr=LEARNING_RATE_DEFAULT)
 
     best_accuracy = 0
@@ -259,7 +284,7 @@ def train():
                 accuracy_info = ",  BEST ACCURACY: " + str(best_accuracy) + " at iter: " + str(iter_acc) + "\n"
                 file.write(accuracy_info)
                 file.close()
-                break;
+                break
 
 
 def to_tensor(X):

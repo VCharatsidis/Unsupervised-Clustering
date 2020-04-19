@@ -85,9 +85,9 @@ class UnsupervisedNet(nn.Module):
             #
             # nn.Conv2d(512, 512, kernel_size=(3, 3), stride=1, padding=1),
             # nn.ReLU(),
-
-            #nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
-            #nn.AvgPool2d(kernel_size=(1, 1), stride=1, padding=0),
+            #
+            # nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
+            # nn.AvgPool2d(kernel_size=(1, 1), stride=1, padding=0),
         )
 
         self.head_input = 128
@@ -97,36 +97,35 @@ class UnsupervisedNet(nn.Module):
         )
 
 
-
         self.test_linear = nn.Sequential(
 
             nn.Linear(self.head_input, classes[0]),
             nn.Softmax(dim=1)
         )
 
-        self.help_linear1 = nn.Sequential(
-
-            nn.Linear(self.head_input, classes[1]),
-            nn.Softmax(dim=1)
-        )
-
-        self.help_linear2 = nn.Sequential(
-
-            nn.Linear(self.head_input, classes[2]),
-            nn.Softmax(dim=1)
-        )
-
-        self.help_linear3 = nn.Sequential(
-
-            nn.Linear(self.head_input, classes[3]),
-            nn.Softmax(dim=1)
-        )
-
-        self.help_linear4 = nn.Sequential(
-
-            nn.Linear(self.head_input, classes[4]),
-            nn.Softmax(dim=1)
-        )
+        # self.help_linear1 = nn.Sequential(
+        #
+        #     nn.Linear(self.head_input, classes[1]),
+        #     nn.Softmax(dim=1)
+        # )
+        #
+        # self.help_linear2 = nn.Sequential(
+        #
+        #     nn.Linear(self.head_input, classes[2]),
+        #     nn.Softmax(dim=1)
+        # )
+        #
+        # self.help_linear3 = nn.Sequential(
+        #
+        #     nn.Linear(self.head_input, classes[3]),
+        #     nn.Softmax(dim=1)
+        # )
+        #
+        # self.help_linear4 = nn.Sequential(
+        #
+        #     nn.Linear(self.head_input, classes[4]),
+        #     nn.Softmax(dim=1)
+        # )
 
     def forward(self, x):
         """
@@ -144,9 +143,9 @@ class UnsupervisedNet(nn.Module):
 
         test_preds = self.test_linear(embeddings)
 
-        help_preds1 = self.help_linear1(embeddings)
-        help_preds2 = self.help_linear2(embeddings)
-        help_preds3 = self.help_linear3(embeddings)
-        help_preds4 = self.help_linear4(embeddings)
+        # help_preds1 = self.help_linear1(embeddings)
+        # help_preds2 = self.help_linear2(embeddings)
+        # help_preds3 = self.help_linear3(embeddings)
+        # help_preds4 = self.help_linear4(embeddings)
 
-        return embeddings, test_preds, help_preds1, help_preds2, help_preds3, help_preds4
+        return embeddings, test_preds, test_preds, test_preds, test_preds, test_preds# help_preds1, help_preds2, help_preds3, help_preds4

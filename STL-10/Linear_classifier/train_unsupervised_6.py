@@ -12,22 +12,25 @@ import sys
 from torchvision.utils import make_grid
 import matplotlib
 
-
+EPS=sys.float_info.epsilon
 LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 300000
 
-BATCH_SIZE_DEFAULT = 80
-INPUT_NET = 8192
-SIZE = 36
+BATCH_SIZE_DEFAULT = 100
+INPUT_NET = 4608
+SIZE = 32
+crop_size = 76
 NETS = 1
 UNSUPERVISED = True
 DROPOUT = [0.0, 0.0, 0.0, 0.0, 0.0]
-CLASSES = [20, 20, 20, 20, 20]
+classes_n = 20
+CLASSES = [classes_n, classes_n, classes_n, classes_n, classes_n]
 DESCRIPTION = " Image size: "+str(SIZE) + " , Dropout2d: "+str(DROPOUT)+" , Classes: "+str(CLASSES)
 
 SHOW = False
 EVAL_FREQ_DEFAULT = 500
 MIN_CLUSTERS_TO_SAVE = 10
+
 np.set_printoptions(formatter={'float': lambda x: "{0:0.4f}".format(x)})
 FLAGS = None
 
@@ -63,7 +66,6 @@ def encode_4_patches(image, encoder):
     pad = (96 - SIZE) // 2
     image /= 255
 
-    crop_size = 50
     crop_pad = (96 - crop_size) // 2
     crop_preparation = scale(image, crop_size, crop_pad, BATCH_SIZE_DEFAULT)
     crop_preparation = crop_preparation[:, :, crop_pad:96 - crop_pad, crop_pad:96 - crop_pad]
@@ -90,14 +92,14 @@ def encode_4_patches(image, encoder):
                 6: soft_bin_hf,
                 7: rev_soft_bin_hf,
                 8: torch.abs(1 - original_hfliped),
-                9: rotate(original_hfliped, 40, BATCH_SIZE_DEFAULT),
+                9: rotate(original_hfliped, 40),
                 10: scale(original_hfliped, SIZE - 12, 6, BATCH_SIZE_DEFAULT),
                 }
 
     ids = np.random.choice(len(augments.keys()), size=1, replace=False)
 
-    image_1 = color_jitter(random_crop(crop_preparation, SIZE, BATCH_SIZE_DEFAULT))  # augments[ids[0]]
-    image_2 = color_jitter(random_crop(crop_prep_horizontal, SIZE, BATCH_SIZE_DEFAULT))
+    image_1 = color_jitter(random_crop(image, SIZE, BATCH_SIZE_DEFAULT))  # augments[ids[0]]
+    image_2 = color_jitter(random_crop(horiz_f, SIZE, BATCH_SIZE_DEFAULT))
     image_3 = color_jitter(random_crop(crop_preparation, SIZE, BATCH_SIZE_DEFAULT))
     image_4 = color_jitter(random_crop(crop_prep_horizontal, SIZE, BATCH_SIZE_DEFAULT))
     image_5 = color_jitter(original_image)
@@ -126,15 +128,15 @@ def encode_4_patches(image, encoder):
            original_image, ids
 
 
-def entropy_minmax_loss(targets, preds_1, preds_2, preds_3, preds_4, preds_5, preds_6):
-    help_batch_pred_1_1 = batch_entropy(preds_1, targets)
-    help_batch_pred_2_1 = batch_entropy(preds_2, targets)
-    help_batch_pred_3_1 = batch_entropy(preds_3, targets)
-    help_batch_pred_4_1 = batch_entropy(preds_4, targets)
-    help_batch_pred_5_1 = batch_entropy(preds_5, targets)
-    help_batch_pred_6_1 = batch_entropy(preds_6, targets)
-
-    help_batch_loss_1 = help_batch_pred_1_1 + help_batch_pred_2_1 + help_batch_pred_3_1 + help_batch_pred_4_1 + help_batch_pred_5_1 + help_batch_pred_6_1
+def entropy_minmax_loss(targets, preds_1, preds_2, preds_3, preds_4, preds_5, preds_6, mean):
+    # help_batch_pred_1_1 = batch_entropy(preds_1, targets)
+    # help_batch_pred_2_1 = batch_entropy(preds_2, targets)
+    # help_batch_pred_3_1 = batch_entropy(preds_3, targets)
+    # help_batch_pred_4_1 = batch_entropy(preds_4, targets)
+    # help_batch_pred_5_1 = batch_entropy(preds_5, targets)
+    # help_batch_pred_6_1 = batch_entropy(preds_6, targets)
+    #
+    # help_batch_loss_1 = help_batch_pred_1_1 + help_batch_pred_2_1 + help_batch_pred_3_1 + help_batch_pred_4_1 + help_batch_pred_5_1 + help_batch_pred_6_1
 
     # entropy_pred_1_1 = -(preds_1 * torch.log(preds_1)).sum(dim=1).mean(dim=0)
     # entropy_pred_2_1 = -(preds_2 * torch.log(preds_2)).sum(dim=1).mean(dim=0)
@@ -146,9 +148,9 @@ def entropy_minmax_loss(targets, preds_1, preds_2, preds_3, preds_4, preds_5, pr
     # H = entropy_pred_1_1 + entropy_pred_2_1 + entropy_pred_3_1 + entropy_pred_4_1 + entropy_pred_5_1 + entropy_pred_6_1
 
     help_product_1 = preds_1 * preds_2 * preds_3 * preds_4 * preds_5 * preds_6
-    help_mean_1 = help_product_1.mean(dim=0)
+    help_mean_1 = help_product_1.mean(dim=0) * mean.detach()
     help_log_1 = torch.log(help_mean_1)
-    total_loss = -  help_log_1.mean() #- help_batch_loss_1 #+ H
+    total_loss = - help_log_1.mean() #- help_batch_loss_1 #+ H
 
     return total_loss
 
@@ -169,16 +171,16 @@ def forward_block(X, ids, encoder, optimizer, train, total_mean):
     help_preds_1_4, help_preds_2_4, help_preds_3_4, help_preds_4_4, help_preds_5_4, help_preds_6_4, \
     orig_image, aug_ids = encode_4_patches(images, encoder)
 
-    test_total_loss = entropy_minmax_loss(get_targets(CLASSES[0]), test_preds_1, test_preds_2, test_preds_3, test_preds_4, test_preds_5, test_preds_6)
-    help_total_loss_1 = entropy_minmax_loss(get_targets(CLASSES[1]), help_preds_1_1, help_preds_2_1, help_preds_3_1, help_preds_4_1, help_preds_5_1, help_preds_6_1)
-    help_total_loss_2 = entropy_minmax_loss(get_targets(CLASSES[2]), help_preds_1_2, help_preds_2_2, help_preds_3_2, help_preds_4_2, help_preds_5_2, help_preds_6_2)
-    help_total_loss_3 = entropy_minmax_loss(get_targets(CLASSES[3]), help_preds_1_3, help_preds_2_3, help_preds_3_3, help_preds_4_3, help_preds_5_3, help_preds_6_3)
-    help_total_loss_4 = entropy_minmax_loss(get_targets(CLASSES[4]), help_preds_1_4, help_preds_2_4, help_preds_3_4, help_preds_4_4, help_preds_5_4, help_preds_6_4)
+    test_total_loss = entropy_minmax_loss(get_targets(CLASSES[0]), test_preds_1, test_preds_2, test_preds_3, test_preds_4, test_preds_5, test_preds_6, total_mean)
+    # help_total_loss_1 = entropy_minmax_loss(get_targets(CLASSES[1]), help_preds_1_1, help_preds_2_1, help_preds_3_1, help_preds_4_1, help_preds_5_1, help_preds_6_1)
+    # help_total_loss_2 = entropy_minmax_loss(get_targets(CLASSES[2]), help_preds_1_2, help_preds_2_2, help_preds_3_2, help_preds_4_2, help_preds_5_2, help_preds_6_2)
+    # help_total_loss_3 = entropy_minmax_loss(get_targets(CLASSES[3]), help_preds_1_3, help_preds_2_3, help_preds_3_3, help_preds_4_3, help_preds_5_3, help_preds_6_3)
+    # help_total_loss_4 = entropy_minmax_loss(get_targets(CLASSES[4]), help_preds_1_4, help_preds_2_4, help_preds_3_4, help_preds_4_4, help_preds_5_4, help_preds_6_4)
 
     m_preds = test_preds_1 * test_preds_2 * test_preds_3 * test_preds_4 * test_preds_5 * test_preds_6
-    total_mean = 0.99 * total_mean + 0.01 * m_preds.mean(dim=0).detach()
+    total_mean = 0.95 * total_mean + 0.05 * m_preds.mean(dim=0).detach()
 
-    all_losses = test_total_loss + help_total_loss_1 + help_total_loss_2 + help_total_loss_3 + help_total_loss_4
+    all_losses = test_total_loss #+ help_total_loss_1 + help_total_loss_2 + help_total_loss_3 + help_total_loss_4
 
     if train:
         optimizer.zero_grad()

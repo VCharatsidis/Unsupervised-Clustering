@@ -99,7 +99,7 @@ class SupervisedClassifier(nn.Module):
 
         self.test_linear = nn.Sequential(
             nn.Linear(128, 10),
-            nn.Softmax(dim=1)
+           # nn.Softmax(dim=1)
         )
 
 

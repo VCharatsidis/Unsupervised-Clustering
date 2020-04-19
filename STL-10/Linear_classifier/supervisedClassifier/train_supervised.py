@@ -18,31 +18,32 @@ from SupervisedClassifier import SupervisedClassifier
 
 # Default constants
 
-LEARNING_RATE_DEFAULT = 1e-4
+LEARNING_RATE_DEFAULT = 1e-5
 MAX_STEPS_DEFAULT = 300000
 
-BATCH_SIZE_DEFAULT = 50
-INPUT_NET = 8192
-SIZE = 36
+BATCH_SIZE_DEFAULT = 20
+INPUT_NET = 4608
+SIZE = 32
 NETS = 1
 EVAL_FREQ_DEFAULT = 200
 PATIENCE = 20
 
 np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
 FLAGS = None
+criterion = nn.CrossEntropyLoss().cuda()
 
 
 def forward_block(X, ids, classifier, optimizer, train, targets):
-    images = X[ids, :]
-    x_tensor = to_tensor(images)
+    x_tens = X[ids, :]
+    x_train = rgb2gray(x_tens)
 
-    x_train = rgb2gray(x_tensor)
     x_tensor = to_tensor(x_train)
     x_tensor = x_tensor.unsqueeze(0)
     images = x_tensor.transpose(0, 1)
     images = images.transpose(2, 3)
 
-    images = images / 255.0
+    images /= 255
+
     pad = (96 - SIZE) // 2
     original_image = scale(images, SIZE, pad, BATCH_SIZE_DEFAULT)
     original_image = original_image[:, :, pad:96 - pad, pad:96 - pad]
@@ -50,12 +51,21 @@ def forward_block(X, ids, classifier, optimizer, train, targets):
 
     _, preds = classifier(original_image)
 
-    tensor_targets = torch.LongTensor(targets[ids]).unsqueeze(dim=1).to('cuda')
-    y_onehot = torch.FloatTensor(BATCH_SIZE_DEFAULT, 10).to('cuda')
-    y_onehot.zero_()
-    y_onehot.scatter_(1, tensor_targets, 1)
+    t = [x % 10 for x in targets[ids]]
 
-    cross_entropy_loss = - (y_onehot * torch.log(preds)).sum(dim=1).mean()
+    tensor_targets = torch.LongTensor(t).to('cuda')
+
+    # y_onehot = torch.FloatTensor(BATCH_SIZE_DEFAULT, 10).to('cuda')
+    # y_onehot.zero_()
+    # y_onehot.scatter_(1, tensor_targets, 1)
+
+    # print(t)
+    # print(y_onehot)
+    # input()
+    #
+    # cross_entropy_loss = - (y_onehot * torch.log(preds)).sum(dim=1).mean()
+
+    cross_entropy_loss = criterion(preds, tensor_targets)
 
     if train:
         optimizer.zero_grad()
@@ -145,6 +155,8 @@ def train():
     best_accuracy = 0
     iter_acc = 0
     patience = 50
+
+
 
     for iteration in range(MAX_STEPS_DEFAULT):
         linearClassifier.train()
