@@ -16,10 +16,10 @@ from linear_net import LinearNet
 # Default constants
 
 LEARNING_RATE_DEFAULT = 1e-4
-MAX_STEPS_DEFAULT = 300000
+MAX_STEPS_DEFAULT = 500000
 
 BATCH_SIZE_DEFAULT = 200
-INPUT_NET = 740
+INPUT_NET = 128
 SIZE = 32
 NETS = 1
 EVAL_FREQ_DEFAULT = 50
@@ -30,23 +30,25 @@ FLAGS = None
 
 
 ############ UNSUPERVISED INFO #############################
-classes_encoder = 20
+classes_encoder = 30
 
 conv_layers_encoder = 4
 number_filters = 512
 linear_layers_encoder = 1
 
-batch_size = 100
+batch_size = 150
 lr = 1e-4
 
-augments_compared = 6
+augments_compared = 4
 heads = 1
 
 # encoder_name = "push_best_loss"
 # encoder_name = "push_most_clusters"
-encoder_name = "most_clusters_encoder_c20_multisizecrop"
-#encoder_name = "most_clusters"
-#encoder_name = "supervised"
+encoder_name = "most_clusters_encoder"
+encoder_name = "best_loss_encoder"
+SUPERVISED_FILE_NAME = "supervised_encoder_loss"
+# # SUPERVISED_FILE_NAME = "supervised_encoder_acc"
+# encoder_name = SUPERVISED_FILE_NAME
 encoder = torch.load("models\\"+encoder_name+".model")
 
 # encoder_name = "one_net_best_loss.model"
@@ -54,7 +56,7 @@ encoder = torch.load("models\\"+encoder_name+".model")
 
 encoder.eval()
 
-
+#############
 encoder_name2 = "most_clusters_encoder_c30_crop_96"
 encoder2 = torch.load("models\\"+encoder_name2+".model")
 encoder2.eval()
@@ -63,6 +65,7 @@ encoder_name3 = "best_loss_encoder_c30_crop_96"
 encoder3 = torch.load("models\\"+encoder_name3+".model")
 encoder3.eval()
 
+#############
 encoder_name4 = "best_loss_encoder_c10_multicrop"
 encoder4 = torch.load("models\\"+encoder_name4+".model")
 encoder4.eval()
@@ -71,12 +74,62 @@ encoder_name5 = "most_clusters_encoder_c10_multicrop"
 encoder5 = torch.load("models\\"+encoder_name5+".model")
 encoder5.eval()
 
+#############
+encoder_name6 = "best_loss_encoder_c20_multisizecrop"
+encoder6 = torch.load("models\\"+encoder_name6+".model")
+encoder6.eval()
 
-DESCRIPTION = ["RANDOM NET"]
+encoder_name7 = "most_clusters_encoder_c20_multisizecrop"
+encoder7 = torch.load("models\\"+encoder_name7+".model")
+encoder7.eval()
+
+############
+
+encoder_name8 = "most_clusters_encoder_c50_multicrop"
+encoder8 = torch.load("models\\"+encoder_name8+".model")
+encoder8.eval()
+
+encoder_name9 = "best_loss_encoder_c50_multicrop"
+encoder9 = torch.load("models\\"+encoder_name9+".model")
+encoder9.eval()
+
+############
+
+encoder_name10 = "best_loss_encoder_c90_multicrop"
+encoder10 = torch.load("models\\"+encoder_name10+".model")
+encoder10.eval()
+
+encoder_name11 = "most_clusters_encoder_c90_multicrop"
+encoder11 = torch.load("models\\"+encoder_name11+".model")
+encoder11.eval()
+
+############
+
+encoder_name12 = "most_clusters_encoder_c40_crop66_crop76"
+encoder12 = torch.load("models\\"+encoder_name12+".model")
+encoder12.eval()
+
+encoder_name13 = "best_loss_encoder_c40_crop66_crop76"
+encoder13 = torch.load("models\\"+encoder_name13+".model")
+encoder13.eval()
+
+############
+
+encoder_name14 = "most_clusters_encoder_c150_4aug_cr66_80"
+encoder14 = torch.load("models\\"+encoder_name14+".model")
+encoder14.eval()
+
+encoder_name15 = "best_loss_encoder_c150_4aug_cr66_80"
+encoder15 = torch.load("models\\"+encoder_name15+".model")
+encoder15.eval()
+
+
+
+DESCRIPTION = ["Supervised NET with 75% augments per batch."]
 
 DESCRIPTION = ["LOSS: product loss multiplied by mean ", " Image size: " + str(SIZE)\
               +",  BATCH SIZE: " + str(batch_size)\
-              +",  lr: " + str(lr) + ",  train iters: 90000"
+              +",  lr: " + str(lr) + ",  train iters: 300000"
               ,",  Classes: " + str(classes_encoder)\
               ,",  embedding dim: " + str(INPUT_NET)\
               +",  conv layers: " + str(conv_layers_encoder)\
@@ -84,7 +137,7 @@ DESCRIPTION = ["LOSS: product loss multiplied by mean ", " Image size: " + str(S
               ,",  number filters: " + str(number_filters)\
               ,",  augments compared: " + str(augments_compared)\
               +",  heads: " + str(heads)\
-              +",  Policy: Ensembe 10c, 20c, 30c and their preds " + "  " + encoder_name]
+              +",  Policy: crop 56, 66 " + "  " + encoder_name]
 
 
 def encode(image):
@@ -96,22 +149,65 @@ def encode(image):
 
     original_image = original_image.to('cuda')
 
-    if encoder_name == "supervised":
+    if encoder_name == SUPERVISED_FILE_NAME:
         encoding1, _ = encoder(original_image)
-
+    elif encoder_name == "simCLR":
+        encoding1 = encoder(original_image)
     else:
         encoding1, pred, _, _, _, _ = encoder(original_image)
 
     #encoding = encode_one_net(image)
 
-    encoding2, pred2, _, _, _, _ = encoder2(original_image)
-    encoding3, pred3, _, _, _, _ = encoder3(original_image)
-    encoding4, pred4, _, _, _, _ = encoder4(original_image)
-    encoding5, pred5, _, _, _, _ = encoder5(original_image)
+    # encoding2, pred2, _, _, _, _ = encoder2(original_image)
+    # encoding3, pred3, _, _, _, _ = encoder3(original_image)
+    # encoding4, pred4, _, _, _, _ = encoder4(original_image)
+    # encoding5, pred5, _, _, _, _ = encoder5(original_image)
+    # encoding6, pred6, _, _, _, _ = encoder6(original_image)
+    # encoding7, pred7, _, _, _, _ = encoder7(original_image)
+    # encoding8, pred8, _, _, _, _ = encoder8(original_image)
+    # encoding9, pred9, _, _, _, _ = encoder9(original_image)
+    # encoding10, pred10, _, _, _, _ = encoder10(original_image)
+    # encoding11, pred11, _, _, _, _ = encoder11(original_image)
+    # encoding12, pred12, _, _, _, _ = encoder12(original_image)
+    # encoding13, pred13, _, _, _, _ = encoder13(original_image)
+    # encoding14, pred14, _, _, _, _ = encoder14(original_image)
+    # encoding15, pred15, _, _, _, _ = encoder15(original_image)
+    #
+    # encoding = torch.cat([encoding1,
+    #                       encoding2,
+    #                       encoding3,
+    #                       encoding4,
+    #                       encoding5,
+    #                       encoding6,
+    #                       encoding7,
+    #                       encoding8,
+    #                       encoding9,
+    #                       encoding10,
+    #                       encoding11,
+    #                       encoding12,
+    #                       encoding13,
+    #                       encoding14,
+    #                       encoding15], dim=1)
+    #
+    # preds_ensemble = torch.cat([pred,
+    #                       pred2,
+    #                       pred3,
+    #                       pred4,
+    #                       pred5,
+    #                       pred6,
+    #                       pred7,
+    #                       pred8,
+    #                       pred9,
+    #                       pred10,
+    #                       pred11,
+    #                       pred12,
+    #                       pred13,
+    #                       pred14,
+    #                       pred15], dim=1)
+    #
+    # encoding_ensemble = torch.cat([encoding, preds_ensemble], dim=1)
 
-    encoding = torch.cat([encoding1, encoding2, encoding3, encoding4, encoding5, pred, pred2, pred3, pred4, pred5], dim=1)
-
-    return encoding
+    return encoding1
 
 
 def forward_block(X, ids, classifier, optimizer, train, targets):
@@ -129,7 +225,12 @@ def forward_block(X, ids, classifier, optimizer, train, targets):
     with torch.no_grad():
         encodings = encode(images)
 
-    preds = classifier(encodings.detach())
+    # if encoder_name == SUPERVISED_FILE_NAME:
+    #     preds = encodings.detach()
+    # else:
+    #     preds = classifier(encodings.detach())
+
+    preds = classifier(encodings)
 
     # pad = (96 - SIZE) // 2
     # original_image = scale(images, SIZE, pad, BATCH_SIZE_DEFAULT)
@@ -137,7 +238,7 @@ def forward_block(X, ids, classifier, optimizer, train, targets):
     # original_image = original_image.to('cuda')
     # preds = classifier(original_image)
 
-    t = [x%10 for x in targets[ids]]
+    t = [x % 10 for x in targets[ids]]
 
     tensor_targets = torch.LongTensor(t).unsqueeze(dim=1).cuda()
     y_onehot = torch.FloatTensor(BATCH_SIZE_DEFAULT, 10).cuda()
@@ -147,8 +248,6 @@ def forward_block(X, ids, classifier, optimizer, train, targets):
     cross_entropy_loss = - (y_onehot * torch.log(preds)).sum(dim=1).mean()
 
     if train:
-        # for p in encoder.parameters():
-        #     print(p.name, p.data)
 
         for p in encoder.parameters():
             p.requires_grad = False

@@ -17,13 +17,17 @@ LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 300000
 
 BATCH_SIZE_DEFAULT = 100
+
 INPUT_NET = 4608
 SIZE = 32
-crop_size = 76
+
+crop_size = 66
+crop_size2 = 56
+
 NETS = 1
-UNSUPERVISED = True
+UNSUPERVISED = False
 DROPOUT = [0.0, 0.0, 0.0, 0.0, 0.0]
-classes_n = 20
+classes_n = 10
 CLASSES = [classes_n, classes_n, classes_n, classes_n, classes_n]
 DESCRIPTION = " Image size: "+str(SIZE) + " , Dropout2d: "+str(DROPOUT)+" , Classes: "+str(CLASSES)
 
@@ -71,6 +75,11 @@ def encode_4_patches(image, encoder):
     crop_preparation = crop_preparation[:, :, crop_pad:96 - crop_pad, crop_pad:96 - crop_pad]
     crop_prep_horizontal = horizontal_flip(crop_preparation)
 
+    crop_pad2 = (96 - crop_size2) // 2
+    crop_preparation2 = scale(image, crop_size2, crop_pad2, BATCH_SIZE_DEFAULT)
+    crop_preparation2 = crop_preparation2[:, :, crop_pad2:96 - crop_pad2, crop_pad2:96 - crop_pad2]
+    crop_prep_horizontal2 = horizontal_flip(crop_preparation2)
+
     horiz_f = horizontal_flip(image, BATCH_SIZE_DEFAULT)
 
     soft_bin_hf = binary(horiz_f)
@@ -98,8 +107,8 @@ def encode_4_patches(image, encoder):
 
     ids = np.random.choice(len(augments.keys()), size=1, replace=False)
 
-    image_1 = color_jitter(random_crop(image, SIZE, BATCH_SIZE_DEFAULT))  # augments[ids[0]]
-    image_2 = color_jitter(random_crop(horiz_f, SIZE, BATCH_SIZE_DEFAULT))
+    image_1 = color_jitter(random_crop(crop_preparation2, SIZE, BATCH_SIZE_DEFAULT))  # augments[ids[0]]
+    image_2 = color_jitter(random_crop(crop_prep_horizontal2, SIZE, BATCH_SIZE_DEFAULT))
     image_3 = color_jitter(random_crop(crop_preparation, SIZE, BATCH_SIZE_DEFAULT))
     image_4 = color_jitter(random_crop(crop_prep_horizontal, SIZE, BATCH_SIZE_DEFAULT))
     image_5 = color_jitter(original_image)
@@ -211,7 +220,8 @@ def save_image(original_image, index, name, cluster=0):
 
 def measure_acc_augments(X_test, colons, targets, total_mean):
     print_dict = {1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 0: []}
-    runs = len(X_test)//BATCH_SIZE_DEFAULT
+    test_batch = 100
+    runs = len(X_test)//test_batch
     avg_loss = 0
 
     print()
@@ -220,7 +230,7 @@ def measure_acc_augments(X_test, colons, targets, total_mean):
 
 
     for j in range(runs):
-        test_ids = range(j * BATCH_SIZE_DEFAULT, (j + 1) * BATCH_SIZE_DEFAULT)
+        test_ids = range(j * test_batch, (j + 1) * test_batch)
         optimizers = []
         p1, p2, p3, p4, p5, p6, mim, total_mean, orig_image, aug_ids = forward_block(X_test, test_ids, colons, optimizers, False, total_mean)
 
@@ -268,8 +278,8 @@ def measure_acc_augments(X_test, colons, targets, total_mean):
     print()
     print("AUGMENTS avg loss: ", avg_loss / runs,
           " miss: ", total_miss,
-          " data: ", runs * BATCH_SIZE_DEFAULT,
-          " miss percent: ", total_miss / (runs * BATCH_SIZE_DEFAULT))
+          " data: ", runs * test_batch,
+          " miss percent: ", total_miss / (runs * test_batch))
     print("Clusters found: " + str(len(clusters)) + " " + str(clusters))
     print()
 
@@ -434,15 +444,15 @@ def print_info(p1, p2, p3, p4, p5, p6, targets, test_ids):
         string = str(index.data.cpu().numpy()) + " " + str(index2.data.cpu().numpy()) + " " + str(
             index3.data.cpu().numpy()) + " " + str(index4.data.cpu().numpy()) + " " + str(index5.data.cpu().numpy()) + " " + str(index6.data.cpu().numpy()) + ", "
 
-        if i % cluster == 0:
-            print("a ", labels_to_imags[counter_cluster], " 1: ", p1[i].data.cpu().numpy(), " ", "rc")
-            print("a ", labels_to_imags[counter_cluster], " 2: ", p2[i].data.cpu().numpy(), " ", "rc hf")
-            print("a ", labels_to_imags[counter_cluster], " 3: ", p3[i].data.cpu().numpy(), " ", "rc")
-            print("a ", labels_to_imags[counter_cluster], " 4: ", p4[i].data.cpu().numpy(), " ", "rc hf")
-            print("a ", labels_to_imags[counter_cluster], " 5: ", p5[i].data.cpu().numpy(), " ", "original jittered")
-            print("a ", labels_to_imags[counter_cluster], " 6: ", p6[i].data.cpu().numpy(), " ", "augment orig hf jittered")
-            print()
-            counter_cluster += 1
+        # if i % cluster == 0:
+        #     print("a ", labels_to_imags[counter_cluster], " 1: ", p1[i].data.cpu().numpy(), " ", "rc")
+        #     print("a ", labels_to_imags[counter_cluster], " 2: ", p2[i].data.cpu().numpy(), " ", "rc hf")
+        #     print("a ", labels_to_imags[counter_cluster], " 3: ", p3[i].data.cpu().numpy(), " ", "rc")
+        #     print("a ", labels_to_imags[counter_cluster], " 4: ", p4[i].data.cpu().numpy(), " ", "rc hf")
+        #     print("a ", labels_to_imags[counter_cluster], " 5: ", p5[i].data.cpu().numpy(), " ", "original jittered")
+        #     print("a ", labels_to_imags[counter_cluster], " 6: ", p6[i].data.cpu().numpy(), " ", "augment orig hf jittered")
+        #     print()
+        #     counter_cluster += 1
 
         label = targets[test_ids[i]]
         if label == 10:

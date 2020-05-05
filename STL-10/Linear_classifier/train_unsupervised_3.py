@@ -20,14 +20,15 @@ fcn = models.segmentation.fcn_resnet101(pretrained=True).eval()
 LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 300000
 
-BATCH_SIZE_DEFAULT = 1
-INPUT_NET = 8192
-SIZE = 44
+BATCH_SIZE_DEFAULT = 150
+TEST_BATCH = 150
+INPUT_NET = 4608
+SIZE = 32
 NETS = 1
-UNSUPERVISED = True
+UNSUPERVISED = False
 #DROPOUT = [0.90, 0.90, 0.90, 0.90, 0.90]
-DROPOUT = [0.0, 0.0, 0.0, 0.0, 0.0]
-class_n = 20
+DROPOUT = 0.6
+class_n = 10
 CLASSES = [class_n, class_n, class_n, class_n, class_n]
 DESCRIPTION = " Image size: "+str(SIZE) + " , Dropout2d: "+str(DROPOUT)+" , Classes: "+str(CLASSES)
 
@@ -65,122 +66,61 @@ def get_targets(number_classes):
 
 
 def encode_4_patches(image, encoder):
-    # pad = (96 - SIZE) // 2
-    # image /= 255
-    #
-    # horiz_f = horizontal_flip(image, BATCH_SIZE_DEFAULT)
-    # original_image = scale(image, SIZE, pad, BATCH_SIZE_DEFAULT)
-    # original_image = original_image[:, :, pad:96-pad, pad:96-pad]
-    #
-    # ids = random.randint(0, 9)
-    #
-    # image_3 = original_image
-    #
-    # if ids == 0:
-    #     image_3 = scale(original_image, SIZE - 8, 4, BATCH_SIZE_DEFAULT)
-    # elif ids == 1:
-    #     rot = rotate(image, 24, BATCH_SIZE_DEFAULT)
-    #     scale_rot = scale(rot, SIZE, pad, BATCH_SIZE_DEFAULT)
-    #     image_3 = scale_rot[:, :, pad:96 - pad, pad:96 - pad]
-    # elif ids == 2:
-    #     rev_rot = rotate(image, -24, BATCH_SIZE_DEFAULT)
-    #     scale_rev_rot = scale(rev_rot, SIZE, pad, BATCH_SIZE_DEFAULT)
-    #     image_3 = scale_rev_rot[:, :, pad:96 - pad, pad:96 - pad]
-    # elif ids == 3:
-    #     image_3 = sobel_filter_x(original_image, BATCH_SIZE_DEFAULT)
-    # elif ids == 4:
-    #     image_3 = sobel_filter_y(original_image, BATCH_SIZE_DEFAULT)
-    # elif ids == 5:
-    #     image_3 = sobel_total(original_image, BATCH_SIZE_DEFAULT)
-    # elif ids == 6:
-    #     image_3 = torch.abs(1 - original_image)
-    # elif ids == 7:
-    #     image_soft_bin = binary(image)
-    #     soft_bin = scale(image_soft_bin, SIZE, pad, BATCH_SIZE_DEFAULT)
-    #     soft_bin = soft_bin[:, :, pad:96 - pad, pad:96 - pad]
-    #     image_3 = torch.abs(1 - soft_bin)
-    # elif ids == 8:
-    #     image_3 = scale(original_image, SIZE - 12, 6, BATCH_SIZE_DEFAULT)
-    #
-    # image_1 = random_crop(image, SIZE, BATCH_SIZE_DEFAULT)
-    # image_2 = random_crop(horiz_f, SIZE, BATCH_SIZE_DEFAULT)
-
     pad = (96 - SIZE) // 2
     image /= 255
 
-    crop_size = 60
+    crop_size = 56
     crop_pad = (96 - crop_size) // 2
     crop_preparation = scale(image, crop_size, crop_pad, BATCH_SIZE_DEFAULT)
     crop_preparation = crop_preparation[:, :, crop_pad:96 - crop_pad, crop_pad:96 - crop_pad]
-    crop_prep_horizontal = horizontal_flip(crop_preparation)
+    # crop_prep_horizontal = horizontal_flip(crop_preparation)
 
-    image_soft_bin = binary(image)
-    soft_bin = scale(image_soft_bin, SIZE, pad, BATCH_SIZE_DEFAULT)
-    soft_bin = soft_bin[:, :, pad:96 - pad, pad:96 - pad]
-    rev_soft_bin = torch.abs(1 - soft_bin)
+    crop_size2 = 66
+    crop_pad2 = (96 - crop_size2) // 2
+    crop_preparation2 = scale(image, crop_size2, crop_pad2, BATCH_SIZE_DEFAULT)
+    crop_preparation2 = crop_preparation2[:, :, crop_pad2:96 - crop_pad2, crop_pad2:96 - crop_pad2]
+    crop_prep_horizontal2 = horizontal_flip(crop_preparation2)
 
     horiz_f = horizontal_flip(image, BATCH_SIZE_DEFAULT)
+
     soft_bin_hf = binary(horiz_f)
     soft_bin_hf = scale(soft_bin_hf, SIZE, pad, BATCH_SIZE_DEFAULT)
     soft_bin_hf = soft_bin_hf[:, :, pad:96 - pad, pad:96 - pad]
     rev_soft_bin_hf = torch.abs(1 - soft_bin_hf)
 
-    rot = rotate(image, 26, BATCH_SIZE_DEFAULT)
-    scale_rot = scale(rot, SIZE, pad, BATCH_SIZE_DEFAULT)
-    scale_rot = scale_rot[:, :, pad:96 - pad, pad:96 - pad]
-
-    rev_rot = rotate(image, 40, BATCH_SIZE_DEFAULT)
-    scale_rev_rot = scale(rev_rot, SIZE, pad, BATCH_SIZE_DEFAULT)
-    scale_rev_rot = scale_rev_rot[:, :, pad:96 - pad, pad:96 - pad]
-
     original_image = scale(image, SIZE, pad, BATCH_SIZE_DEFAULT)
-    original_image = original_image[:, :, pad:96-pad, pad:96-pad]
+    original_image = original_image[:, :, pad:96 - pad, pad:96 - pad]
 
     original_hfliped = horizontal_flip(original_image, BATCH_SIZE_DEFAULT)
 
     augments = {0: color_jitter(original_hfliped),
-                1: scale(original_image, SIZE-8, 4, BATCH_SIZE_DEFAULT),
-                2: scale_rot,
-                3: scale_rev_rot,
-                4: random_erease(color_jitter(original_image), BATCH_SIZE_DEFAULT),
-                5: sobel_filter_x(original_image, BATCH_SIZE_DEFAULT),
-                6: sobel_filter_y(original_image, BATCH_SIZE_DEFAULT),
-                7: sobel_total(original_image, BATCH_SIZE_DEFAULT),
-                8: sobel_filter_x(original_hfliped, BATCH_SIZE_DEFAULT),
-                9: sobel_filter_y(original_hfliped, BATCH_SIZE_DEFAULT),
-                10: sobel_total(original_hfliped, BATCH_SIZE_DEFAULT),
-                # 11: binary(original_image),
-                # 12: binary(horizontal_flip(original_image, BATCH_SIZE_DEFAULT)),
-                # 13: binary(scale_rot),
-                # 14: binary(scale_rev_rot),
-                11: soft_bin,
-                12: rev_soft_bin,
-                13: soft_bin_hf,
-                14: rev_soft_bin_hf,
-                15: torch.abs(1 - original_image),
-                16: rotate(original_hfliped, -40, BATCH_SIZE_DEFAULT),
-                17: rotate(original_hfliped, 40, BATCH_SIZE_DEFAULT),
-                18: scale(original_hfliped, SIZE - 10, 5, BATCH_SIZE_DEFAULT),
-                19: scale(original_image, SIZE - 12, 6, BATCH_SIZE_DEFAULT),
-                20: color_jitter(original_image)
+                1: scale(original_hfliped, SIZE-8, 4, BATCH_SIZE_DEFAULT),
+                2: random_erease(color_jitter(original_hfliped), BATCH_SIZE_DEFAULT),
+                3: sobel_filter_x(original_hfliped, BATCH_SIZE_DEFAULT),
+                4: sobel_filter_y(original_hfliped, BATCH_SIZE_DEFAULT),
+                5: sobel_total(original_hfliped, BATCH_SIZE_DEFAULT),
+                6: soft_bin_hf,
+                7: rev_soft_bin_hf,
+                8: torch.abs(1 - original_hfliped),
+                9: rotate(original_hfliped, 40),
+                10: scale(original_hfliped, SIZE - 12, 6, BATCH_SIZE_DEFAULT),
                 }
-
-    # augments = {
-    #             0: scale(original_hfliped, SIZE - 12, 6, BATCH_SIZE_DEFAULT),
-    #             1: random_crop(crop_preparation, SIZE, BATCH_SIZE_DEFAULT),
-    #             2: random_crop(crop_prep_horizontal, SIZE, BATCH_SIZE_DEFAULT),
-    #             3: original_image,
-    #             4: scale_rev_rot,
-    #             # 5: sobel_filter_x(original_image, BATCH_SIZE_DEFAULT),
-    #             # 6: sobel_total(original_image, BATCH_SIZE_DEFAULT),
-    #             # 7: sobel_filter_y(original_hfliped, BATCH_SIZE_DEFAULT)
-    #             }
 
     ids = np.random.choice(len(augments), size=len(augments.keys()), replace=False)
 
     image_1 = color_jitter(random_crop(crop_preparation, SIZE, BATCH_SIZE_DEFAULT))
-    image_2 = color_jitter(random_crop(crop_prep_horizontal, SIZE, BATCH_SIZE_DEFAULT))
+    image_2 = color_jitter(random_crop(crop_prep_horizontal2, SIZE, BATCH_SIZE_DEFAULT))
     image_3 = augments[ids[2]]
+    image_4 = original_image
+
+    # numpy_cluster = torch.zeros([14, 1, SIZE, SIZE])
+    # counter = 0
+    # for index in ids:
+    #     numpy_cluster[counter] = augments[index].cpu().detach()[index]
+    #     counter += 1
+    # if counter > 0:
+    #     save_cluster(numpy_cluster, key, iteration)
+
 
     # image_1 = augments[ids[0]]
     # image_2 = augments[ids[1]]
@@ -189,27 +129,29 @@ def encode_4_patches(image, encoder):
     # show_gray(image_1)
     # show_gray(image_2)
     # show_gray(image_3)
+    # show_gray(image_4)
 
     _, test_preds_1, help_preds_1_1, help_preds_1_2,  help_preds_1_3, help_preds_1_4 = encoder(image_1.to('cuda'))
     _, test_preds_2, help_preds_2_1, help_preds_2_2,  help_preds_2_3, help_preds_2_4 = encoder(image_2.to('cuda'))
     _, test_preds_3, help_preds_3_1, help_preds_3_2,  help_preds_3_3, help_preds_3_4 = encoder(image_3.to('cuda'))
+    _, test_preds_4, help_preds_4_1, help_preds_4_2, help_preds_4_3, help_preds_4_4 = encoder(image_4.to('cuda'))
 
-    return test_preds_1, test_preds_2, test_preds_3, \
-           help_preds_1_1, help_preds_2_1,  help_preds_3_1, \
-           help_preds_1_2, help_preds_2_2, help_preds_3_2, \
-           help_preds_1_3, help_preds_2_3, help_preds_3_3, \
-           help_preds_1_4, help_preds_2_4, help_preds_3_4, \
+    return test_preds_1, test_preds_2, test_preds_3, test_preds_4,\
+           help_preds_1_1, help_preds_2_1,  help_preds_3_1, help_preds_4_1,\
+           help_preds_1_2, help_preds_2_2, help_preds_3_2, help_preds_4_2,\
+           help_preds_1_3, help_preds_2_3, help_preds_3_3, help_preds_4_3,\
+           help_preds_1_4, help_preds_2_4, help_preds_3_4, help_preds_4_4,\
            original_image, ids
 
 
-def entropy_minmax_loss(targets, preds_1, preds_2, preds_3):
+def entropy_minmax_loss(targets, preds_1, preds_2, preds_3, preds_4):
     # batch_cross_entropy_1 = batch_entropy(preds_1, targets)
     # batch_cross_entropy_2 = batch_entropy(preds_2, targets)
     # batch_cross_entropy_3 = batch_entropy(preds_3, targets)
     #
     # total_batch_cross_entropy = batch_cross_entropy_1 + batch_cross_entropy_2 + batch_cross_entropy_3
 
-    product = preds_1 * preds_2 * preds_3
+    product = preds_1 * preds_2 * preds_3 * preds_4
     product = product.mean(dim=0)
     log_product = torch.log(product)
     class_mean = - log_product.mean(dim=0)
@@ -242,20 +184,20 @@ def forward_block(X, ids, encoder, optimizer, train, total_mean):
     images = x_tensor.transpose(0, 1)
     images = images.transpose(2, 3)
 
-    test_preds_1, test_preds_2, test_preds_3, \
-    help_preds_1_1, help_preds_2_1, help_preds_3_1, \
-    help_preds_1_2, help_preds_2_2, help_preds_3_2, \
-    help_preds_1_3, help_preds_2_3, help_preds_3_3, \
-    help_preds_1_4, help_preds_2_4, help_preds_3_4,\
+    test_preds_1, test_preds_2, test_preds_3, test_preds_4, \
+    help_preds_1_1, help_preds_2_1, help_preds_3_1, help_preds_4_1, \
+    help_preds_1_2, help_preds_2_2, help_preds_3_2, help_preds_4_2, \
+    help_preds_1_3, help_preds_2_3, help_preds_3_3, help_preds_4_3, \
+    help_preds_1_4, help_preds_2_4, help_preds_3_4, help_preds_4_4, \
     orig_image, aug_ids = encode_4_patches(images, encoder)
 
-    test_total_loss = entropy_minmax_loss(get_targets(CLASSES[0]), test_preds_1, test_preds_2, test_preds_3)
-    help_total_loss_1 = entropy_minmax_loss(get_targets(CLASSES[1]), help_preds_1_1, help_preds_2_1, help_preds_3_1)
-    help_total_loss_2 = entropy_minmax_loss(get_targets(CLASSES[2]), help_preds_1_2, help_preds_2_2, help_preds_3_2)
-    help_total_loss_3 = entropy_minmax_loss(get_targets(CLASSES[3]), help_preds_1_3, help_preds_2_3, help_preds_3_3)
-    help_total_loss_4 = entropy_minmax_loss(get_targets(CLASSES[4]), help_preds_1_4, help_preds_2_4, help_preds_3_4)
+    test_total_loss = entropy_minmax_loss(get_targets(CLASSES[0]), test_preds_1, test_preds_2, test_preds_3, test_preds_4)
+    help_total_loss_1 = entropy_minmax_loss(get_targets(CLASSES[1]), help_preds_1_1, help_preds_2_1, help_preds_3_1, help_preds_4_1)
+    help_total_loss_2 = entropy_minmax_loss(get_targets(CLASSES[2]), help_preds_1_2, help_preds_2_2, help_preds_3_2, help_preds_4_2)
+    help_total_loss_3 = entropy_minmax_loss(get_targets(CLASSES[3]), help_preds_1_3, help_preds_2_3, help_preds_3_3, help_preds_4_3)
+    help_total_loss_4 = entropy_minmax_loss(get_targets(CLASSES[4]), help_preds_1_4, help_preds_2_4, help_preds_3_4, help_preds_4_4)
 
-    m_preds = (test_preds_1 + test_preds_2 + test_preds_3) / 3
+    m_preds = (test_preds_1 + test_preds_2 + test_preds_3 + test_preds_4) / 4
     total_mean = 0.99 * total_mean + 0.01 * m_preds.mean(dim=0).detach()
 
     all_losses = test_total_loss + help_total_loss_1 + help_total_loss_2 + help_total_loss_3 + help_total_loss_4
@@ -265,7 +207,7 @@ def forward_block(X, ids, encoder, optimizer, train, total_mean):
         all_losses.backward(retain_graph=True)
         optimizer.step()
 
-    return test_preds_1, test_preds_2, test_preds_3, test_total_loss, total_mean, orig_image, aug_ids
+    return test_preds_1, test_preds_2, test_preds_3, test_preds_4, test_total_loss, total_mean, orig_image, aug_ids
 
 
 def batch_entropy(pred, targets):
@@ -313,7 +255,7 @@ def save_image(original_image, index, name, cluster=0):
 
 def measure_acc_augments(X_test, colons, targets, total_mean):
     print_dict = {1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 0: []}
-    runs = len(X_test)//BATCH_SIZE_DEFAULT
+    runs = len(X_test)//TEST_BATCH
     avg_loss = 0
 
     print()
@@ -321,17 +263,18 @@ def measure_acc_augments(X_test, colons, targets, total_mean):
     print()
 
     for j in range(runs):
-        test_ids = range(j * BATCH_SIZE_DEFAULT, (j + 1) * BATCH_SIZE_DEFAULT)
+        test_ids = range(j * TEST_BATCH, (j + 1) * TEST_BATCH)
         optimizers = []
-        p1, p2, p3, mim, total_mean, orig_image, aug_ids = forward_block(X_test, test_ids, colons, optimizers, False, total_mean)
+        p1, p2, p3, p4, mim, total_mean, orig_image, aug_ids = forward_block(X_test, test_ids, colons, optimizers, False, total_mean)
 
         avg_loss += mim.item()
         for i in range(p1.shape[0]):
             val, index = torch.max(p1[i], 0)
             val, index2 = torch.max(p2[i], 0)
             val, index3 = torch.max(p3[i], 0)
+            val, index4 = torch.max(p4[i], 0)
 
-            preds = [index.data.cpu().numpy(), index2.data.cpu().numpy(), index3.data.cpu().numpy()]
+            preds = [index.data.cpu().numpy(), index2.data.cpu().numpy(), index3.data.cpu().numpy(), index4.data.cpu().numpy()]
 
             preds = list(preds)
             preds = [int(x) for x in preds]
@@ -365,8 +308,8 @@ def measure_acc_augments(X_test, colons, targets, total_mean):
     print()
     print("AUGMENTS avg loss: ", avg_loss / runs,
           " miss: ", total_miss,
-          " data: ", runs * BATCH_SIZE_DEFAULT,
-          " miss percent: ", total_miss / (runs * BATCH_SIZE_DEFAULT))
+          " data: ", runs * TEST_BATCH,
+          " miss percent: ", total_miss / (runs * TEST_BATCH))
     print("Clusters found: " + str(len(clusters)) + " " + str(clusters))
     print()
 
@@ -452,7 +395,7 @@ def train():
 
         ids = np.random.choice(len(X_train), size=BATCH_SIZE_DEFAULT, replace=False)
         train = True
-        p1, p2, p3, mim, total_mean, orig_image, aug_ids = forward_block(X_train, ids, encoder, optimizer, train, total_mean)
+        p1, p2, p3, p4, mim, total_mean, orig_image, aug_ids = forward_block(X_train, ids, encoder, optimizer, train, total_mean)
 
         if iteration % EVAL_FREQ_DEFAULT == 0:
             encoder.eval()
@@ -472,8 +415,8 @@ def train():
             for i in range(1, 11):
                 test_ids += random.sample(test_dict[i], samples_per_cluster)
 
-            p1, p2, p3, mim, total_mean, orig_image, aug_ids = forward_block(X_test, test_ids, encoder, optimizer, False, total_mean)
-            classes_dict, numbers_classes_dict = print_info(p1, p2, p3, targets, test_ids)
+            p1, p2, p3, p4, mim, total_mean, orig_image, aug_ids = forward_block(X_test, test_ids, encoder, optimizer, False, total_mean)
+            classes_dict, numbers_classes_dict = print_info(p1, p2, p3, p4, targets, test_ids)
 
             loss, clusters = measure_acc_augments(X_test, encoder, targets, total_mean)
 
@@ -512,7 +455,7 @@ def to_tensor(X):
     return X
 
 
-def print_info(p1, p2, p3, targets, test_ids):
+def print_info(p1, p2, p3, p4, targets, test_ids):
     print_dict = {1: "", 2: "", 3: "", 4: "", 5: "", 6: "", 7: "", 8: "", 9: "", 0: ""}
     #image_dict = {1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 0: []}
     image_dict = {x: [] for x in range(CLASSES[0])}
@@ -524,18 +467,19 @@ def print_info(p1, p2, p3, targets, test_ids):
         val, index = torch.max(p1[i], 0)
         val, index2 = torch.max(p2[i], 0)
         val, index3 = torch.max(p3[i], 0)
+        val, index4 = torch.max(p4[i], 0)
 
-        verdict = most_frequent([int(index.data.cpu().numpy()), int(index2.data.cpu().numpy()), int(index3.data.cpu().numpy())])
+        verdict = most_frequent([int(index.data.cpu().numpy()), int(index2.data.cpu().numpy()), int(index3.data.cpu().numpy()), int(index4.data.cpu().numpy())])
 
         string = str(index.data.cpu().numpy()) + " " + str(index2.data.cpu().numpy()) + " " + str(
-            index3.data.cpu().numpy()) + ", "
+            index3.data.cpu().numpy()) + " " + str(index4.data.cpu().numpy()) +", "
 
-        if i % cluster == 0:
-            print("a ", labels_to_imags[counter_cluster], " 1: ", p1[i].data.cpu().numpy(), " ", "rc")
-            print("a ", labels_to_imags[counter_cluster], " 2: ", p2[i].data.cpu().numpy(), " ", "rc hf")
-            print("a ", labels_to_imags[counter_cluster], " 3: ", p3[i].data.cpu().numpy(), " ", "augment")
-            print()
-            counter_cluster += 1
+        # if i % cluster == 0:
+        #     print("a ", labels_to_imags[counter_cluster], " 1: ", p1[i].data.cpu().numpy(), " ", "rc")
+        #     print("a ", labels_to_imags[counter_cluster], " 2: ", p2[i].data.cpu().numpy(), " ", "rc hf")
+        #     print("a ", labels_to_imags[counter_cluster], " 3: ", p3[i].data.cpu().numpy(), " ", "augment")
+        #     print()
+        #     counter_cluster += 1
 
         label = targets[test_ids[i]]
         if label == 10:

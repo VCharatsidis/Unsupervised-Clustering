@@ -6,14 +6,14 @@ import torch
 
 
 
-class SupervisedClassifier(nn.Module):
+class SimCLRNet(nn.Module):
     """
     This class implements a Multi-layer Perceptron in PyTorch.
     It handles the different layers and parameters of the model.
     Once initialized an MLP object can perform forward.
     """
 
-    def __init__(self, n_inputs):
+    def __init__(self, n_channels, n_inputs, dp):
         """
         Initializes MLP object.
         Args:
@@ -26,10 +26,10 @@ class SupervisedClassifier(nn.Module):
                      This number is required in order to specify the
                      output dimensions of the MLP
         """
-        super(SupervisedClassifier, self).__init__()
+        super(SimCLRNet, self).__init__()
 
         self.conv = nn.Sequential(
-            nn.Conv2d(1, 64, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(n_channels, 64, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
             #
@@ -44,58 +44,56 @@ class SupervisedClassifier(nn.Module):
             nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
+            #
+            # nn.Conv2d(512, 768, kernel_size=3, stride=1, padding=1),
+            # nn.ReLU(),
+            # nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
+            #
+            # nn.Conv2d(768, 512, kernel_size=3, stride=1, padding=1),
+            # nn.BatchNorm2d(512),
+            # nn.ReLU(),
+            # nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
+
 
 
             # nn.Conv2d(n_channels, 64, kernel_size=(3, 3), stride=1, padding=1),
-            # nn.BatchNorm2d(64),
             # nn.ReLU(),
-            # nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1),
+            # nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
             #
             # nn.Conv2d(64, 128, kernel_size=(3, 3), stride=1, padding=1),
-            # nn.BatchNorm2d(128),
             # nn.ReLU(),
-            # nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1),
+            # nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
             #
             # nn.Conv2d(128, 256, kernel_size=(3, 3), stride=1, padding=1),
-            # nn.BatchNorm2d(256),
             # nn.ReLU(),
             #
             # nn.Conv2d(256, 256, kernel_size=(3, 3), stride=1, padding=1),
-            # nn.BatchNorm2d(256),
             # nn.ReLU(),
             #
-            # nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1),
+            # nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
             #
             # nn.Conv2d(256, 512, kernel_size=(3, 3), stride=1, padding=1),
-            # nn.BatchNorm2d(512),
             # nn.ReLU(),
             #
             # nn.Conv2d(512, 512, kernel_size=(3, 3), stride=1, padding=1),
-            # nn.BatchNorm2d(512),
             # nn.ReLU(),
             #
-            # nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1),
+            # nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
             #
             # nn.Conv2d(512, 512, kernel_size=(3, 3), stride=1, padding=1),
-            # nn.BatchNorm2d(512),
             # nn.ReLU(),
             #
-            # nn.Conv2d(512, 725, kernel_size=(3, 3), stride=1, padding=1),
-            # nn.BatchNorm2d(725),
+            # nn.Conv2d(512, 512, kernel_size=(3, 3), stride=1, padding=1),
             # nn.ReLU(),
             #
-            # nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1),
+            # nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
             # nn.AvgPool2d(kernel_size=(1, 1), stride=1, padding=0),
         )
 
+        self.head_input = 128
         self.embeding_linear = nn.Sequential(
-            nn.Linear(n_inputs, 128),
+            nn.Linear(n_inputs, self.head_input),
             nn.ReLU(),
-        )
-
-        self.test_linear = nn.Sequential(
-            nn.Linear(128, 10),
-            nn.Softmax(dim=1)
         )
 
 
@@ -111,8 +109,6 @@ class SupervisedClassifier(nn.Module):
 
         conv = self.conv(x)
         encoding = torch.flatten(conv, 1)
-        embedding = self.embeding_linear(encoding)
+        embeddings = self.embeding_linear(encoding)
 
-        test_preds = self.test_linear(embedding)
-
-        return embedding, test_preds
+        return embeddings
