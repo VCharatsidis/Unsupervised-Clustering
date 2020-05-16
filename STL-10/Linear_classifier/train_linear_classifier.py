@@ -19,7 +19,7 @@ LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 500000
 
 BATCH_SIZE_DEFAULT = 200
-INPUT_NET = 128
+INPUT_NET = 3026
 SIZE = 32
 NETS = 1
 EVAL_FREQ_DEFAULT = 50
@@ -36,16 +36,16 @@ conv_layers_encoder = 4
 number_filters = 512
 linear_layers_encoder = 1
 
-batch_size = 150
+batch_size = 100
 lr = 1e-4
 
-augments_compared = 4
+augments_compared = 6
 heads = 1
 
 # encoder_name = "push_best_loss"
 # encoder_name = "push_most_clusters"
 encoder_name = "most_clusters_encoder"
-encoder_name = "best_loss_encoder"
+# encoder_name = "best_loss_encoder"
 SUPERVISED_FILE_NAME = "supervised_encoder_loss"
 # # SUPERVISED_FILE_NAME = "supervised_encoder_acc"
 # encoder_name = SUPERVISED_FILE_NAME
@@ -123,6 +123,16 @@ encoder_name15 = "best_loss_encoder_c150_4aug_cr66_80"
 encoder15 = torch.load("models\\"+encoder_name15+".model")
 encoder15.eval()
 
+############
+
+encoder_name16 = "most_clusters_encoder_30c_crop56_66_300k_train"
+encoder16 = torch.load("models\\"+encoder_name16+".model")
+encoder16.eval()
+
+encoder_name17 = "best_loss_encoder_c30_crop56_66_300k_train"
+encoder17 = torch.load("models\\"+encoder_name17+".model")
+encoder17.eval()
+
 
 
 DESCRIPTION = ["Supervised NET with 75% augments per batch."]
@@ -137,7 +147,7 @@ DESCRIPTION = ["LOSS: product loss multiplied by mean ", " Image size: " + str(S
               ,",  number filters: " + str(number_filters)\
               ,",  augments compared: " + str(augments_compared)\
               +",  heads: " + str(heads)\
-              +",  Policy: crop 56, 66 " + "  " + encoder_name]
+              +",  Policy: Ensembe 10c, 20c, 30c, 40c, 50c, 90c, 150c, 30c_300k   best_loss_encoder_c150_4aug_cr66_80 " + "  " + encoder_name]
 
 
 def encode(image):
@@ -158,56 +168,60 @@ def encode(image):
 
     #encoding = encode_one_net(image)
 
-    # encoding2, pred2, _, _, _, _ = encoder2(original_image)
-    # encoding3, pred3, _, _, _, _ = encoder3(original_image)
-    # encoding4, pred4, _, _, _, _ = encoder4(original_image)
-    # encoding5, pred5, _, _, _, _ = encoder5(original_image)
-    # encoding6, pred6, _, _, _, _ = encoder6(original_image)
-    # encoding7, pred7, _, _, _, _ = encoder7(original_image)
-    # encoding8, pred8, _, _, _, _ = encoder8(original_image)
-    # encoding9, pred9, _, _, _, _ = encoder9(original_image)
-    # encoding10, pred10, _, _, _, _ = encoder10(original_image)
-    # encoding11, pred11, _, _, _, _ = encoder11(original_image)
-    # encoding12, pred12, _, _, _, _ = encoder12(original_image)
-    # encoding13, pred13, _, _, _, _ = encoder13(original_image)
-    # encoding14, pred14, _, _, _, _ = encoder14(original_image)
-    # encoding15, pred15, _, _, _, _ = encoder15(original_image)
-    #
-    # encoding = torch.cat([encoding1,
-    #                       encoding2,
-    #                       encoding3,
-    #                       encoding4,
-    #                       encoding5,
-    #                       encoding6,
-    #                       encoding7,
-    #                       encoding8,
-    #                       encoding9,
-    #                       encoding10,
-    #                       encoding11,
-    #                       encoding12,
-    #                       encoding13,
-    #                       encoding14,
-    #                       encoding15], dim=1)
-    #
-    # preds_ensemble = torch.cat([pred,
-    #                       pred2,
-    #                       pred3,
-    #                       pred4,
-    #                       pred5,
-    #                       pred6,
-    #                       pred7,
-    #                       pred8,
-    #                       pred9,
-    #                       pred10,
-    #                       pred11,
-    #                       pred12,
-    #                       pred13,
-    #                       pred14,
-    #                       pred15], dim=1)
-    #
-    # encoding_ensemble = torch.cat([encoding, preds_ensemble], dim=1)
+    encoding2, pred2, _, _, _, _ = encoder2(original_image)
+    encoding3, pred3, _, _, _, _ = encoder3(original_image)
+    encoding4, pred4, _, _, _, _ = encoder4(original_image)
+    encoding5, pred5, _, _, _, _ = encoder5(original_image)
+    encoding6, pred6, _, _, _, _ = encoder6(original_image)
+    encoding7, pred7, _, _, _, _ = encoder7(original_image)
+    encoding8, pred8, _, _, _, _ = encoder8(original_image)
+    encoding9, pred9, _, _, _, _ = encoder9(original_image)
+    encoding10, pred10, _, _, _, _ = encoder10(original_image)
+    encoding11, pred11, _, _, _, _ = encoder11(original_image)
+    encoding12, pred12, _, _, _, _ = encoder12(original_image)
+    encoding13, pred13, _, _, _, _ = encoder13(original_image)
+    encoding14, pred14, _, _, _, _ = encoder14(original_image)
+    encoding15, pred15, _, _, _, _ = encoder15(original_image)
+    encoding16, pred16, _, _, _, _ = encoder16(original_image)
+    encoding17, pred17, _, _, _, _ = encoder17(original_image)
 
-    return encoding1
+    encoding = torch.cat([encoding1,
+                          encoding2,
+                          encoding3,
+                          encoding4,
+                          encoding5,
+                          encoding6,
+                          encoding7,
+                          encoding8,
+                          encoding9,
+                          encoding10,
+                          encoding11,
+                          encoding12,
+                          encoding13,
+                          encoding14,
+                          encoding15, encoding16, encoding17], dim=1)
+
+    preds_ensemble = torch.cat([pred,
+                          pred2,
+                          pred3,
+                          pred4,
+                          pred5,
+                          pred6,
+                          pred7,
+                          pred8,
+                          pred9,
+                          pred10,
+                          pred11,
+                          pred12,
+                          pred13,
+                          pred14,
+                          pred15,
+                          pred16,
+                          pred17], dim=1)
+
+    encoding_ensemble = torch.cat([encoding, preds_ensemble], dim=1)
+
+    return encoding_ensemble
 
 
 def forward_block(X, ids, classifier, optimizer, train, targets):

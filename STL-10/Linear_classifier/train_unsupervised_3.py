@@ -20,14 +20,14 @@ fcn = models.segmentation.fcn_resnet101(pretrained=True).eval()
 LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 300000
 
-BATCH_SIZE_DEFAULT = 150
-TEST_BATCH = 150
+BATCH_SIZE_DEFAULT = 24
+
 INPUT_NET = 4608
 SIZE = 32
 NETS = 1
 UNSUPERVISED = False
 #DROPOUT = [0.90, 0.90, 0.90, 0.90, 0.90]
-DROPOUT = 0.6
+DROPOUT = 0
 class_n = 10
 CLASSES = [class_n, class_n, class_n, class_n, class_n]
 DESCRIPTION = " Image size: "+str(SIZE) + " , Dropout2d: "+str(DROPOUT)+" , Classes: "+str(CLASSES)
@@ -87,15 +87,16 @@ def encode_4_patches(image, encoder):
     soft_bin_hf = scale(soft_bin_hf, SIZE, pad, BATCH_SIZE_DEFAULT)
     soft_bin_hf = soft_bin_hf[:, :, pad:96 - pad, pad:96 - pad]
     rev_soft_bin_hf = torch.abs(1 - soft_bin_hf)
+    rev_soft_bin_hf /= 255
 
     original_image = scale(image, SIZE, pad, BATCH_SIZE_DEFAULT)
     original_image = original_image[:, :, pad:96 - pad, pad:96 - pad]
 
-    original_hfliped = horizontal_flip(original_image, BATCH_SIZE_DEFAULT)
+    original_hfliped = color_jitter(horizontal_flip(original_image, BATCH_SIZE_DEFAULT))
 
-    augments = {0: color_jitter(original_hfliped),
+    augments = {0: original_hfliped,
                 1: scale(original_hfliped, SIZE-8, 4, BATCH_SIZE_DEFAULT),
-                2: random_erease(color_jitter(original_hfliped), BATCH_SIZE_DEFAULT),
+                2: random_erease(original_hfliped, BATCH_SIZE_DEFAULT),
                 3: sobel_filter_x(original_hfliped, BATCH_SIZE_DEFAULT),
                 4: sobel_filter_y(original_hfliped, BATCH_SIZE_DEFAULT),
                 5: sobel_total(original_hfliped, BATCH_SIZE_DEFAULT),
@@ -111,25 +112,63 @@ def encode_4_patches(image, encoder):
     image_1 = color_jitter(random_crop(crop_preparation, SIZE, BATCH_SIZE_DEFAULT))
     image_2 = color_jitter(random_crop(crop_prep_horizontal2, SIZE, BATCH_SIZE_DEFAULT))
     image_3 = augments[ids[2]]
-    image_4 = original_image
+    image_4 = color_jitter(original_image)
 
-    # numpy_cluster = torch.zeros([14, 1, SIZE, SIZE])
+    ####################### print augments #############################################
+    # for id in ids:
+    #     numpy_cluster = torch.zeros([BATCH_SIZE_DEFAULT, 1, SIZE, SIZE])
+    #     image_3 = augments[id]
+    #
+    #     # step 1: convert it to [0 ,2]
+    #     image_3 = image_3 + 1
+    #
+    #     # step 2: convert it to [0 ,1]
+    #     image_3 = image_3 - image_3.min()
+    #     image_3 = image_3 / (image_3.max() - image_3.min())
+    #
+    #     counter = 0
+    #     for im in image_3:
+    #         numpy_cluster[counter] = im.cpu().detach()
+    #         counter += 1
+    #     print("max",  torch.max(image_3))
+    #     print("min", torch.min(image_3))
+    #     print(id)
+    #     save_cluster(numpy_cluster, id, 0)
+    #
+    # numpy_cluster = torch.zeros([BATCH_SIZE_DEFAULT, 1, SIZE, SIZE])
     # counter = 0
-    # for index in ids:
-    #     numpy_cluster[counter] = augments[index].cpu().detach()[index]
+    # for im in image_1:
+    #     numpy_cluster[counter] = im.cpu().detach()
     #     counter += 1
-    # if counter > 0:
-    #     save_cluster(numpy_cluster, key, iteration)
+    # print("max", torch.max(image_3))
+    # print("min", torch.min(image_3))
+    # print(id)
+    # save_cluster(numpy_cluster, 1, 1)
+    #
+    # numpy_cluster = torch.zeros([BATCH_SIZE_DEFAULT, 1, SIZE, SIZE])
+    # counter = 0
+    # for im in image_2:
+    #     numpy_cluster[counter] = im.cpu().detach()
+    #     counter += 1
+    # print("max", torch.max(image_3))
+    # print("min", torch.min(image_3))
+    # print(id)
+    # save_cluster(numpy_cluster, 2, 2)
+    #
+    # numpy_cluster = torch.zeros([BATCH_SIZE_DEFAULT, 1, SIZE, SIZE])
+    # counter = 0
+    # for im in image_4:
+    #     numpy_cluster[counter] = im.cpu().detach()
+    #     counter += 1
+    # print("max", torch.max(image_3))
+    # print("min", torch.min(image_3))
+    # print(id)
+    # save_cluster(numpy_cluster, 4, 4)
 
-
-    # image_1 = augments[ids[0]]
-    # image_2 = augments[ids[1]]
-    # image_3 = augments[ids[2]]
-
-    # show_gray(image_1)
-    # show_gray(image_2)
-    # show_gray(image_3)
-    # show_gray(image_4)
+    show_gray(image_1)
+    show_gray(image_2)
+    show_gray(image_3)
+    show_gray(image_4)
 
     _, test_preds_1, help_preds_1_1, help_preds_1_2,  help_preds_1_3, help_preds_1_4 = encoder(image_1.to('cuda'))
     _, test_preds_2, help_preds_2_1, help_preds_2_2,  help_preds_2_3, help_preds_2_4 = encoder(image_2.to('cuda'))
@@ -163,20 +202,6 @@ def entropy_minmax_loss(targets, preds_1, preds_2, preds_3, preds_4):
 
 def forward_block(X, ids, encoder, optimizer, train, total_mean):
     x_train = X[ids, :]
-
-    # print("x_train shape", x_train.shape)
-    # resize = upscale(x_train, 224, BATCH_SIZE_DEFAULT)
-    # print("resize shape", resize.shape)
-    # out = fcn(resize)['out']
-    #
-    # print("segment shape", out.shape)
-    # om = torch.argmax(out.squeeze(), dim=0).detach().cpu().numpy()
-    # rgb = decode_segmap(om)
-    # plt.imshow(rgb);
-    # plt.show()
-    # show_mnist(out, 224, 224)
-    # input()
-
     x_train = rgb2gray(x_train)
 
     x_tensor = to_tensor(x_train)
@@ -241,6 +266,7 @@ def decode_segmap(image, nc=21):
     rgb = np.stack([r, g, b], axis=2)
     return rgb
 
+
 def save_cluster(original_image, cluster, iteration):
     sample = original_image.view(-1, 1, original_image.shape[2], original_image.shape[2])
     sample = make_grid(sample, nrow=8).detach().numpy().astype(np.float).transpose(1, 2, 0)
@@ -255,7 +281,8 @@ def save_image(original_image, index, name, cluster=0):
 
 def measure_acc_augments(X_test, colons, targets, total_mean):
     print_dict = {1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 0: []}
-    runs = len(X_test)//TEST_BATCH
+    size = BATCH_SIZE_DEFAULT
+    runs = len(X_test)//size
     avg_loss = 0
 
     print()
@@ -263,7 +290,7 @@ def measure_acc_augments(X_test, colons, targets, total_mean):
     print()
 
     for j in range(runs):
-        test_ids = range(j * TEST_BATCH, (j + 1) * TEST_BATCH)
+        test_ids = range(j * size, (j + 1) * size)
         optimizers = []
         p1, p2, p3, p4, mim, total_mean, orig_image, aug_ids = forward_block(X_test, test_ids, colons, optimizers, False, total_mean)
 
@@ -308,8 +335,8 @@ def measure_acc_augments(X_test, colons, targets, total_mean):
     print()
     print("AUGMENTS avg loss: ", avg_loss / runs,
           " miss: ", total_miss,
-          " data: ", runs * TEST_BATCH,
-          " miss percent: ", total_miss / (runs * TEST_BATCH))
+          " data: ", runs * size,
+          " miss percent: ", total_miss / (runs * size))
     print("Clusters found: " + str(len(clusters)) + " " + str(clusters))
     print()
 

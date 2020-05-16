@@ -90,11 +90,11 @@ def encode_4_patches(image, encoder):
     original_image = scale(image, SIZE, pad, BATCH_SIZE_DEFAULT)
     original_image = original_image[:, :, pad:96 - pad, pad:96 - pad]
 
-    original_hfliped = horizontal_flip(original_image, BATCH_SIZE_DEFAULT)
+    original_hfliped = color_jitter(horizontal_flip(original_image, BATCH_SIZE_DEFAULT))
 
-    augments = {0: color_jitter(original_hfliped),
+    augments = {0: original_hfliped,
                 1: scale(original_hfliped, SIZE-8, 4, BATCH_SIZE_DEFAULT),
-                2: random_erease(color_jitter(original_hfliped), BATCH_SIZE_DEFAULT),
+                2: random_erease(original_hfliped, BATCH_SIZE_DEFAULT),
                 3: sobel_filter_x(original_hfliped, BATCH_SIZE_DEFAULT),
                 4: sobel_filter_y(original_hfliped, BATCH_SIZE_DEFAULT),
                 5: sobel_total(original_hfliped, BATCH_SIZE_DEFAULT),
