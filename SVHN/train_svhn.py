@@ -3,6 +3,7 @@ from __future__ import division
 from __future__ import print_function
 
 
+import sys
 import scipy.io as sio
 import argparse
 import os
@@ -14,6 +15,7 @@ import random
 from torchvision.utils import make_grid
 import matplotlib
 from torchvision import models
+EPS = sys.float_info.epsilon
 
 
 fcn = models.segmentation.fcn_resnet101(pretrained=True).eval()
@@ -75,29 +77,29 @@ def encode_4_patches(image, encoder):
     # rc = random_crop(magnify, image.shape[2], BATCH_SIZE_DEFAULT, image.shape[3])
     # show_gray(rc)
 
-    # augments = {0: color_jitter(image),
-    #             1: scale(color_jitter(image), (image.shape[2]-8, image.shape[3]-8), 4, BATCH_SIZE_DEFAULT),
-    #             2: sobel_total(color_jitter(image), BATCH_SIZE_DEFAULT),
-    #             3: rotate(color_jitter(image), 30),
-    #             4: torch.abs(1 - color_jitter(image)),
-    #             5: scale(color_jitter(image), (image.shape[2]-6, image.shape[3]-6), 3, BATCH_SIZE_DEFAULT),
-    #             6: sobel_filter_x(color_jitter(image), BATCH_SIZE_DEFAULT),
-    #             7: sobel_filter_y(color_jitter(image), BATCH_SIZE_DEFAULT),
-    #             }
-    #
-    # ids = np.random.choice(len(augments), size=len(augments.keys()), replace=False)
-    #
-    # image_1 = augments[ids[0]]
-    # image_2 = augments[ids[1]]
-    # image_3 = augments[ids[2]]
-    # image_4 = augments[ids[3]]
+    augments = {0: color_jitter(image),
+                1: scale(color_jitter(image), (image.shape[2]-8, image.shape[3]-8), 4, BATCH_SIZE_DEFAULT),
+                2: sobel_total(color_jitter(image), BATCH_SIZE_DEFAULT),
+                3: rotate(color_jitter(image), 30),
+                4: torch.abs(1 - color_jitter(image)),
+                5: scale(color_jitter(image), (image.shape[2]-6, image.shape[3]-6), 3, BATCH_SIZE_DEFAULT),
+                6: sobel_filter_x(color_jitter(image), BATCH_SIZE_DEFAULT),
+                7: sobel_filter_y(color_jitter(image), BATCH_SIZE_DEFAULT),
+                }
 
-    ids = [1, 2, 3, 4]
+    ids = np.random.choice(len(augments), size=len(augments.keys()), replace=False)
 
-    image_1 = color_jitter(image)
-    image_2 = scale(color_jitter(image), (image.shape[2]-8, image.shape[3]-8), 4, BATCH_SIZE_DEFAULT)
-    image_3 = sobel_total(color_jitter(image), BATCH_SIZE_DEFAULT)
-    image_4 = rotate(color_jitter(image), 30)
+    image_1 = augments[ids[0]]
+    image_2 = augments[ids[1]]
+    image_3 = augments[ids[2]]
+    image_4 = augments[ids[3]]
+
+    # ids = [1, 2, 3, 4]
+    #
+    # image_1 = color_jitter(image)
+    # image_2 = scale(color_jitter(image), (image.shape[2]-8, image.shape[3]-8), 4, BATCH_SIZE_DEFAULT)
+    # image_3 = sobel_total(color_jitter(image), BATCH_SIZE_DEFAULT)
+    # image_4 = rotate(color_jitter(image), 30)
 
     # show_gray(image)
     # show_gray(image_1)
@@ -110,13 +112,13 @@ def encode_4_patches(image, encoder):
     _, test_preds_3 = encoder(image_3.to('cuda'))
     _, test_preds_4 = encoder(image_4.to('cuda'))
 
-
     return test_preds_1, test_preds_2, test_preds_3, test_preds_4, image, ids
 
 
-def entropy_minmax_loss(total_mean, preds_1, preds_2, preds_3, preds_4):
+def entropy_minmax_loss(preds_1, preds_2, preds_3, preds_4, total_mean):
     product = preds_1 * preds_2 * preds_3 * preds_4
-    product = product.mean(dim=0) #* total_mean.detach()
+    product = product.mean(dim=0) * total_mean.detach()
+    product[(product < EPS).data] = EPS
     log_product = torch.log(product)
     class_mean = - log_product.mean(dim=0)
 
@@ -129,7 +131,7 @@ def forward_block(X, ids, encoder, optimizer, train, total_mean):
     images = X[ids, :]
     test_preds_1, test_preds_2, test_preds_3, test_preds_4, orig_image, aug_ids = encode_4_patches(images, encoder)
 
-    test_total_loss = entropy_minmax_loss(total_mean, test_preds_1, test_preds_2, test_preds_3, test_preds_4)
+    test_total_loss = entropy_minmax_loss(test_preds_1, test_preds_2, test_preds_3, test_preds_4, total_mean)
 
     m_preds = (test_preds_1 + test_preds_2 + test_preds_3 + test_preds_4) / 4
     total_mean = 0.99 * total_mean + 0.01 * m_preds.mean(dim=0).detach()
@@ -345,10 +347,6 @@ def train():
                         counter += 1
                     if counter > 0:
                         save_cluster(numpy_cluster, key, iteration)
-
-                # for i in image_dict.keys():
-                #     for index in image_dict[i]:
-                #         save_image(orig_image.cpu().detach()[index], index, "iter_"+str(iteration)+"_"+labels_to_imags[targets[test_ids[index]]], i)
 
             if clusters >= most_clusters:
                 most_clusters = clusters
