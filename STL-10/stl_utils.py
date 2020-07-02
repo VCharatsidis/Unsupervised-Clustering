@@ -6,6 +6,7 @@ import numpy as np
 from torch.autograd import Variable
 import torch
 from Mutual_Information.RandomErase import RandomErasing
+from GaussianBlur import GaussianSmoothing
 import torch.nn as nn
 import matplotlib.pyplot as plt
 import random
@@ -22,6 +23,19 @@ class AddGaussianNoise(object):
 
     def __repr__(self):
         return self.__class__.__name__ + '(mean={0}, std={1})'.format(self.mean, self.std)
+
+
+def gaussian_blur(X):
+    X_copy = copy.deepcopy(X)
+    X_copy = Variable(torch.FloatTensor(X_copy))
+
+    for i in range(X_copy.shape[0]):
+        transformation = transforms.Compose([GaussianSmoothing([0, 2])])
+        trans = transforms.Compose([transformation, transforms.ToTensor()])
+        a = F.to_pil_image(X_copy[i])
+        X_copy[i] = trans(a)
+
+    return X_copy
 
 
 def guassian_noise(X):
@@ -46,6 +60,35 @@ def rotate(X, degrees):
         trans = transforms.Compose([transformation, transforms.ToTensor()])
         a = F.to_pil_image(X_copy[i])
         X_copy[i] = trans(a)
+
+    return X_copy
+
+
+def vertical_blacken(X):
+    X_copy = copy.deepcopy(X)
+    X_copy = Variable(torch.FloatTensor(X_copy))
+
+    size = X_copy.shape[3]
+    crop = size//2 + size//8
+
+    if random.uniform(0, 1) > 0.5:
+        X_copy[:, :, :, :(size-crop)] = 0
+    else:
+        X_copy[:, :, :, crop:] = 0
+
+    return X_copy
+
+def horizontal_blacken(X):
+    X_copy = copy.deepcopy(X)
+    X_copy = Variable(torch.FloatTensor(X_copy))
+
+    size = X_copy.shape[2]
+    crop = size//2 + size//5
+
+    if random.uniform(0, 1) > 0.5:
+        X_copy[:, :, :(size-crop), :] = 0
+    else:
+        X_copy[:, :,  crop:, :] = 0
 
     return X_copy
 
@@ -92,24 +135,18 @@ def upscale(X, size):
     return X_copy
 
 
-# def scale_up(X, size, size_y, pad, batch_size=BATCH_SIZE_DEFAULT):
-#
-#     X_copy = copy.deepcopy(X)
-#
-#     X_copy = torch.zeros([batch_size, 1, size, size_y])
-#
-#     # if random.uniform(0, 1) > 0.5:
-#     #     size = 20
-#     #     pad = 4
-#
-#     for i in range(X_copy.shape[0]):
-#         transformation = transforms.Resize(size=(size, size_y), interpolation=2)
-#         trans = transforms.Compose([transformation, transforms.Pad(pad), transforms.ToTensor()])
-#         a = F.to_pil_image(X_copy[i])
-#         trans_image = trans(a)
-#         X_copy[i] = trans_image
-#
-#     return X_copy
+def scale_up(X, size, size_y, batch_size):
+    X_copy = copy.deepcopy(X)
+    X_put = torch.zeros([batch_size, 1, size, size_y])
+
+    for i in range(X_copy.shape[0]):
+        transformation = transforms.Resize(size=(size, size_y))
+        trans = transforms.Compose([transformation, transforms.ToTensor()])
+        a = F.to_pil_image(X_copy[i])
+        trans_image = trans(a)
+        X_put[i] = trans_image
+
+    return X_put
 
 
 def scale(X, size, pad, batch_size=BATCH_SIZE_DEFAULT):
@@ -283,7 +320,7 @@ def color_jitter(X):
     X_copy = Variable(torch.FloatTensor(X_copy))
 
     for i in range(X_copy.shape[0]):
-        transformation = transforms.ColorJitter(brightness=0.25, contrast=0.25, saturation=0.25, hue=0.45)
+        transformation = transforms.ColorJitter(brightness=0.25, contrast=0.25, saturation=0.25, hue=0.35)
         trans = transforms.Compose([transformation, transforms.ToTensor()])
         a = F.to_pil_image(X_copy[i])
         trans_image = trans(a)

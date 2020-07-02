@@ -30,32 +30,40 @@ class SVHNencoderNet(nn.Module):
 
         self.conv = nn.Sequential(
             nn.Conv2d(n_channels, 64, kernel_size=3, stride=1, padding=1),
+            #nn.BatchNorm2d(64),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
 
             nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
+            #nn.BatchNorm2d(128),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
 
             nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
+            #nn.BatchNorm2d(256),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
 
             nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1),
+            #nn.BatchNorm2d(512),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
         )
 
         self.head_input = 128
         self.embeding_linear = nn.Sequential(
-
+            #nn.Dropout2d(0.2),
             nn.Linear(n_inputs, self.head_input),
             nn.ReLU(),
         )
 
         self.test_linear = nn.Sequential(
 
-            nn.Linear(self.head_input, classes[0]),
+            nn.Linear(self.head_input, classes[0])
+
+        )
+
+        self.softmax = nn.Sequential(
             nn.Softmax(dim=1)
         )
 
@@ -76,4 +84,8 @@ class SVHNencoderNet(nn.Module):
 
         test_preds = self.test_linear(embeddings)
 
-        return embeddings, test_preds
+        #print(test_preds)
+        #temp = 2
+        probs = self.softmax(test_preds)
+
+        return embeddings, probs

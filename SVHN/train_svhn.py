@@ -21,7 +21,7 @@ EPS = sys.float_info.epsilon
 fcn = models.segmentation.fcn_resnet101(pretrained=True).eval()
 
 #EPS=sys.float_info.epsilon
-LEARNING_RATE_DEFAULT = 1e-4
+LEARNING_RATE_DEFAULT = 2e-4
 MAX_STEPS_DEFAULT = 500000
 
 BATCH_SIZE_DEFAULT = 220
@@ -36,7 +36,7 @@ class_n = 10
 CLASSES = [class_n, class_n, class_n, class_n, class_n]
 DESCRIPTION = " Image size: "+str(SIZE) + " , Dropout2d: "+str(DROPOUT)+" , Classes: "+str(CLASSES)
 
-EVAL_FREQ_DEFAULT = 1000
+EVAL_FREQ_DEFAULT = 2000
 MIN_CLUSTERS_TO_SAVE = 9
 np.set_printoptions(formatter={'float': lambda x: "{0:0.4f}".format(x)})
 FLAGS = None
@@ -69,39 +69,46 @@ def get_targets(number_classes):
     return (torch.ones([number_classes]).to('cuda')) / number_classes
 
 
+def transformation(id, image):
+    if id == 0:
+        return color_jitter(image)
+    elif id == 1:
+        return scale(color_jitter(image), (image.shape[2] - 8, image.shape[3] - 8), 4, BATCH_SIZE_DEFAULT)
+    elif id == 2:
+        return rotate(color_jitter(image), 30)
+    elif id == 3:
+        return torch.abs(1 - color_jitter(image))
+    elif id == 4:
+        return sobel_total(color_jitter(image), BATCH_SIZE_DEFAULT)
+    elif id == 5:
+        return sobel_filter_x(color_jitter(image), BATCH_SIZE_DEFAULT)
+
+    elif id == 6:
+        return sobel_filter_y(color_jitter(image), BATCH_SIZE_DEFAULT)
+
+    # elif id == 7:
+    #     return horizontal_flip(color_jitter(image), BATCH_SIZE_DEFAULT)
+
+    # elif id == 8:
+    #     return gaussian_blur(color_jitter(image))
+
+    # elif id == 9:
+    #     t = random_crop(color_jitter(image), 18, BATCH_SIZE_DEFAULT, 18)
+    #     return scale_up(t, 32, 20, BATCH_SIZE_DEFAULT)
+
+    print("Error in transformation of the image.")
+    return image
+
+
 def encode_4_patches(image, encoder):
+    number_transforms = 7
+    ids = np.random.choice(number_transforms, size=number_transforms, replace=False)
 
-    # magnify = scale(color_jitter(image), 64, 40, 0, BATCH_SIZE_DEFAULT)
-    # show_gray(magnify)
-    #
-    # rc = random_crop(magnify, image.shape[2], BATCH_SIZE_DEFAULT, image.shape[3])
-    # show_gray(rc)
+    image_1 = transformation(ids[0], image)
+    image_2 = transformation(ids[1], image)
+    image_3 = transformation(ids[2], image)
+    image_4 = transformation(ids[3], image)
 
-    augments = {0: color_jitter(image),
-                1: scale(color_jitter(image), (image.shape[2]-8, image.shape[3]-8), 4, BATCH_SIZE_DEFAULT),
-                2: sobel_total(color_jitter(image), BATCH_SIZE_DEFAULT),
-                3: rotate(color_jitter(image), 30),
-                4: torch.abs(1 - color_jitter(image)),
-                5: scale(color_jitter(image), (image.shape[2]-6, image.shape[3]-6), 3, BATCH_SIZE_DEFAULT),
-                6: sobel_filter_x(color_jitter(image), BATCH_SIZE_DEFAULT),
-                7: sobel_filter_y(color_jitter(image), BATCH_SIZE_DEFAULT),
-                }
-
-    ids = np.random.choice(len(augments), size=len(augments.keys()), replace=False)
-
-    image_1 = augments[ids[0]]
-    image_2 = augments[ids[1]]
-    image_3 = augments[ids[2]]
-    image_4 = augments[ids[3]]
-
-    # ids = [1, 2, 3, 4]
-    #
-    # image_1 = color_jitter(image)
-    # image_2 = scale(color_jitter(image), (image.shape[2]-8, image.shape[3]-8), 4, BATCH_SIZE_DEFAULT)
-    # image_3 = sobel_total(color_jitter(image), BATCH_SIZE_DEFAULT)
-    # image_4 = rotate(color_jitter(image), 30)
-
-    # show_gray(image)
     # show_gray(image_1)
     # show_gray(image_2)
     # show_gray(image_3)
@@ -138,7 +145,7 @@ def forward_block(X, ids, encoder, optimizer, train, total_mean):
 
     if train:
         optimizer.zero_grad()
-        test_total_loss.backward(retain_graph=True)
+        test_total_loss.backward()
         optimizer.step()
 
     return test_preds_1, test_preds_2, test_preds_3, test_preds_4, test_total_loss, total_mean, orig_image, aug_ids
