@@ -21,12 +21,12 @@ EPS = sys.float_info.epsilon
 fcn = models.segmentation.fcn_resnet101(pretrained=True).eval()
 
 #EPS=sys.float_info.epsilon
-LEARNING_RATE_DEFAULT = 1e-4
+LEARNING_RATE_DEFAULT = 2e-4
 # ANCHOR = 1e-4
 # SPIKE = 3e-3
 MAX_STEPS_DEFAULT = 500000
 
-BATCH_SIZE_DEFAULT = 700
+BATCH_SIZE_DEFAULT = 1300
 
 #INPUT_NET = 3072
 INPUT_NET = 4608
@@ -39,7 +39,7 @@ class_n = 12
 CLASSES = [class_n, class_n, class_n, class_n, class_n]
 DESCRIPTION = " Image size: "+str(SIZE) + " , Dropout2d: "+str(DROPOUT)+" , Classes: "+str(CLASSES)
 
-EVAL_FREQ_DEFAULT = 100
+EVAL_FREQ_DEFAULT = 1000
 MIN_CLUSTERS_TO_SAVE = 10
 np.set_printoptions(formatter={'float': lambda x: "{0:0.4f}".format(x)})
 FLAGS = None
@@ -85,16 +85,19 @@ def transformation(id, image):
         return sobel_total(color_jitter(image), BATCH_SIZE_DEFAULT)
     elif id == 5:
         return sobel_filter_x(color_jitter(image), BATCH_SIZE_DEFAULT)
-    elif id == 6:
-        return horizontal_flip(color_jitter(image), BATCH_SIZE_DEFAULT)
-    elif id == 7:
-        return sobel_filter_y(color_jitter(image), BATCH_SIZE_DEFAULT)
-    # elif id == 8:
-    #     return gaussian_blur(color_jitter(image))
 
-    # elif id == 9:
-    #     t = random_crop(color_jitter(image), 18, BATCH_SIZE_DEFAULT, 18)
-    #     return scale_up(t, 32, 20, BATCH_SIZE_DEFAULT)
+    elif id == 6:
+        return sobel_filter_y(color_jitter(image), BATCH_SIZE_DEFAULT)
+
+    elif id == 7:
+        return horizontal_flip(color_jitter(image), BATCH_SIZE_DEFAULT)
+
+    elif id == 8:
+        return gaussian_blur(color_jitter(image))
+
+    elif id == 9:
+        t = random_crop(color_jitter(image), 18, BATCH_SIZE_DEFAULT, 18)
+        return scale_up(t, 32, 20, BATCH_SIZE_DEFAULT)
 
     print("Error in transformation of the image.")
     return image
@@ -107,15 +110,34 @@ def encode(image, encoder):
 
 
 def entropy_minmax_loss(preds_1, preds_2, total_mean):
+    # _, mean_index = torch.max(preds_1, 1)
+    # preds_1_zero = torch.zeros(BATCH_SIZE_DEFAULT, class_n).to("cuda")
+    # mean_index.unsqueeze_(0)
+    # mean_index = mean_index.transpose(0, 1)
+    # preds_1_zero = preds_1_zero.scatter(1, mean_index, 1.)
+
+    # _, mean_index = torch.max(preds_2, 1)
+    # preds_2_zero = torch.zeros(BATCH_SIZE_DEFAULT, class_n).to("cuda")
+    # mean_index.unsqueeze_(0)
+    # mean_index = mean_index.transpose(0, 1)
+    # preds_2_zero = preds_2_zero.scatter(1, mean_index, 1.)
+
+    # print("preds 1", preds_1[0])
+    # print(preds_1_zero[0])
+    #
+    # print(preds_2[0])
+    # print(preds_2_zero[0])
+    # print("")
+
     product = preds_1 * preds_2
     product = product.mean(dim=0) * total_mean.detach()
-    #product[(product < EPS).data] = EPS
+    # product[(product < EPS).data] = EPS
     total_loss = - torch.log(product).mean(dim=0)
 
     return total_loss
 
 
-def calc_targets(X, images, tfs_id, encoder):
+def calc_targets(images, tfs_id, encoder):
     with torch.no_grad():
         transformations = transformation(tfs_id, images)
         targets = encode(transformations, encoder)
@@ -126,18 +148,14 @@ def calc_targets(X, images, tfs_id, encoder):
 def big_forward(X, ids, encoder, optimizer, total_mean):
     images = X[ids, :]
 
-    number_transformations = 8
+    number_transformations = 10
     tfs_ids = np.random.choice(number_transformations, size=number_transformations, replace=False)
-    targets = calc_targets(X, images, tfs_ids[0], encoder)
+    targets = calc_targets(images, tfs_ids[0], encoder)
 
-    sum_loss = 0
-    for i in range(1, number_transformations):
-        transformations = transformation(tfs_ids[i], images)
-        p1, targets, mim, total_mean = forward_block(encoder, optimizer, total_mean, targets.detach(), transformations)
-        sum_loss += mim.item()
+    transformations = transformation(tfs_ids[1], images)
+    p1, p2, loss, total_mean = forward_block(encoder, optimizer, total_mean, targets.detach(), transformations)
 
-    loss = sum_loss /(number_transformations-1)
-    return p1, targets, loss, total_mean, images
+    return p1, p2, loss, total_mean, images
 
 
 def forward_block(encoder, optimizer, total_mean, targets, transformations):
@@ -196,7 +214,9 @@ def measure_acc_augments(X_test, colons, targets, total_mean):
         p = accuracy_block(X_test, test_ids, colons)
 
         if j == 0:
-            print(p[0])
+            pred_number = random.randint(0, BATCH_SIZE_DEFAULT-1)
+            print("example prediction ", pred_number, " : ", p[pred_number].data.cpu().numpy())
+
         for i in range(p.shape[0]):
             _, mean_index = torch.max(p[i], 0)
             verdict = int(mean_index.data.cpu().numpy())

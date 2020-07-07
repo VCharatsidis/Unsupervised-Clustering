@@ -320,7 +320,7 @@ def color_jitter(X):
     X_copy = Variable(torch.FloatTensor(X_copy))
 
     for i in range(X_copy.shape[0]):
-        transformation = transforms.ColorJitter(brightness=0.25, contrast=0.25, saturation=0.25, hue=0.35)
+        transformation = transforms.ColorJitter(brightness=0.45, contrast=0.45, saturation=0.45, hue=0.45)
         trans = transforms.Compose([transformation, transforms.ToTensor()])
         a = F.to_pil_image(X_copy[i])
         trans_image = trans(a)

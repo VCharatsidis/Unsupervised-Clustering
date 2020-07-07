@@ -150,7 +150,7 @@ def big_forward(X, ids, encoder, optimizer):
 
     sum_loss = 0
 
-    times = 3
+    times = 1
     for j in range(times):
 
         for i in range(1, number_transformations):

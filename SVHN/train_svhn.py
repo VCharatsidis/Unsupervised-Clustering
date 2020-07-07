@@ -21,7 +21,7 @@ EPS = sys.float_info.epsilon
 fcn = models.segmentation.fcn_resnet101(pretrained=True).eval()
 
 #EPS=sys.float_info.epsilon
-LEARNING_RATE_DEFAULT = 2e-4
+LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 500000
 
 BATCH_SIZE_DEFAULT = 220
@@ -86,22 +86,22 @@ def transformation(id, image):
     elif id == 6:
         return sobel_filter_y(color_jitter(image), BATCH_SIZE_DEFAULT)
 
-    # elif id == 7:
-    #     return horizontal_flip(color_jitter(image), BATCH_SIZE_DEFAULT)
+    elif id == 7:
+        return horizontal_flip(color_jitter(image), BATCH_SIZE_DEFAULT)
 
-    # elif id == 8:
-    #     return gaussian_blur(color_jitter(image))
+    elif id == 8:
+        return gaussian_blur(color_jitter(image))
 
-    # elif id == 9:
-    #     t = random_crop(color_jitter(image), 18, BATCH_SIZE_DEFAULT, 18)
-    #     return scale_up(t, 32, 20, BATCH_SIZE_DEFAULT)
+    elif id == 9:
+        t = random_crop(color_jitter(image), 18, BATCH_SIZE_DEFAULT, 18)
+        return scale_up(t, 32, 20, BATCH_SIZE_DEFAULT)
 
     print("Error in transformation of the image.")
     return image
 
 
 def encode_4_patches(image, encoder):
-    number_transforms = 7
+    number_transforms = 10
     ids = np.random.choice(number_transforms, size=number_transforms, replace=False)
 
     image_1 = transformation(ids[0], image)
@@ -125,11 +125,9 @@ def encode_4_patches(image, encoder):
 def entropy_minmax_loss(preds_1, preds_2, preds_3, preds_4, total_mean):
     product = preds_1 * preds_2 * preds_3 * preds_4
     product = product.mean(dim=0) * total_mean.detach()
-    product[(product < EPS).data] = EPS
+    #product[(product < EPS).data] = EPS
     log_product = torch.log(product)
-    class_mean = - log_product.mean(dim=0)
-
-    total_loss = class_mean
+    total_loss = - log_product.mean(dim=0)
 
     return total_loss
 
@@ -161,7 +159,7 @@ def batch_entropy(pred, targets):
 def save_cluster(original_image, cluster, iteration):
     sample = original_image.view(-1, 1, original_image.shape[2], original_image.shape[3])
     sample = make_grid(sample, nrow=8).detach().numpy().astype(np.float).transpose(1, 2, 0)
-    matplotlib.image.imsave(f"images/iter_{iteration}_c_{cluster}.png", sample)
+    matplotlib.image.imsave(f"new_images/iter_{iteration}_c_{cluster}.png", sample)
 
 
 def save_image(original_image, index, name, cluster=0):
@@ -253,22 +251,22 @@ def print_params(model):
         print(param.data)
 
 
-def preproccess(X_train):
-    X_train = to_tensor(X_train)
+def preproccess(data):
+    data = to_tensor(data)
 
-    X_train = X_train.transpose(0, 2)
-    X_train = X_train.transpose(1, 3)
-    X_train = X_train.transpose(0, 1)
+    data = data.transpose(0, 2)
+    data = data.transpose(1, 3)
+    data = data.transpose(0, 1)
 
     pad = (SIZE-SIZE_Y) // 2
-    X_train = X_train[:, :, :, pad: SIZE-pad]
-    X_train = rgb2gray(X_train)
+    data = data[:, :, :, pad: SIZE - pad]
+    data = rgb2gray(data)
 
-    X_train = X_train.unsqueeze(0)
-    X_train = X_train.transpose(0, 1)
-    X_train /= 255
+    data = data.unsqueeze(0)
+    data = data.transpose(0, 1)
+    data /= 255
 
-    return X_train
+    return data
 
 
 def train():

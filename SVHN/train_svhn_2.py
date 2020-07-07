@@ -21,12 +21,12 @@ EPS = sys.float_info.epsilon
 fcn = models.segmentation.fcn_resnet101(pretrained=True).eval()
 
 #EPS=sys.float_info.epsilon
-LEARNING_RATE_DEFAULT = 1e-4
+LEARNING_RATE_DEFAULT = 2e-4
 # ANCHOR = 1e-4
 # SPIKE = 3e-3
 MAX_STEPS_DEFAULT = 500000
 
-BATCH_SIZE_DEFAULT = 650
+BATCH_SIZE_DEFAULT = 600
 
 #INPUT_NET = 3072
 INPUT_NET = 4608
@@ -40,7 +40,7 @@ CLASSES = [class_n, class_n, class_n, class_n, class_n]
 DESCRIPTION = " Image size: "+str(SIZE) + " , Dropout2d: "+str(DROPOUT)+" , Classes: "+str(CLASSES)
 
 EVAL_FREQ_DEFAULT = 1000
-MIN_CLUSTERS_TO_SAVE = 10
+MIN_CLUSTERS_TO_SAVE = 9
 np.set_printoptions(formatter={'float': lambda x: "{0:0.4f}".format(x)})
 FLAGS = None
 
@@ -86,15 +86,17 @@ def transformation(id, image):
     elif id == 5:
         return sobel_filter_x(color_jitter(image), BATCH_SIZE_DEFAULT)
     elif id == 6:
-        return horizontal_flip(color_jitter(image), BATCH_SIZE_DEFAULT)
-    elif id == 7:
         return sobel_filter_y(color_jitter(image), BATCH_SIZE_DEFAULT)
-    # elif id == 8:
-    #     return gaussian_blur(color_jitter(image))
 
-    # elif id == 9:
-    #     t = random_crop(color_jitter(image), 18, BATCH_SIZE_DEFAULT, 18)
-    #     return scale_up(t, 32, 20, BATCH_SIZE_DEFAULT)
+    elif id == 7:
+        return horizontal_flip(color_jitter(image), BATCH_SIZE_DEFAULT)
+
+    elif id == 8:
+        return gaussian_blur(color_jitter(image))
+
+    elif id == 9:
+        t = random_crop(color_jitter(image), 18, BATCH_SIZE_DEFAULT, 18)
+        return scale_up(t, 32, 20, BATCH_SIZE_DEFAULT)
 
     print("Error in transformation of the image.")
     return image
@@ -138,7 +140,7 @@ def encode_4_patches(image, encoder):
 
 def entropy_minmax_loss(preds_1, preds_2, total_mean):
     product = preds_1 * preds_2
-    product = product.mean(dim=0) * total_mean.detach()
+    product = product.mean(dim=0)  # * total_mean.detach()
     #product[(product < EPS).data] = EPS
     total_loss = - torch.log(product).mean(dim=0)
 
@@ -197,11 +199,24 @@ def measure_acc_augments(X_test, colons, targets, total_mean):
     print()
     print("total mean:     ", total_mean.data.cpu().numpy())
     print()
+    batch_num = random.randint(0, runs-1)
 
     for j in range(runs):
         test_ids = range(j * size, (j + 1) * size)
 
         p = accuracy_block(X_test, test_ids, colons)
+
+        if j == batch_num:
+            pred_number = random.randint(0, BATCH_SIZE_DEFAULT-1)
+            print("example prediction ", pred_number, " : ", p[pred_number].data.cpu().numpy())
+            pred_number = random.randint(0, BATCH_SIZE_DEFAULT - 1)
+            print("example prediction ", pred_number, " : ", p[pred_number].data.cpu().numpy())
+            pred_number = random.randint(0, BATCH_SIZE_DEFAULT - 1)
+            print("example prediction ", pred_number, " : ", p[pred_number].data.cpu().numpy())
+            pred_number = random.randint(0, BATCH_SIZE_DEFAULT - 1)
+            print("example prediction ", pred_number, " : ", p[pred_number].data.cpu().numpy())
+            pred_number = random.randint(0, BATCH_SIZE_DEFAULT - 1)
+            print("example prediction ", pred_number, " : ", p[pred_number].data.cpu().numpy())
 
         for i in range(p.shape[0]):
             _, mean_index = torch.max(p[i], 0)
