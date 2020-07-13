@@ -21,12 +21,12 @@ EPS = sys.float_info.epsilon
 fcn = models.segmentation.fcn_resnet101(pretrained=True).eval()
 
 #EPS=sys.float_info.epsilon
-LEARNING_RATE_DEFAULT = 2e-4
+LEARNING_RATE_DEFAULT = 1e-4
 # ANCHOR = 1e-4
 # SPIKE = 3e-3
 MAX_STEPS_DEFAULT = 500000
 
-BATCH_SIZE_DEFAULT = 1300
+BATCH_SIZE_DEFAULT = 1250
 
 #INPUT_NET = 3072
 INPUT_NET = 4608
@@ -35,7 +35,7 @@ SIZE_Y = 20
 NETS = 1
 
 DROPOUT = 0
-class_n = 12
+class_n = 10
 CLASSES = [class_n, class_n, class_n, class_n, class_n]
 DESCRIPTION = " Image size: "+str(SIZE) + " , Dropout2d: "+str(DROPOUT)+" , Classes: "+str(CLASSES)
 
@@ -44,6 +44,19 @@ MIN_CLUSTERS_TO_SAVE = 10
 np.set_printoptions(formatter={'float': lambda x: "{0:0.4f}".format(x)})
 FLAGS = None
 
+mean_entropies = []
+choosen_transformations = []
+
+transformations_dict ={0: "original",
+                       1: "scale",
+                       2: "rotate",
+                       3: "reverse pixel value",
+                       4: "sobel total",
+                       5: "sobel x",
+                       6: "sobel y",
+                       7: "horizontal flip",
+                       8: "gaussian blur",
+                       9: "random crop"}
 
 labels_to_imags = {1: "1",
                    2: "2",
@@ -85,16 +98,13 @@ def transformation(id, image):
         return sobel_total(color_jitter(image), BATCH_SIZE_DEFAULT)
     elif id == 5:
         return sobel_filter_x(color_jitter(image), BATCH_SIZE_DEFAULT)
-
     elif id == 6:
         return sobel_filter_y(color_jitter(image), BATCH_SIZE_DEFAULT)
 
     elif id == 7:
         return horizontal_flip(color_jitter(image), BATCH_SIZE_DEFAULT)
-
     elif id == 8:
         return gaussian_blur(color_jitter(image))
-
     elif id == 9:
         t = random_crop(color_jitter(image), 18, BATCH_SIZE_DEFAULT, 18)
         return scale_up(t, 32, 20, BATCH_SIZE_DEFAULT)
@@ -130,7 +140,7 @@ def entropy_minmax_loss(preds_1, preds_2, total_mean):
     # print("")
 
     product = preds_1 * preds_2
-    product = product.mean(dim=0) * total_mean.detach()
+    product = product.mean(dim=0) #* total_mean.detach()
     # product[(product < EPS).data] = EPS
     total_loss = - torch.log(product).mean(dim=0)
 
@@ -148,12 +158,17 @@ def calc_targets(images, tfs_id, encoder):
 def big_forward(X, ids, encoder, optimizer, total_mean):
     images = X[ids, :]
 
-    number_transformations = 10
+    number_transformations = 8
     tfs_ids = np.random.choice(number_transformations, size=number_transformations, replace=False)
     targets = calc_targets(images, tfs_ids[0], encoder)
 
     transformations = transformation(tfs_ids[1], images)
+    #show_gray(transformations)
     p1, p2, loss, total_mean = forward_block(encoder, optimizer, total_mean, targets.detach(), transformations)
+
+    if random.uniform(0, 1) > 0.99:
+        mean_entropy = batch_entropy(targets.detach())
+        print("mean entropy targets: ", mean_entropy.data.cpu().numpy(), " transformation: ", transformations_dict[tfs_ids[0]])
 
     return p1, p2, loss, total_mean, images
 
@@ -173,11 +188,13 @@ def forward_block(encoder, optimizer, total_mean, targets, transformations):
     return targets, predictions, test_total_loss, total_mean
 
 
-def batch_entropy(pred, targets):
-    batch_mean_preds = pred.mean(dim=0)
-    H_batch = torch.log(batch_mean_preds).mean()
+def batch_entropy(product):
+    product[(product < EPS).data] = EPS
+    entropyVector = - torch.sum(product * torch.log(product), dim=1)
 
-    return H_batch
+    mean_entropy = torch.mean(entropyVector)
+
+    return mean_entropy
 
 
 def save_cluster(original_image, cluster, iteration):
@@ -209,12 +226,31 @@ def measure_acc_augments(X_test, colons, targets, total_mean):
     print("total mean:     ", total_mean.data.cpu().numpy())
     print()
 
+    random_batch = random.randint(0, runs-1)
     for j in range(runs):
         test_ids = range(j * size, (j + 1) * size)
         p = accuracy_block(X_test, test_ids, colons)
 
-        if j == 0:
+        if j == random_batch:
             pred_number = random.randint(0, BATCH_SIZE_DEFAULT-1)
+            print("example prediction ", pred_number, " : ", p[pred_number].data.cpu().numpy())
+            pred_number = random.randint(0, BATCH_SIZE_DEFAULT - 1)
+            print("example prediction ", pred_number, " : ", p[pred_number].data.cpu().numpy())
+            pred_number = random.randint(0, BATCH_SIZE_DEFAULT - 1)
+            print("example prediction ", pred_number, " : ", p[pred_number].data.cpu().numpy())
+            pred_number = random.randint(0, BATCH_SIZE_DEFAULT - 1)
+            print("example prediction ", pred_number, " : ", p[pred_number].data.cpu().numpy())
+            pred_number = random.randint(0, BATCH_SIZE_DEFAULT - 1)
+            print("example prediction ", pred_number, " : ", p[pred_number].data.cpu().numpy())
+            pred_number = random.randint(0, BATCH_SIZE_DEFAULT - 1)
+            print("example prediction ", pred_number, " : ", p[pred_number].data.cpu().numpy())
+            pred_number = random.randint(0, BATCH_SIZE_DEFAULT - 1)
+            print("example prediction ", pred_number, " : ", p[pred_number].data.cpu().numpy())
+            pred_number = random.randint(0, BATCH_SIZE_DEFAULT - 1)
+            print("example prediction ", pred_number, " : ", p[pred_number].data.cpu().numpy())
+            pred_number = random.randint(0, BATCH_SIZE_DEFAULT - 1)
+            print("example prediction ", pred_number, " : ", p[pred_number].data.cpu().numpy())
+            pred_number = random.randint(0, BATCH_SIZE_DEFAULT - 1)
             print("example prediction ", pred_number, " : ", p[pred_number].data.cpu().numpy())
 
         for i in range(p.shape[0]):
@@ -245,15 +281,16 @@ def measure_acc_augments(X_test, colons, targets, total_mean):
               ", miss percentage: ",
               misses / length)
 
+    miss_percentage = total_miss / (runs * size)
     print()
     print("AUGMENTS avg loss: ", avg_loss / runs,
           " miss: ", total_miss,
           " data: ", runs * size,
-          " miss percent: ", total_miss / (runs * size))
+          " miss percent: ", miss_percentage)
     print("Clusters found: " + str(len(clusters)) + " " + str(clusters))
     print()
 
-    return avg_loss/runs, len(clusters)
+    return miss_percentage, len(clusters)
 
 
 def miss_classifications(cluster):
@@ -323,7 +360,7 @@ def train():
     encoder = SVHNencoderNet(1, INPUT_NET, DROPOUT, CLASSES).to('cuda')
     optimizer = torch.optim.Adam(encoder.parameters(), lr=LEARNING_RATE_DEFAULT)
 
-    max_loss = 1999
+    min_miss_percentage = 100
     max_loss_iter = 0
     most_clusters = 0
     most_clusters_iter = 0
@@ -366,9 +403,9 @@ def train():
             p1, p2, mim, total_mean, orig_image = big_forward(X_test, test_ids, encoder, optimizer, total_mean)
             classes_dict, numbers_classes_dict = print_info(p1, p2, targets, test_ids)
 
-            loss, clusters = measure_acc_augments(X_test, encoder, targets, total_mean)
+            miss_percentage, clusters = measure_acc_augments(X_test, encoder, targets, total_mean)
 
-            if clusters >= MIN_CLUSTERS_TO_SAVE and max_loss > loss:
+            if clusters >= MIN_CLUSTERS_TO_SAVE and min_miss_percentage > miss_percentage:
                 for key in numbers_classes_dict.keys():
                     numpy_cluster = torch.zeros([len(numbers_classes_dict[key]), 1, SIZE, SIZE_Y])
                     counter = 0
@@ -378,18 +415,13 @@ def train():
                     if counter > 0:
                         save_cluster(numpy_cluster, key, iteration)
 
-            if clusters >= most_clusters:
+            if clusters >= most_clusters and min_miss_percentage > miss_percentage:
+                min_miss_percentage = miss_percentage
+                max_loss_iter = iteration
                 most_clusters = clusters
                 most_clusters_iter = iteration
                 print("models saved iter: " + str(iteration))
                 torch.save(encoder, clusters_net_path)
-
-            if max_loss > loss:
-                max_loss = loss
-                max_loss_iter = iteration
-
-                print("models saved iter: " + str(iteration))
-                torch.save(encoder, loss_net_path)
 
 
 def to_tensor(X):

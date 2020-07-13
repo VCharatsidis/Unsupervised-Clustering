@@ -85,7 +85,7 @@ class SVHNencoderNet(nn.Module):
         test_preds = self.test_linear(embeddings)
 
         #print(test_preds)
-        #temp = 2
-        probs = self.softmax(test_preds)
+        temp = 5
+        probs = self.softmax(test_preds/temp)
 
         return embeddings, probs
