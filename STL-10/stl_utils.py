@@ -25,6 +25,7 @@ class AddGaussianNoise(object):
         return self.__class__.__name__ + '(mean={0}, std={1})'.format(self.mean, self.std)
 
 
+
 def gaussian_blur(X):
     X_copy = copy.deepcopy(X)
     X_copy = Variable(torch.FloatTensor(X_copy))
@@ -77,6 +78,7 @@ def vertical_blacken(X):
         X_copy[:, :, :, crop:] = 0
 
     return X_copy
+
 
 def horizontal_blacken(X):
     X_copy = copy.deepcopy(X)
@@ -320,7 +322,7 @@ def color_jitter(X):
     X_copy = Variable(torch.FloatTensor(X_copy))
 
     for i in range(X_copy.shape[0]):
-        transformation = transforms.ColorJitter(brightness=0.55, contrast=0.55, saturation=0.55, hue=0.5)
+        transformation = transforms.ColorJitter(brightness=0.45, contrast=0.45, saturation=0.45, hue=0.45)
         trans = transforms.Compose([transformation, transforms.ToTensor()])
         a = F.to_pil_image(X_copy[i])
         trans_image = trans(a)

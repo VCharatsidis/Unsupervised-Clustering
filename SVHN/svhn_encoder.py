@@ -30,7 +30,6 @@ class SVHNencoderNet(nn.Module):
 
         self.conv = nn.Sequential(
             nn.Conv2d(n_channels, 64, kernel_size=3, stride=1, padding=1),
-            #nn.BatchNorm2d(64),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
 
@@ -50,17 +49,15 @@ class SVHNencoderNet(nn.Module):
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
         )
 
-        self.head_input = 128
-        self.embeding_linear = nn.Sequential(
-            #nn.Dropout2d(0.2),
-            nn.Linear(n_inputs, self.head_input),
-            nn.ReLU(),
-        )
+        # self.head_input = 128
+        # self.embeding_linear = nn.Sequential(
+        #     #nn.Dropout2d(0.2),
+        #     nn.Linear(n_inputs, self.head_input),
+        #     nn.ReLU(),
+        # )
 
         self.test_linear = nn.Sequential(
-
-            nn.Linear(self.head_input, classes[0])
-
+            nn.Linear(4608, classes[0])
         )
 
         self.softmax = nn.Sequential(
@@ -80,12 +77,10 @@ class SVHNencoderNet(nn.Module):
 
         conv = self.conv(x)
         encoding = torch.flatten(conv, 1)
-        embeddings = self.embeding_linear(encoding)
+        #embeddings = self.embeding_linear(encoding)
 
-        test_preds = self.test_linear(embeddings)
+        test_preds = self.test_linear(encoding)
 
-        #print(test_preds)
-        temp = 5
-        probs = self.softmax(test_preds/temp)
+        probs = self.softmax(test_preds)
 
-        return embeddings, probs
+        return encoding, test_preds, probs

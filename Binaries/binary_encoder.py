@@ -6,7 +6,7 @@ import torch
 
 
 
-class UnsupervisedNet(nn.Module):
+class BinEncoderNet(nn.Module):
     """
     This class implements a Multi-layer Perceptron in PyTorch.
     It handles the different layers and parameters of the model.
@@ -26,62 +26,46 @@ class UnsupervisedNet(nn.Module):
                      This number is required in order to specify the
                      output dimensions of the MLP
         """
-        super(UnsupervisedNet, self).__init__()
+        super(BinEncoderNet, self).__init__()
 
         self.conv = nn.Sequential(
             nn.Conv2d(n_channels, 64, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
-            #
+
             nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
-            #
+
             nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
-            #
+
             nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
         )
 
-        self.head_input = 128
-        self.embeding_linear = nn.Sequential(
-
-            nn.Linear(n_inputs, self.head_input),
-            nn.ReLU(),
-        )
+        # self.head_input = 128
+        # self.embeding_linear = nn.Sequential(
+        #     #nn.Dropout2d(0.2),
+        #     nn.Linear(n_inputs, self.head_input),
+        #     nn.ReLU(),
+        # )
 
         self.test_linear = nn.Sequential(
+            nn.Linear(4608, classes[0])
 
-            nn.Linear(self.head_input, classes[0]),
+        )
+
+        self.sigmoid = nn.Sequential(
+            nn.Sigmoid()
+        )
+
+        self.softmax = nn.Sequential(
             nn.Softmax(dim=1)
         )
 
-        self.help_linear1 = nn.Sequential(
-
-            nn.Linear(self.head_input, classes[1]),
-            nn.Softmax(dim=1)
-        )
-
-        self.help_linear2 = nn.Sequential(
-
-            nn.Linear(self.head_input, classes[2]),
-            nn.Softmax(dim=1)
-        )
-
-        self.help_linear3 = nn.Sequential(
-
-            nn.Linear(self.head_input, classes[3]),
-            nn.Softmax(dim=1)
-        )
-
-        self.help_linear4 = nn.Sequential(
-
-            nn.Linear(self.head_input, classes[4]),
-            nn.Softmax(dim=1)
-        )
 
     def forward(self, x):
         """
@@ -95,13 +79,10 @@ class UnsupervisedNet(nn.Module):
 
         conv = self.conv(x)
         encoding = torch.flatten(conv, 1)
-        embeddings = self.embeding_linear(encoding)
+        #embeddings = self.embeding_linear(encoding)
 
-        test_preds = self.test_linear(embeddings)
+        test_preds = self.test_linear(encoding)
 
-        help_preds1 = self.help_linear1(embeddings)
-        help_preds2 = self.help_linear2(embeddings)
-        help_preds3 = self.help_linear3(embeddings)
-        help_preds4 = self.help_linear4(embeddings)
+        probs = self.sigmoid(test_preds)
 
-        return embeddings, test_preds, help_preds1, help_preds2, help_preds3, help_preds4
+        return encoding, test_preds, probs

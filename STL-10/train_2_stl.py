@@ -11,7 +11,7 @@ from torch.autograd import Variable
 import matplotlib.pyplot as plt
 from stl10_input import read_all_images, read_labels
 from encoderSTL import EncoderSTL
-from stl_utils import rotate, scale, to_gray, vertical_flip, random_erease
+from stl_utils import*
 from torchvision import transforms
 import random
 
@@ -39,7 +39,7 @@ def kl_divergence(p, q):
 
 def encode_4_patches(image, colons, train):
     image_1 = image[:, :, 10: 90, 10:90]
-    image_1 = to_gray(image_1, 1)
+    image_1 = to_grayscale(image_1, 1)
 
     # image_1 = torch.transpose(image_1, 1, 3)
     # print(image_1.shape)
