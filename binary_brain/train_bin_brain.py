@@ -8,8 +8,7 @@ import scipy.io as sio
 import argparse
 import os
 
-from binary_encoder import BinEncoderNet
-from binary_conv_encoder import BinConvEncoderNet
+from bin_brain_encoder import BinBrain
 
 from stl_utils import *
 import random
@@ -28,7 +27,7 @@ LEARNING_RATE_DEFAULT = 1e-4
 # SPIKE = 3e-3
 MAX_STEPS_DEFAULT = 500000
 
-BATCH_SIZE_DEFAULT = 280
+BATCH_SIZE_DEFAULT = 400
 
 #INPUT_NET = 3072
 INPUT_NET = 4608
@@ -151,19 +150,33 @@ def transformation(id, image):
     return image
 
 
-def entropy_minmax_loss(preds_1, preds_2):
-    product = preds_1 * preds_2
-    product_mean = product.mean(dim=0)
-    class_logs = torch.log(product_mean)
-    loss = - class_logs.mean(dim=0)
+def energy_loss(pred):
+    vertical_mean = pred.mean(dim=0)
+    reverse_vertical_mean = 1 - vertical_mean
+    log_rev_vert_mean = - torch.log(reverse_vertical_mean)
+    energy = log_rev_vert_mean.mean(dim=0)
 
-    rev_prod = (1-preds_1) * (1-preds_2)
-    rev_prod = rev_prod.mean(dim=0)
-    rev_class_logs = torch.log(rev_prod)
-    rev_total_loss = - rev_class_logs.mean(dim=0)
+    return energy
+
+
+def entropy_minmax_loss(preds_1, preds_2):
+    energy_loss_1 = energy_loss(preds_1)
+    energy_loss_2 = energy_loss(preds_2)
+
+    mean_energy_loss = (energy_loss_1 + energy_loss_2) / 2
+
+    product = preds_1 * preds_2
+
+    product_horizontal_mean = product.mean(dim=1)
+    log_horizontal_mean = - torch.log(product_horizontal_mean)
+    batch_horizontal_mean = log_horizontal_mean.mean(dim=0)
+
+    product_vertical_mean = product.mean(dim=0)
+    log_vertical_mean = - torch.log(product_vertical_mean)
+    batch_vertical_mean = log_vertical_mean.mean(dim=0)
 
     sum_mean = 0
-    negative_samples = 100
+    negative_samples = 40
     for i in range(negative_samples):
         derangement = random_derangement(BATCH_SIZE_DEFAULT)
 
@@ -174,21 +187,12 @@ def entropy_minmax_loss(preds_1, preds_2):
         log_neg_mean = torch.log(negative_mean)
         log_mean = -log_neg_mean.mean(dim=0)
 
-        # deranged_prod = product[derangement, :]
-        # rev_negative = (1-product) * deranged_prod
-        # rev_negative_mean = rev_negative.mean(dim=1)
-        #
-        # rev_negative_mean[(rev_negative_mean < EPS).data] = EPS
-        # log_rev_neg_mean = torch.log(rev_negative_mean)
-        # rev_log_mean = -log_rev_neg_mean.mean(dim=0)
-
         sum_mean += log_mean
         # sum_rev_mean += rev_log_mean
 
     mean_negatives = sum_mean / negative_samples
-    #mean_rev_negatives = sum_rev_mean / negative_samples
 
-    total_loss = rev_total_loss + loss + 2 * mean_negatives  # + mean_rev_negatives
+    total_loss = 0.85 * mean_energy_loss + 0.05 * batch_vertical_mean + 0.05 * batch_horizontal_mean + 0.05 * mean_negatives
 
     return total_loss
 
@@ -276,8 +280,7 @@ def measure_acc_augments(X_test, colons, targets, total_mean):
             print("example prediction ", pred_number, " : ", p[pred_number].data.cpu().numpy())
             pred_number = random.randint(0, BATCH_SIZE_DEFAULT - 1)
             print("example prediction ", pred_number, " : ", p[pred_number].data.cpu().numpy())
-            pred_number = random.randint(0, BATCH_SIZE_DEFAULT - 1)
-            print("example prediction ", pred_number, " : ", p[pred_number].data.cpu().numpy())
+
 
     avg_loss = sum_loss / runs
     print("test avg loss", avg_loss)
@@ -363,13 +366,13 @@ def train():
 
     script_directory = os.path.split(os.path.abspath(__file__))[0]
 
-    filepath = 'binary_models\\most_clusters_encoder' + '.model'
+    filepath = 'brain_models\\most_clusters_encoder' + '.model'
     clusters_net_path = os.path.join(script_directory, filepath)
 
-    filepath = 'binary_models\\best_loss_encoder' + '.model'
+    filepath = 'brain_models\\best_loss_encoder' + '.model'
     loss_net_path = os.path.join(script_directory, filepath)
 
-    encoder = BinConvEncoderNet(1, INPUT_NET, DROPOUT, CLASSES).to('cuda')
+    encoder = BinBrain(1, INPUT_NET, DROPOUT, CLASSES).to('cuda')
     optimizer = torch.optim.Adam(encoder.parameters(), lr=LEARNING_RATE_DEFAULT)
 
     min_miss_percentage = 50

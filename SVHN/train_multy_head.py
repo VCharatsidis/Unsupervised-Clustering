@@ -8,7 +8,7 @@ import scipy.io as sio
 import argparse
 import os
 
-from multy_head_dropout_encoder import MultiHeadDropout
+from multy_head_encoder import MultiHead
 
 from stl_utils import *
 import random
@@ -18,13 +18,9 @@ import matplotlib
 from torchvision import models
 EPS = sys.float_info.epsilon
 
-
-fcn = models.segmentation.fcn_resnet101(pretrained=True).eval()
-
 #EPS=sys.float_info.epsilon
 LEARNING_RATE_DEFAULT = 1e-4
-# ANCHOR = 1e-4
-# SPIKE = 3e-3
+
 MAX_STEPS_DEFAULT = 500000
 
 BATCH_SIZE_DEFAULT = 580
@@ -98,50 +94,50 @@ images_to_labels ={"1": 1,
 
 
 def transformation(id, image):
-    half = BATCH_SIZE_DEFAULT//2
+    quarter = BATCH_SIZE_DEFAULT//4
     if id == 0:
         return color_jitter(image)
     elif id == 1:
-        return scale(color_jitter(image), (image.shape[2] - 8, image.shape[3] - 8), 4, half)
+        return scale(color_jitter(image), (image.shape[2] - 8, image.shape[3] - 8), 4, quarter)
     elif id == 2:
         return rotate(color_jitter(image), 30)
     elif id == 3:
         return torch.abs(1 - color_jitter(image))
     elif id == 4:
-        return sobel_total(color_jitter(image), half)
+        return sobel_total(color_jitter(image), quarter)
     elif id == 5:
-        return sobel_filter_x(color_jitter(image), half)
+        return sobel_filter_x(color_jitter(image), quarter)
     elif id == 6:
-        return sobel_filter_y(color_jitter(image), half)
+        return sobel_filter_y(color_jitter(image), quarter)
     elif id == 7:
         return gaussian_blur(color_jitter(image))
 
     elif id == 8:
-        t = random_crop(color_jitter(image), 22, half, 18)
-        scaled_up = scale_up(t, 32, 20, half)
+        t = random_crop(color_jitter(image), 22, quarter, 18)
+        scaled_up = scale_up(t, 32, 20, quarter)
         blured = gaussian_blur(scaled_up)
         return blured
 
     elif id == 9:
-        t = random_crop(color_jitter(image), 22, half, 18)
-        scaled_up = scale_up(t, 32, 20, half)
-        sobeled = sobel_total(scaled_up, half)
+        t = random_crop(color_jitter(image), 22, quarter, 18)
+        scaled_up = scale_up(t, 32, 20, quarter)
+        sobeled = sobel_total(scaled_up, quarter)
         return sobeled
 
     elif id == 10:
-        t = random_crop(color_jitter(image), 22, half, 18)
-        scaled_up = scale_up(t, 32, 20, half)
+        t = random_crop(color_jitter(image), 22, quarter, 18)
+        scaled_up = scale_up(t, 32, 20, quarter)
         rev = torch.abs(1 - scaled_up)
         return rev
 
     elif id == 11:
-        t = random_crop(color_jitter(image), 22, half, 18)
-        scaled_up = scale_up(t, 32, 20, half)
+        t = random_crop(color_jitter(image), 22, quarter, 18)
+        scaled_up = scale_up(t, 32, 20, quarter)
         rot = rotate(scaled_up, 40)
         return rot
 
     elif id == 11:
-        return horizontal_flip(color_jitter(image), half)
+        return horizontal_flip(color_jitter(image), quarter)
 
 
 
@@ -152,7 +148,7 @@ def transformation(id, image):
 def entropy_minmax_loss(preds_1, preds_2, total_mean):
     product = preds_1 * preds_2
     product = product.mean(dim=0)  # * total_mean.detach()
-    #product[(product < EPS).data] = EPS
+    product[(product < EPS).data] = EPS
     class_logs = torch.log(product) #* cuda_tensor_priors
     total_loss = - class_logs.mean(dim=0)
 
@@ -166,15 +162,21 @@ def forward_block(X, ids, encoder, optimizer, train, total_mean):
     ids = np.random.choice(len(X), size=BATCH_SIZE_DEFAULT, replace=False)
     image = X[ids, :]
 
-    half = BATCH_SIZE_DEFAULT // 2
-    image_1 = transformation(aug_ids[0], image[0:half])
-    image_2 = transformation(aug_ids[1], image[0:half])
+    fourth = BATCH_SIZE_DEFAULT // 4
+    image_1 = transformation(aug_ids[0], image[0:fourth])
+    image_2 = transformation(aug_ids[1], image[0:fourth])
 
-    image_3 = transformation(aug_ids[2], image[half:])
-    image_4 = transformation(aug_ids[3], image[half:])
+    image_3 = transformation(aug_ids[2], image[fourth: 2 * fourth])
+    image_4 = transformation(aug_ids[3], image[fourth: 2 * fourth])
 
-    image_1 = torch.cat([image_1, image_3], dim=0)
-    image_2 = torch.cat([image_2, image_4], dim=0)
+    image_5 = transformation(aug_ids[4], image[2 * fourth: 3 * fourth])
+    image_6 = transformation(aug_ids[5], image[2 * fourth: 3 * fourth])
+
+    image_7 = transformation(aug_ids[6], image[3 * fourth:])
+    image_8 = transformation(aug_ids[7], image[3 * fourth:])
+
+    image_1 = torch.cat([image_1, image_3, image_5, image_7], dim=0)
+    image_2 = torch.cat([image_2, image_4, image_6, image_8], dim=0)
 
     encoding, probs10, probs12, probs20, probs50 = encoder(image_1.to('cuda'))
     encoding, probs10_b, probs12_b, probs20_b, probs50_b = encoder(image_2.to('cuda'))
@@ -224,20 +226,17 @@ def measure_acc_augments(X_test, colons, targets, total_mean):
     print("total mean:     ", total_mean.data.cpu().numpy())
     print()
     batch_num = random.randint(0, runs-1)
+    sum_loss = 0
 
     for j in range(runs):
         test_ids = range(j * size, (j + 1) * size)
 
         p = accuracy_block(X_test, test_ids, colons)
+        _, _, total_loss, _, _, _ = forward_block(X_test, test_ids, colons, [], False)
+        sum_loss += total_loss.item()
 
         if j == batch_num:
             pred_number = random.randint(0, BATCH_SIZE_DEFAULT-1)
-            print("example prediction ", pred_number, " : ", p[pred_number].data.cpu().numpy())
-            pred_number = random.randint(0, BATCH_SIZE_DEFAULT - 1)
-            print("example prediction ", pred_number, " : ", p[pred_number].data.cpu().numpy())
-            pred_number = random.randint(0, BATCH_SIZE_DEFAULT - 1)
-            print("example prediction ", pred_number, " : ", p[pred_number].data.cpu().numpy())
-            pred_number = random.randint(0, BATCH_SIZE_DEFAULT - 1)
             print("example prediction ", pred_number, " : ", p[pred_number].data.cpu().numpy())
             pred_number = random.randint(0, BATCH_SIZE_DEFAULT - 1)
             print("example prediction ", pred_number, " : ", p[pred_number].data.cpu().numpy())
@@ -292,7 +291,10 @@ def measure_acc_augments(X_test, colons, targets, total_mean):
     print("Clusters found: " + str(len(clusters)) + " " + str(clusters))
     print()
 
-    return miss_percentage, len(clusters)
+    avg_loss = sum_loss / runs
+    print("test avg loss", avg_loss)
+
+    return miss_percentage, len(clusters), avg_loss
 
 
 def miss_classifications(cluster):
@@ -379,13 +381,14 @@ def train():
     filepath = 'svhn_models\\best_loss_encoder' + '.model'
     loss_net_path = os.path.join(script_directory, filepath)
 
-    encoder = MultiHeadDropout(1, INPUT_NET, DROPOUT, CLASSES).to('cuda')
+    encoder = MultiHead(1, INPUT_NET, DROPOUT, CLASSES).to('cuda')
     optimizer = torch.optim.Adam(encoder.parameters(), lr=LEARNING_RATE_DEFAULT)
 
     min_miss_percentage = 100
     max_loss_iter = 0
     most_clusters = 0
     most_clusters_iter = 0
+    best_test_loss = 1000
 
     print(encoder)
     print("X_train: ", X_train.shape, " X_test: ", X_test.shape, " targets: ", targets.shape)
@@ -407,7 +410,7 @@ def train():
         avg_loss += mim.item()
         if iteration % EVAL_FREQ_DEFAULT == 0:
             print("==================================================================================")
-            print("avg loss : ", avg_loss/(iteration+1))
+            print("train avg loss : ", avg_loss/(iteration+1))
             encoder.eval()
 
             print("ITERATION: ", iteration,
@@ -428,30 +431,35 @@ def train():
             p1, p2, mim, total_mean, orig_image, test_ids = forward_block(original_train, test_ids, encoder, optimizer, False, total_mean)
             classes_dict, numbers_classes_dict = print_info(p1, p2, train_targets, test_ids)
 
-            miss_percentage, clusters = measure_acc_augments(X_test, encoder, targets, total_mean)
+            miss_percentage, clusters, test_loss = measure_acc_augments(X_test, encoder, targets, total_mean)
 
-            if clusters >= most_clusters:
-                min_miss_percentage = 1 - best_cluster_accuracies[clusters]
-                most_clusters = clusters
+            if test_loss < best_test_loss:
+                print("models saved iter: " + str(iteration))
+                torch.save(encoder, clusters_net_path)
+                best_test_loss = test_loss
 
-                if min_miss_percentage > miss_percentage:
-                    best_cluster_accuracies[clusters] = 1 - miss_percentage
-                    min_miss_percentage = miss_percentage
-                    max_loss_iter = iteration
-                    most_clusters_iter = iteration
-
-                    print("models saved iter: " + str(iteration))
-                    torch.save(encoder, clusters_net_path)
-
-                    if clusters >= MIN_CLUSTERS_TO_SAVE:
-                        for key in numbers_classes_dict.keys():
-                            numpy_cluster = torch.zeros([len(numbers_classes_dict[key]), 1, SIZE, SIZE_Y])
-                            counter = 0
-                            for index in numbers_classes_dict[key]:
-                                numpy_cluster[counter] = orig_image.cpu().detach()[index]
-                                counter += 1
-                            if counter > 0:
-                                save_cluster(numpy_cluster, key, iteration)
+            # if clusters >= most_clusters:
+            #     min_miss_percentage = 1 - best_cluster_accuracies[clusters]
+            #     most_clusters = clusters
+            #
+            #     if min_miss_percentage > miss_percentage:
+            #         best_cluster_accuracies[clusters] = 1 - miss_percentage
+            #         min_miss_percentage = miss_percentage
+            #         max_loss_iter = iteration
+            #         most_clusters_iter = iteration
+            #
+            #         print("models saved iter: " + str(iteration))
+            #         torch.save(encoder, clusters_net_path)
+            #
+            #         if clusters >= MIN_CLUSTERS_TO_SAVE:
+            #             for key in numbers_classes_dict.keys():
+            #                 numpy_cluster = torch.zeros([len(numbers_classes_dict[key]), 1, SIZE, SIZE_Y])
+            #                 counter = 0
+            #                 for index in numbers_classes_dict[key]:
+            #                     numpy_cluster[counter] = orig_image.cpu().detach()[index]
+            #                     counter += 1
+            #                 if counter > 0:
+            #                     save_cluster(numpy_cluster, key, iteration)
 
 
 def to_tensor(X):

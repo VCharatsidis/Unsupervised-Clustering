@@ -6,27 +6,11 @@ import torch
 
 
 
-class BinEncoderNet(nn.Module):
-    """
-    This class implements a Multi-layer Perceptron in PyTorch.
-    It handles the different layers and parameters of the model.
-    Once initialized an MLP object can perform forward.
-    """
+class MultiHead50(nn.Module):
 
     def __init__(self, n_channels, n_inputs, dp, classes):
-        """
-        Initializes MLP object.
-        Args:
-          n_inputs: number of inputs.
-          n_hidden: list of ints, specifies the number of units
-                    in each linear layer. If the list is empty, the MLP
-                    will not have any linear layers, and the model
-                    will simply perform a multinomial logistic regression.
-          n_classes: number of classes of the classification problem.
-                     This number is required in order to specify the
-                     output dimensions of the MLP
-        """
-        super(BinEncoderNet, self).__init__()
+
+        super(MultiHead50, self).__init__()
 
         self.conv = nn.Sequential(
             nn.Conv2d(n_channels, 64, kernel_size=3, stride=1, padding=1),
@@ -34,14 +18,22 @@ class BinEncoderNet(nn.Module):
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
 
             nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
+            #nn.BatchNorm2d(128),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
 
             nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
+            #nn.BatchNorm2d(256),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
 
             nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1),
+            #nn.BatchNorm2d(512),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
+
+            nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1),
+            # nn.BatchNorm2d(512),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
         )
@@ -53,13 +45,24 @@ class BinEncoderNet(nn.Module):
         #     nn.ReLU(),
         # )
 
-        self.test_linear = nn.Sequential(
-            nn.Linear(4608, 2048)
-
+        self.headA = nn.Sequential(
+            nn.Dropout(0.1),
+            nn.Linear(2048, classes[0])
         )
 
-        self.sigmoid = nn.Sequential(
-            nn.Sigmoid()
+        self.headB = nn.Sequential(
+            nn.Dropout(0.1),
+            nn.Linear(2048, classes[0])
+        )
+
+        self.headC = nn.Sequential(
+            nn.Dropout(0.1),
+            nn.Linear(2048, classes[0])
+        )
+
+        self.headD = nn.Sequential(
+            nn.Dropout(0.1),
+            nn.Linear(2048, classes[0])
         )
 
         self.softmax = nn.Sequential(
@@ -81,8 +84,16 @@ class BinEncoderNet(nn.Module):
         encoding = torch.flatten(conv, 1)
         #embeddings = self.embeding_linear(encoding)
 
-        test_preds = self.test_linear(encoding)
+        test_preds10 = self.headA(encoding)
+        probs10 = self.softmax(test_preds10)
 
-        probs = self.sigmoid(test_preds)
+        test_preds12 = self.headB(encoding)
+        probs12 = self.softmax(test_preds12)
 
-        return encoding, test_preds, probs
+        test_preds20 = self.headC(encoding)
+        probs20 = self.softmax(test_preds20)
+        #
+        test_preds50 = self.headD(encoding)
+        probs50 = self.softmax(test_preds50)
+
+        return encoding, probs10, probs12, probs20, probs50

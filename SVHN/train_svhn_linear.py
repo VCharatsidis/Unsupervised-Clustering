@@ -20,7 +20,7 @@ LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 500000
 
 BATCH_SIZE_DEFAULT = 300
-INPUT_NET = 128
+INPUT_NET = 2048
 SIZE = 32
 NETS = 1
 EVAL_FREQ_DEFAULT = 100
@@ -45,7 +45,7 @@ heads = 1
 
 # encoder_name = "push_best_loss"
 # encoder_name = "push_most_clusters"
-encoder_name = "..\\Binaries\\binary_models\\128features_60k"
+encoder_name = "..\\binary_brain\\brain_models\\most_clusters_encoder"
 encoder_name2 = "clusters12_120k_0.23miss_9aug"
 #encoder_name = "2aug_20_classes_0.57miss"
 
@@ -58,8 +58,8 @@ SUPERVISED_FILE_NAME = "supervised_encoder_loss"
 encoder = torch.load(encoder_name+".model")
 encoder.eval()
 
-encoder2 = torch.load("svhn_models\\"+encoder_name2+".model")
-encoder2.eval()
+# encoder2 = torch.load("svhn_models\\"+encoder_name2+".model")
+# encoder2.eval()
 
 
 DESCRIPTION = ["Supervised NET with 75% augments per batch."]
@@ -83,13 +83,16 @@ def forward_block(X, ids, classifier, optimizer, train, targets):
     images = X[ids, :]
 
     with torch.no_grad():
-        encoding, test_preds, probs = encoder(images.to('cuda'))
-    #     conv2, encodings2, orig_preds2 = encoder2(images.to('cuda'))
-    #
-    #concat = torch.cat([probs10, probs12, probs20, probs50], dim=1)
+        # encoding, p1, p2, p3, p4 = encoder(images.to('cuda'))
+        encoding, p1, binaries = encoder(images.to('cuda'))
 
+    print(binaries[0])
+    print(binaries[1])
+    print(binaries[2])
+    input()
+    #concat = torch.cat([p1, p2, p3, p4], dim=1)
 
-    preds = classifier(probs)
+    preds = classifier(binaries)
 
     # tensor_targets = torch.LongTensor(targets[ids]).unsqueeze(dim=1).cuda()
     # y_onehot = torch.LongTensor(BATCH_SIZE_DEFAULT, 10).cuda()

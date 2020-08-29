@@ -6,7 +6,7 @@ import torch
 
 
 
-class BinEncoderNet(nn.Module):
+class BinBrain(nn.Module):
     """
     This class implements a Multi-layer Perceptron in PyTorch.
     It handles the different layers and parameters of the model.
@@ -26,7 +26,7 @@ class BinEncoderNet(nn.Module):
                      This number is required in order to specify the
                      output dimensions of the MLP
         """
-        super(BinEncoderNet, self).__init__()
+        super(BinBrain, self).__init__()
 
         self.conv = nn.Sequential(
             nn.Conv2d(n_channels, 64, kernel_size=3, stride=1, padding=1),
@@ -53,17 +53,12 @@ class BinEncoderNet(nn.Module):
         #     nn.ReLU(),
         # )
 
-        self.test_linear = nn.Sequential(
-            nn.Linear(4608, 2048)
-
+        self.brain = nn.Sequential(
+            nn.Linear(4608, 32)
         )
 
         self.sigmoid = nn.Sequential(
             nn.Sigmoid()
-        )
-
-        self.softmax = nn.Sequential(
-            nn.Softmax(dim=1)
         )
 
 
@@ -81,8 +76,8 @@ class BinEncoderNet(nn.Module):
         encoding = torch.flatten(conv, 1)
         #embeddings = self.embeding_linear(encoding)
 
-        test_preds = self.test_linear(encoding)
+        test_preds = self.brain(encoding)
 
-        probs = self.sigmoid(test_preds)
+        binaries = self.sigmoid(test_preds)
 
-        return encoding, test_preds, probs
+        return encoding, test_preds, binaries
