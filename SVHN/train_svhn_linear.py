@@ -20,7 +20,7 @@ LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 500000
 
 BATCH_SIZE_DEFAULT = 300
-INPUT_NET = 2048
+INPUT_NET = 4608
 SIZE = 32
 NETS = 1
 EVAL_FREQ_DEFAULT = 100
@@ -86,13 +86,9 @@ def forward_block(X, ids, classifier, optimizer, train, targets):
         # encoding, p1, p2, p3, p4 = encoder(images.to('cuda'))
         encoding, p1, binaries = encoder(images.to('cuda'))
 
-    print(binaries[0])
-    print(binaries[1])
-    print(binaries[2])
-    input()
     #concat = torch.cat([p1, p2, p3, p4], dim=1)
 
-    preds = classifier(binaries)
+    preds = classifier(encoding)
 
     # tensor_targets = torch.LongTensor(targets[ids]).unsqueeze(dim=1).cuda()
     # y_onehot = torch.LongTensor(BATCH_SIZE_DEFAULT, 10).cuda()
