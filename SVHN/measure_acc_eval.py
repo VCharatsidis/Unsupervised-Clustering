@@ -20,7 +20,7 @@ LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 500000
 
 BATCH_SIZE_DEFAULT = 300
-INPUT_NET = 128
+INPUT_NET = 32
 SIZE = 32
 NETS = 1
 EVAL_FREQ_DEFAULT = 100
@@ -45,8 +45,8 @@ heads = 1
 
 # encoder_name = "push_best_loss"
 # encoder_name = "push_most_clusters"
-encoder_name = "..\\binary_brain\\brain_models\\most_clusters_encoder"
-#encoder_name = "svhn_models\\most_clusters_encoder"
+encoder_name = "svhn_models\\clusters12_120k_0.23miss_9aug"
+encoder_name2 = "clusters12_120k_0.23miss_9aug"
 #encoder_name = "2aug_20_classes_0.57miss"
 
 # encoder_name = "best_loss_encoder"
@@ -60,6 +60,28 @@ encoder.eval()
 
 # encoder2 = torch.load("svhn_models\\"+encoder_name2+".model")
 # encoder2.eval()
+
+labels_to_imags = {1: "1",
+                   2: "2",
+                   3: "3",
+                   4: "4",
+                   5: "5",
+                   6: "6",
+                   7: "7",
+                   8: "8",
+                   9: "9",
+                   0: "0"}
+
+images_to_labels = {"1": 1,
+                    "2": 2,
+                    "3": 3,
+                    "4": 4,
+                    "5": 5,
+                    "6": 6,
+                    "7": 7,
+                    "8": 8,
+                    "9": 9,
+                    "0": 0}
 
 
 DESCRIPTION = ["Supervised NET with 75% augments per batch."]
@@ -79,68 +101,69 @@ DESCRIPTION = ["LOSS: product loss multiplied by mean ", " Image size: " + str(S
 loss = nn.CrossEntropyLoss()
 
 
-def forward_block(X, ids, classifier, optimizer, train, targets):
-    images = X[ids, :]
-
-    with torch.no_grad():
-        # encoding, p1, p2, p3, p4 = encoder(images.to('cuda'))
-        encoding, p1, binaries = encoder(images.to('cuda'))
-
-    #concat = torch.cat([p1, p2, p3, p4], dim=1)
-
-    preds = classifier(p1)
-
-    targets_tensor = Variable(torch.LongTensor(targets[ids])).to('cuda')
-
-    cross_entropy_loss = loss(preds, targets_tensor)
-
-    if train:
-
-        for p in encoder.parameters():
-            p.requires_grad = False
-
-        optimizer.zero_grad()
-        cross_entropy_loss.backward()
-        optimizer.step()
-
-    return preds, cross_entropy_loss
-
-
-def save_image(original_image, iteration, name):
-    sample = original_image.view(-1, 1, original_image.shape[2], original_image.shape[2])
-    sample = make_grid(sample, nrow=8).detach().numpy().astype(np.float).transpose(1, 2, 0)
-    matplotlib.image.imsave(f"gen_images/{name}_iter_{iteration}.png", sample)
-
-
 def accuracy(predictions, targets):
    predictions = predictions.cpu().detach().numpy()
    preds = np.argmax(predictions, 1)
    result = preds == targets
    sum = np.sum(result)
-   #accur = sum / float(targets.shape[0])
 
    return sum
 
 
 def measure_acc_augments(X_test, classifier, targets):
+    print_dict = {1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 0: []}
     runs = len(X_test) // BATCH_SIZE_DEFAULT
-    avg_loss = 0
+
     sum_correct = 0
+    size = BATCH_SIZE_DEFAULT
 
     for j in range(runs):
         test_ids = range(j * BATCH_SIZE_DEFAULT, (j + 1) * BATCH_SIZE_DEFAULT)
         test_ids = np.array(test_ids)
         optimizer = []
-        preds, mim = forward_block(X_test, test_ids, classifier, optimizer, False, targets)
 
-        sum_correct += accuracy(preds, targets[test_ids])
-        avg_loss += mim.item()
+        images = X_test[test_ids]
+        with torch.no_grad():
+            # encoding, p1, p2, p3, p4 = encoder(images.to('cuda'))
+            encoding, p1, preds = classifier(images.to('cuda'))
 
-    average_test_loss = avg_loss / runs
-    accuracy_test_set = sum_correct / (runs * BATCH_SIZE_DEFAULT)
-    print("Test set avg loss: ", average_test_loss, " avg accuracy: ", accuracy_test_set)
+        for i in range(preds.shape[0]):
+            _, mean_index = torch.max(preds[i], 0)
+            verdict = int(mean_index.data.cpu().numpy())
+            label = targets[test_ids[i]]
 
-    return average_test_loss, accuracy_test_set
+            if label == 10:
+                label = 0
+
+            print_dict[label].append(verdict)
+
+
+    total_miss = 0
+    clusters = set()
+    for element in print_dict.keys():
+        length = len(print_dict[element])
+        misses = miss_classifications(print_dict[element])
+        total_miss += misses
+
+        mfe = most_frequent(print_dict[element])
+        clusters.add(mfe)
+        print("cluster: ",
+              labels_to_imags[element],
+              ", most frequent: ",
+              mfe,
+              ", miss-classifications: ",
+              misses,
+              ", miss percentage: ",
+              misses / length)
+
+    miss_percentage = total_miss / (runs * size)
+    print()
+    print("AUGMENTS avg loss: ",
+          " miss: ", total_miss,
+          " data: ", runs * size,
+          " miss percent: ", miss_percentage)
+    print("Clusters found: " + str(len(clusters)) + " " + str(clusters))
+    print()
 
 
 def miss_classifications(cluster):
@@ -165,13 +188,13 @@ def print_params(model):
 def train():
 
     ### Train data ###
-    train_data = sio.loadmat('data\\train_32x32.mat')
-    X_train = preproccess(train_data['X'])
-    print("x train shape", X_train.shape)
-
-    targets_train = train_data['y'].squeeze(1)
-    print("y train", targets_train.shape)
-    targets_train = np.array([x % 10 for x in targets_train])
+    # train_data = sio.loadmat('data\\train_32x32.mat')
+    # X_train = preproccess(train_data['X'])
+    # print("x train shape", X_train.shape)
+    #
+    # targets_train = train_data['y'].squeeze(1)
+    # print("y train", targets_train.shape)
+    # targets_train = np.array([x % 10 for x in targets_train])
 
     ### Test data ###
     test_data = sio.loadmat('data\\test_32x32.mat')
@@ -184,67 +207,7 @@ def train():
 
     script_directory = os.path.split(os.path.abspath(__file__))[0]
 
-    filepath = 'encoders\\encoder_' + str(0) + '.model'
-    path_to_model = os.path.join(script_directory, filepath)
-
-    linearClassifier = LinearNetSVHN(INPUT_NET).cuda()
-    optimizer = torch.optim.Adam(linearClassifier.parameters(), lr=LEARNING_RATE_DEFAULT)
-
-    best_accuracy = 0
-    iter_acc = 0
-    patience = 50
-
-    for iteration in range(MAX_STEPS_DEFAULT):
-        linearClassifier.train()
-        ids = np.random.choice(len(X_train), size=BATCH_SIZE_DEFAULT, replace=False)
-        train = True
-        preds, mim = forward_block(X_train, ids, linearClassifier, optimizer, train, targets_train)
-
-        if iteration % EVAL_FREQ_DEFAULT == 0:
-            linearClassifier.eval()
-            print()
-            print("==============================================================")
-            print("ITERATION: ", iteration,
-                  ", batch size: ", BATCH_SIZE_DEFAULT,
-                  ", lr: ", LEARNING_RATE_DEFAULT,
-                  ", best acc: ", iter_acc,
-                  ": ", best_accuracy)
-            print("patience: ", patience)
-            print()
-            for info in DESCRIPTION:
-                print(info)
-            print()
-            loss, acc = measure_acc_augments(X_test, linearClassifier, targets_test)
-
-            if best_accuracy < acc:
-                best_accuracy = acc
-                iter_acc = iteration
-                patience = 0
-
-                print("models saved iter: " + str(iteration))
-            else:
-                patience += 1
-
-            if patience > PATIENCE:
-                print("For ", patience, " iterations we do not have a better accuracy")
-                print("best accuracy: ", best_accuracy, " at iter: ", iter_acc)
-                print("accuracy at stop: ", acc, "loss at stop: ", loss)
-
-                file = open("experiments.txt", "a")
-                for info in DESCRIPTION:
-                    file.write(info)
-
-                accuracy_info = ",  BEST ACCURACY: " + str(best_accuracy) + " at iter: " + str(iter_acc) + "\n"
-                file.write(accuracy_info)
-                file.close()
-                break
-
-
-def to_tensor(X):
-    with torch.no_grad():
-        X = Variable(torch.FloatTensor(X))
-
-    return X
+    measure_acc_augments(X_test, encoder, targets_test)
 
 
 def main():

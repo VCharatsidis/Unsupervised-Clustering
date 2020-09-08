@@ -6,14 +6,14 @@ import torch
 
 
 
-class UnsupervisedNet(nn.Module):
+class Test(nn.Module):
     """
     This class implements a Multi-layer Perceptron in PyTorch.
     It handles the different layers and parameters of the model.
     Once initialized an MLP object can perform forward.
     """
 
-    def __init__(self, n_channels, classes):
+    def __init__(self, n_channels, CLASSES):
         """
         Initializes MLP object.
         Args:
@@ -26,21 +26,21 @@ class UnsupervisedNet(nn.Module):
                      This number is required in order to specify the
                      output dimensions of the MLP
         """
-        super(UnsupervisedNet, self).__init__()
+        super(Test, self).__init__()
 
         self.conv = nn.Sequential(
-            nn.Conv2d(n_channels, 64, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(n_channels, 64, kernel_size=5, stride=1, padding=1),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
-            #
+
             nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
-            #
+
             nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
-            #
+
             nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
@@ -50,9 +50,12 @@ class UnsupervisedNet(nn.Module):
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
         )
 
-        self.test_linear = nn.Sequential(
-            nn.Linear(2048, classes),
-            nn.Softmax(dim=1)
+        self.brain = nn.Sequential(
+            nn.Linear(2048, CLASSES)
+        )
+
+        self.sigmoid = nn.Sequential(
+            nn.Sigmoid()
         )
 
 
@@ -69,6 +72,8 @@ class UnsupervisedNet(nn.Module):
         conv = self.conv(x)
         encoding = torch.flatten(conv, 1)
 
-        test_preds = self.test_linear(encoding)
+        test_preds = self.brain(encoding)
 
-        return encoding, test_preds
+        binaries = self.sigmoid(test_preds)
+
+        return encoding, test_preds, binaries

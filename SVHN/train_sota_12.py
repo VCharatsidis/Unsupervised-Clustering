@@ -8,8 +8,7 @@ import scipy.io as sio
 import argparse
 import os
 
-from multy_head_encoder import MultiHead
-
+from svhn_encoder import SVHNencoderNet
 from stl_utils import *
 import random
 
@@ -23,7 +22,7 @@ LEARNING_RATE_DEFAULT = 1e-4
 
 MAX_STEPS_DEFAULT = 500000
 
-BATCH_SIZE_DEFAULT = 580
+BATCH_SIZE_DEFAULT = 320
 
 #INPUT_NET = 3072
 INPUT_NET = 5120
@@ -32,7 +31,7 @@ SIZE_Y = 20
 NETS = 1
 
 DROPOUT = 0
-class_n = 10
+class_n = 12
 CLASSES = [class_n, class_n, class_n, class_n, class_n]
 DESCRIPTION = " Image size: "+str(SIZE) + " , Dropout2d: "+str(DROPOUT)+" , Classes: "+str(CLASSES)
 
@@ -147,7 +146,7 @@ def transformation(id, image):
 
 def entropy_minmax_loss(preds_1, preds_2, total_mean):
     product = preds_1 * preds_2
-    product = product.mean(dim=0)  # * total_mean.detach()
+    product = product.mean(dim=0)
     product[(product < EPS).data] = EPS
     class_logs = torch.log(product) #* cuda_tensor_priors
     total_loss = - class_logs.mean(dim=0)
@@ -178,22 +177,19 @@ def forward_block(X, ids, encoder, optimizer, train, total_mean):
     image_1 = torch.cat([image_1, image_3, image_5, image_7], dim=0)
     image_2 = torch.cat([image_2, image_4, image_6, image_8], dim=0)
 
-    encoding, probs10, probs12, probs20, probs50 = encoder(image_1.to('cuda'))
-    encoding, probs10_b, probs12_b, probs20_b, probs50_b = encoder(image_2.to('cuda'))
+    encoding, probs10, probs12 = encoder(image_1.to('cuda'))
+    encoding, probs10_b, probs12_b = encoder(image_2.to('cuda'))
 
-    loss10 = entropy_minmax_loss(probs10, probs10_b, total_mean)
     loss12 = entropy_minmax_loss(probs12, probs12_b, total_mean)
-    loss20 = entropy_minmax_loss(probs20, probs20_b, total_mean)
-    loss50 = entropy_minmax_loss(probs50, probs50_b, total_mean)
 
-    total_loss = loss10 + loss12 + loss20 + loss50
+    total_loss = loss12
 
     if train:
         optimizer.zero_grad()
         total_loss.backward()
         optimizer.step()
 
-    return probs10, probs10_b, total_loss, total_mean, image, ids
+    return probs12, probs12_b, total_loss, total_mean, image, ids
 
 
 def save_cluster(original_image, cluster, iteration):
@@ -211,9 +207,9 @@ def save_image(original_image, index, name, cluster=0):
 def accuracy_block(X, ids, encoder):
     images = X[ids, :]
     #sobel = transformation(4, images)
-    encoding, probs10, probs12, probs20, probs50 = encoder(images.to('cuda'))
+    encoding, probs10, probs12 = encoder(images.to('cuda'))
 
-    return probs10
+    return probs12
 
 
 def measure_acc_augments(X_test, colons, targets, total_mean):
@@ -232,7 +228,7 @@ def measure_acc_augments(X_test, colons, targets, total_mean):
         test_ids = range(j * size, (j + 1) * size)
 
         p = accuracy_block(X_test, test_ids, colons)
-        _, _, total_loss, _, _, _ = forward_block(X_test, test_ids, colons, [], False)
+        _, _, total_loss, _, _, _ = forward_block(X_test, test_ids, colons, [], False, total_mean)
         sum_loss += total_loss.item()
 
         if j == batch_num:
@@ -335,9 +331,15 @@ def preproccess(x):
 
 
 def train():
-    unsupervised_data = sio.loadmat('data\\train.mat')
-    #train_data = sio.loadmat('data\\train_32x32.mat')
-    test_data = sio.loadmat('data\\test.mat')
+    unsupervised_data = sio.loadmat('data\\extra_32x32.mat')
+    train_data = sio.loadmat('data\\train_32x32.mat')
+    test_data = sio.loadmat('data\\test_32x32.mat')
+
+    original_train = preproccess(train_data['X'])
+    train_targets = train_data['y'].squeeze(1)
+    print("y test", train_targets.shape)
+
+    train_targets = np.array([x % 10 for x in train_targets])
 
     # for target in train_targets:
     #     class_numbers[target] += 1
@@ -353,6 +355,8 @@ def train():
     targets = test_data['y'].squeeze(1)
     print("y test", targets.shape)
 
+    targets = np.array([x % 10 for x in targets])
+
     # for target in targets:
     #     class_numbers[target] += 1
     #
@@ -367,13 +371,13 @@ def train():
 
     script_directory = os.path.split(os.path.abspath(__file__))[0]
 
-    filepath = 'cifar100_models\\most_clusters_encoder' + '.model'
+    filepath = 'svhn_models\\most_clusters_encoder' + '.model'
     clusters_net_path = os.path.join(script_directory, filepath)
 
-    filepath = 'cifar100_models\\best_loss_encoder' + '.model'
+    filepath = 'svhn_models\\best_loss_encoder' + '.model'
     loss_net_path = os.path.join(script_directory, filepath)
 
-    encoder = MultiHead(1, INPUT_NET, DROPOUT, CLASSES).to('cuda')
+    encoder = SVHNencoderNet(1, INPUT_NET, DROPOUT, CLASSES).to('cuda')
     optimizer = torch.optim.Adam(encoder.parameters(), lr=LEARNING_RATE_DEFAULT)
 
     min_miss_percentage = 100
@@ -419,29 +423,29 @@ def train():
             # for i in range(0, 10):
             #     test_ids += random.sample(test_dict[i], samples_per_cluster)
 
-            test_ids = np.random.choice(len(X_test), size=BATCH_SIZE_DEFAULT, replace=False)
-            p1, p2, mim, total_mean, orig_image, test_ids = forward_block(X_test, test_ids, encoder, optimizer, False, total_mean)
-            classes_dict, numbers_classes_dict = print_info(p1, p2, targets, test_ids)
+            test_ids = np.random.choice(len(original_train), size=BATCH_SIZE_DEFAULT, replace=False)
+            p1, p2, mim, total_mean, orig_image, test_ids = forward_block(original_train, test_ids, encoder, optimizer, False, total_mean)
+            classes_dict, numbers_classes_dict = print_info(p1, p2, train_targets, test_ids)
 
             miss_percentage, clusters, test_loss = measure_acc_augments(X_test, encoder, targets, total_mean)
 
-            if test_loss < best_test_loss:
-                print("models saved iter: " + str(iteration))
-                torch.save(encoder, clusters_net_path)
-                best_test_loss = test_loss
+            # if test_loss < best_test_loss:
+            #     print("models saved iter: " + str(iteration))
+            #     torch.save(encoder, clusters_net_path)
+            #     best_test_loss = test_loss
 
-            # if clusters >= most_clusters:
-            #     min_miss_percentage = 1 - best_cluster_accuracies[clusters]
-            #     most_clusters = clusters
-            #
-            #     if min_miss_percentage > miss_percentage:
-            #         best_cluster_accuracies[clusters] = 1 - miss_percentage
-            #         min_miss_percentage = miss_percentage
-            #         max_loss_iter = iteration
-            #         most_clusters_iter = iteration
-            #
-            #         print("models saved iter: " + str(iteration))
-            #         torch.save(encoder, clusters_net_path)
+            if clusters >= most_clusters:
+                min_miss_percentage = 1 - best_cluster_accuracies[clusters]
+                most_clusters = clusters
+
+                if min_miss_percentage > miss_percentage:
+                    best_cluster_accuracies[clusters] = 1 - miss_percentage
+                    min_miss_percentage = miss_percentage
+                    max_loss_iter = iteration
+                    most_clusters_iter = iteration
+
+                    print("models saved iter: " + str(iteration))
+                    torch.save(encoder, clusters_net_path)
             #
             #         if clusters >= MIN_CLUSTERS_TO_SAVE:
             #             for key in numbers_classes_dict.keys():

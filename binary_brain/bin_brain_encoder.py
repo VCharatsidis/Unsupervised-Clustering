@@ -44,6 +44,10 @@ class BinBrain(nn.Module):
             nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
+
+            nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
         )
 
         # self.head_input = 128
@@ -54,7 +58,7 @@ class BinBrain(nn.Module):
         # )
 
         self.brain = nn.Sequential(
-            nn.Linear(4608, 32)
+            nn.Linear(2048, 128)
         )
 
         self.sigmoid = nn.Sequential(

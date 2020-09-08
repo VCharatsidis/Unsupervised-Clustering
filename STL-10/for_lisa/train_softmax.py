@@ -5,7 +5,7 @@ from __future__ import print_function
 import argparse
 import os
 from stl10_input import read_all_images, read_labels
-from UnsupervisedEncoder import UnsupervisedNet
+from test_encoder import Test
 from stl_utils import *
 import random
 import sys
@@ -25,7 +25,6 @@ BATCH_SIZE_DEFAULT = 300
 INPUT_NET = 2048
 SIZE = 32
 NETS = 1
-UNSUPERVISED = True
 
 CLASSES = 12
 DESCRIPTION = " Image size: "+str(SIZE) + " , Classes: "+str(CLASSES)
@@ -34,6 +33,19 @@ EVAL_FREQ_DEFAULT = 500
 MIN_CLUSTERS_TO_SAVE = 10
 np.set_printoptions(formatter={'float': lambda x: "{0:0.4f}".format(x)})
 FLAGS = None
+
+
+def preprocess_stl(x):
+    images = rgb2gray(x)
+
+    images = to_tensor(images)
+    images = images.unsqueeze(0)
+    images = images.transpose(0, 1)
+    images = images.transpose(2, 3)
+
+    images /= 255
+    return images
+
 
 cluster_accuracies = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0}
 
@@ -73,24 +85,15 @@ def entropy_minmax_loss(preds_1, preds_2):
     return total_loss
 
 
-def forward_block(X, ids, encoder, optimizer, train):
-    images = X[ids]
-
-    if train:
-        images = rgb2gray(images)
-
-        images = to_tensor(images)
-        images = images.unsqueeze(0)
-        images = images.transpose(0, 1)
-        images = images.transpose(2, 3)
-
-        images /= 255
+def forward_block(X, X_scaled, ids, encoder, optimizer, train):
+    images = X[ids, :]
+    scaled_images = X_scaled[ids, :]
 
     number_augments = 12
     aug_ids = np.random.choice(number_augments, size=2, replace=False)
 
-    image_1 = transformation(aug_ids[0], images)
-    image_2 = transformation(aug_ids[1], images)
+    image_1 = transformation(aug_ids[0], images, scaled_images)
+    image_2 = transformation(aug_ids[1], images, scaled_images)
 
     # show_gray(image_1)
     # show_gray(image_2)
@@ -127,7 +130,7 @@ def save_image(original_image, index, name, cluster=0):
     matplotlib.image.imsave(f"gen_images/c_{cluster}/{name}_index_{index}.png", sample)
 
 
-def transformation(id, image):
+def transformation(id, image, scaled_image):
     pad = (96 - SIZE) // 2
     fourth = BATCH_SIZE_DEFAULT
 
@@ -135,51 +138,35 @@ def transformation(id, image):
         image = horizontal_flip(image, fourth)
 
     if id == 0:
-        image = scale(image, SIZE, pad, fourth)
-        image = image[:, :, pad:96 - pad, pad:96 - pad]
-        color_jit_image = color_jitter(image)
+        color_jit_image = color_jitter(scaled_image)
         return color_jit_image
 
     elif id == 1:
-        image = scale(image, SIZE, pad, fourth)
-        image = image[:, :, pad:96 - pad, pad:96 - pad]
-        color_jit_image = color_jitter(image)
+        color_jit_image = color_jitter(scaled_image)
         return scale(color_jit_image, (color_jit_image.shape[2] - 8, color_jit_image.shape[3] - 8), 4,
                      fourth)
     elif id == 2:
-        image = scale(image, SIZE, pad, fourth)
-        image = image[:, :, pad:96 - pad, pad:96 - pad]
-        color_jit_image = color_jitter(image)
+        color_jit_image = color_jitter(scaled_image)
         return rotate(color_jit_image, 30)
 
     elif id == 3:
-        image = scale(image, SIZE, pad, fourth)
-        image = image[:, :, pad:96 - pad, pad:96 - pad]
-        color_jit_image = color_jitter(image)
+        color_jit_image = color_jitter(scaled_image)
         return torch.abs(1 - color_jit_image)
 
     elif id == 4:
-        image = scale(image, SIZE, pad, fourth)
-        image = image[:, :, pad:96 - pad, pad:96 - pad]
-        color_jit_image = color_jitter(image)
+        color_jit_image = color_jitter(scaled_image)
         return sobel_total(color_jit_image, fourth)
 
     elif id == 5:
-        image = scale(image, SIZE, pad, fourth)
-        image = image[:, :, pad:96 - pad, pad:96 - pad]
-        color_jit_image = color_jitter(image)
+        color_jit_image = color_jitter(scaled_image)
         return sobel_filter_x(color_jit_image, fourth)
 
     elif id == 6:
-        image = scale(image, SIZE, pad, fourth)
-        image = image[:, :, pad:96 - pad, pad:96 - pad]
-        color_jit_image = color_jitter(image)
+        color_jit_image = color_jitter(scaled_image)
         return sobel_filter_y(color_jit_image, fourth)
 
     elif id == 7:
-        image = scale(image, SIZE, pad, fourth)
-        image = image[:, :, pad:96 - pad, pad:96 - pad]
-        color_jit_image = color_jitter(image)
+        color_jit_image = color_jitter(scaled_image)
         return gaussian_blur(color_jit_image)
 
     elif id == 8:
@@ -199,15 +186,13 @@ def transformation(id, image):
         return random_crop(crop_preparation2, SIZE, fourth, SIZE)
 
     elif id == 10:
-        image = scale(image, SIZE, pad, fourth)
-        image = image[:, :, pad:96 - pad, pad:96 - pad]
-        color_jit_image = color_jitter(image)
+        color_jit_image = color_jitter(scaled_image)
         if random.uniform(0, 1) > 0.5:
             color_jit_image = gaussian_blur(color_jit_image)
         return random_erease(color_jit_image, fourth)
 
     elif id == 11:
-        crop_size2 = 76
+        crop_size2 = 66
         crop_pad2 = (96 - crop_size2) // 2
         color_jit_image = color_jitter(image)
         crop_preparation2 = scale(color_jit_image, crop_size2, crop_pad2, fourth)
@@ -234,10 +219,6 @@ def measure_acc_augments(X_test, encoder, targets):
         test_ids = range(j * size, (j + 1) * size)
 
         images = X_test[test_ids, :]
-
-        pad = (96 - SIZE) // 2
-        images = scale(images, SIZE, pad, BATCH_SIZE_DEFAULT)
-        images = images[:, :, pad:96 - pad, pad:96 - pad]
 
         _, p = encoder(images.to('cuda'))
 
@@ -327,39 +308,43 @@ def print_params(model):
 
 
 def train():
-    train_path = "..\\data_2\\stl10_binary\\unlabeled_X.bin"
+    train_path = "data/unlabeled_X.bin"
     print(train_path)
     X_train = read_all_images(train_path)
+    X_train = preprocess_stl(X_train)
 
     ########### test ##############################
-    testFile = "..\\data\\stl10_binary\\train_X.bin"
+    testFile = "data/train_X.bin"
     X_validation = read_all_images(testFile)
+    X_validation = preprocess_stl(X_validation)
 
-    X_validation = rgb2gray(X_validation)
+    sc_pad = (96 - SIZE) // 2
 
-    X_validation = to_tensor(X_validation)
-    X_validation = X_validation.unsqueeze(0)
-    X_validation = X_validation.transpose(0, 1)
-    X_validation = X_validation.transpose(2, 3)
+    X_validation_scaled = scale(X_validation, SIZE, sc_pad, X_validation.shape[0])
+    print("after scale validation", X_validation_scaled.shape)
+    X_validation_scaled = X_validation_scaled[:, :, sc_pad:96 - sc_pad, sc_pad:96 - sc_pad]
+    print("after crop validation", X_validation_scaled.shape)
 
-    X_validation /= 255
+    X_train_scaled = scale(X_train, SIZE, sc_pad, X_train.shape[0])
+    print("after scale train", X_train_scaled.shape)
+    X_train_scaled = X_train_scaled[:, :, sc_pad:96 - sc_pad, sc_pad:96 - sc_pad]
+    print("after crop train", X_train_scaled.shape)
 
-    test_y_File = "..\\data\\stl10_binary\\train_y.bin"
+    test_y_File = "data/train_y.bin"
     targets = read_labels(test_y_File)
-
     targets = np.array([x % 10 for x in targets])
 
     ###############################################
 
     script_directory = os.path.split(os.path.abspath(__file__))[0]
 
-    filepath = 'new_models\\actual_best' + '.model'
+    filepath = 'new_models/actual_best' + '.model'
     actual_best_path = os.path.join(script_directory, filepath)
 
-    filepath = 'new_models\\virtual_best' + '.model'
+    filepath = 'new_models/virtual_best' + '.model'
     virtual_best_path = os.path.join(script_directory, filepath)
 
-    encoder = UnsupervisedNet(1, CLASSES).to('cuda')
+    encoder = Test(1, CLASSES).to('cuda')
     optimizer = torch.optim.Adam(encoder.parameters(), lr=LEARNING_RATE_DEFAULT)
 
     min_miss_percentage = 100
@@ -385,7 +370,7 @@ def train():
 
         ids = np.random.choice(len(X_train), size=BATCH_SIZE_DEFAULT, replace=False)
         train = True
-        p1, p2, mim = forward_block(X_train, ids, encoder, optimizer, train)
+        p1, p2, mim = forward_block(X_train, X_train_scaled, ids, encoder, optimizer, train)
 
         if iteration % EVAL_FREQ_DEFAULT == 0:
             encoder.eval()
@@ -400,7 +385,7 @@ def train():
                   ",  virtual best iter: ", best_virtual_iter,
                   ",", DESCRIPTION)
 
-            miss_percentage, clusters, virtual_percentage = measure_acc_augments(X_validation, encoder, targets)
+            miss_percentage, clusters, virtual_percentage = measure_acc_augments(X_validation_scaled, encoder, targets)
 
             if virtual_percentage < min_virtual_miss_percentage:
                 best_virtual_iter = iteration

@@ -27,7 +27,7 @@ LEARNING_RATE_DEFAULT = 1e-4
 # SPIKE = 3e-3
 MAX_STEPS_DEFAULT = 500000
 
-BATCH_SIZE_DEFAULT = 400
+BATCH_SIZE_DEFAULT = 500
 
 #INPUT_NET = 3072
 INPUT_NET = 4608
@@ -40,7 +40,7 @@ class_n = 2048
 CLASSES = [class_n, class_n, class_n, class_n, class_n]
 DESCRIPTION = " Image size: "+str(SIZE) + " , Dropout2d: "+str(DROPOUT)+" , Classes: "+str(CLASSES)
 
-EVAL_FREQ_DEFAULT = 500
+EVAL_FREQ_DEFAULT = 1000
 MIN_CLUSTERS_TO_SAVE = 10
 np.set_printoptions(formatter={'float': lambda x: "{0:0.4f}".format(x)})
 FLAGS = None
@@ -167,20 +167,24 @@ def entropy_minmax_loss(preds_1, preds_2):
 
     product = preds_1 * preds_2
 
-    product_horizontal_mean = product.mean(dim=1)
-    log_horizontal_mean = - torch.log(product_horizontal_mean)
-    batch_horizontal_mean = log_horizontal_mean.mean(dim=0)
+    # product_horizontal_mean = product.mean(dim=1)
+    # product_horizontal_mean[(product_horizontal_mean < EPS).data] = EPS
+    # log_horizontal_mean = - torch.log(product_horizontal_mean)
+    # batch_horizontal_mean = log_horizontal_mean.mean(dim=0)
 
     product_vertical_mean = product.mean(dim=0)
+    product_vertical_mean[(product_vertical_mean < EPS).data] = EPS
     log_vertical_mean = - torch.log(product_vertical_mean)
     batch_vertical_mean = log_vertical_mean.mean(dim=0)
 
     sum_mean = 0
-    negative_samples = 60
+    negative_samples = 100
     for i in range(negative_samples):
-        derangement = random_derangement(BATCH_SIZE_DEFAULT)
+        #derangement = random_derangement(BATCH_SIZE_DEFAULT)
+        a_range = [(x + i + 1) % BATCH_SIZE_DEFAULT for x in range(BATCH_SIZE_DEFAULT)]
+        #print(a_range)
 
-        rev_deranged_prod = 1 - product[derangement, :]
+        rev_deranged_prod = 1 - product[a_range, :]
         negative = product * rev_deranged_prod
         negative_mean = negative.mean(dim=1)
         negative_mean[(negative_mean < EPS).data] = EPS
@@ -191,7 +195,7 @@ def entropy_minmax_loss(preds_1, preds_2):
 
     mean_negatives = sum_mean / negative_samples
 
-    total_loss = 0.7 * mean_energy_loss + 0.05 * batch_vertical_mean + 0.05 * batch_horizontal_mean + 0.2 * mean_negatives
+    total_loss = 0.9 * mean_energy_loss + 0.1 * mean_negatives  # + 0.05 * batch_vertical_mean
 
     return total_loss
 
@@ -200,7 +204,6 @@ def forward_block(X, ids, encoder, optimizer, train):
     number_transforms = 12
     aug_ids = np.random.choice(number_transforms, size=number_transforms, replace=False)
 
-    ids = np.random.choice(len(X), size=BATCH_SIZE_DEFAULT, replace=False)
     image = X[ids, :]
 
     fourth = BATCH_SIZE_DEFAULT//4
@@ -229,7 +232,7 @@ def forward_block(X, ids, encoder, optimizer, train):
         test_total_loss.backward()
         optimizer.step()
 
-    return test_preds_1, test_preds_2, test_total_loss, image, ids
+    return test_preds_1, test_preds_2, test_total_loss
 
 
 def save_cluster(original_image, cluster, iteration):
@@ -252,39 +255,88 @@ def accuracy_block(X, ids, encoder):
     return test_preds_1
 
 
-def measure_acc_augments(X_test, colons, targets, total_mean):
+def measure_acc_augments(X_test, colons, targets):
+    def measure_acc_augments(X_test, encoder, targets):
+        print_dict = {1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 0: []}
+        size = BATCH_SIZE_DEFAULT
+        runs = len(X_test) // size
+        avg_loss = 0
 
-    size = BATCH_SIZE_DEFAULT
-    runs = len(X_test)//size
-    sum_loss = 0
+        virtual_clusters = {}
+        for i in range(CLASSES):
+            virtual_clusters[i] = []
 
-    print()
-    print("total mean:     ", total_mean.data.cpu().numpy())
-    print()
-    batch_num = random.randint(0, runs-1)
+        for j in range(runs):
+            test_ids = range(j * size, (j + 1) * size)
 
-    for j in range(runs):
-        test_ids = range(j * size, (j + 1) * size)
+            images = X_test[test_ids, :]
 
-        p = accuracy_block(X_test, test_ids, colons)
-        _, _, test_total_loss, _, _ = forward_block(X_test, test_ids, colons,[], False)
-        sum_loss += test_total_loss.item()
+            _, p = encoder(images.to('cuda'))
 
-        if j == batch_num:
-            pred_number = random.randint(0, BATCH_SIZE_DEFAULT-1)
-            print("example prediction ", pred_number, " : ", p[pred_number].data.cpu().numpy())
-            pred_number = random.randint(0, BATCH_SIZE_DEFAULT - 1)
-            print("example prediction ", pred_number, " : ", p[pred_number].data.cpu().numpy())
-            pred_number = random.randint(0, BATCH_SIZE_DEFAULT - 1)
-            print("example prediction ", pred_number, " : ", p[pred_number].data.cpu().numpy())
-            pred_number = random.randint(0, BATCH_SIZE_DEFAULT - 1)
-            print("example prediction ", pred_number, " : ", p[pred_number].data.cpu().numpy())
+            for i in range(p.shape[0]):
+                val, index = torch.max(p[i], 0)
+                verdict = int(index.data.cpu().numpy())
 
+                label = targets[test_ids[i]]
+                if label == 10:
+                    label = 0
 
-    avg_loss = sum_loss / runs
-    print("test avg loss", avg_loss)
+                print_dict[label].append(verdict)
+                virtual_clusters[verdict].append(label)
 
-    return avg_loss
+        total_miss = 0
+        clusters = set()
+        for element in print_dict.keys():
+            length = len(print_dict[element])
+            misses = miss_classifications(print_dict[element])
+            total_miss += misses
+
+            mfe = most_frequent(print_dict[element])
+            clusters.add(mfe)
+            print("cluster: ",
+                  labels_to_imags[element],
+                  ", most frequent: ",
+                  mfe,
+                  ", miss-classifications: ",
+                  misses,
+                  ", miss percentage: ",
+                  misses / length)
+
+        total_miss_percentage = total_miss / (runs * size)
+
+        print()
+        print("AUGMENTS avg loss: ", avg_loss / runs,
+              " miss: ", total_miss,
+              " data: ", runs * size,
+              " miss percent: ", total_miss_percentage)
+        print("Clusters found: " + str(len(clusters)) + " " + str(clusters))
+        print()
+
+        print(virtual_clusters)
+        total_miss_virtual = 0
+        for element in virtual_clusters.keys():
+            if len(virtual_clusters[element]) == 0:
+                continue
+            virtual_length = len(virtual_clusters[element])
+
+            virtual_misses = miss_classifications(virtual_clusters[element])
+            total_miss_virtual += virtual_misses
+
+            mfe = most_frequent(virtual_clusters[element])
+
+            print("cluster: ",
+                  element,
+                  ", most frequent: ",
+                  labels_to_imags[mfe],
+                  ", miss-classifications: ",
+                  virtual_misses,
+                  ", miss percentage: ",
+                  virtual_misses / virtual_length)
+
+        miss_virtual_percentage = total_miss_virtual / (runs * size)
+        print("miss virtual percentage: ", miss_virtual_percentage)
+
+        return total_miss_percentage, len(clusters), miss_virtual_percentage
 
 
 def miss_classifications(cluster):
@@ -343,10 +395,10 @@ def train():
 
     # access to the dict
 
-    X_test = preproccess(test_data['X'])
+    X_test = preproccess(train_data['X'])
     print("x test shape", X_test.shape)
 
-    targets = test_data['y'].squeeze(1)
+    targets = train_data['y'].squeeze(1)
     print("y test", targets.shape)
 
     targets = np.array([x % 10 for x in targets])
@@ -389,6 +441,7 @@ def train():
         test_dict[i].append(idx)
 
     test_best_loss = 1000
+
     avg_loss = 0
     for iteration in range(MAX_STEPS_DEFAULT):
         encoder.train()
@@ -398,9 +451,13 @@ def train():
 
         p1, p2, mim, orig_image, aug_ids = forward_block(X_train, ids, encoder, optimizer, train)
         avg_loss += mim.item()
+
+        test_loss = 0
         if iteration % EVAL_FREQ_DEFAULT == 0:
+
             print("==================================================================================")
-            print("avg loss : ", avg_loss/(iteration+1))
+            print("avg train loss : ", avg_loss/BATCH_SIZE_DEFAULT)
+            avg_loss = 0
             encoder.eval()
 
             print("ITERATION: ", iteration,
@@ -421,15 +478,13 @@ def train():
             #p1, p2, mim, orig_image, test_ids = forward_block(original_train, test_ids, encoder, optimizer, False)
             #classes_dict, numbers_classes_dict = print_info(p1, p2, train_targets, test_ids)
 
-            avg_loss = measure_acc_augments(X_test, encoder, targets, total_mean)
+            test_loss = measure_acc_augments(X_test, encoder, targets, total_mean)
 
-            if avg_loss < test_best_loss:
-                test_best_loss = avg_loss
+            if test_loss < test_best_loss:
+                test_best_loss = test_loss
                 max_loss_iter = iteration
                 print("models saved iter: " + str(iteration))
                 torch.save(encoder, clusters_net_path)
-
-
 
 
 def to_tensor(X):

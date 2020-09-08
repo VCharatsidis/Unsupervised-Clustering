@@ -6,7 +6,7 @@ import torch
 
 
 
-class UnsupervisedNet(nn.Module):
+class CifarNet(nn.Module):
     """
     This class implements a Multi-layer Perceptron in PyTorch.
     It handles the different layers and parameters of the model.
@@ -26,32 +26,34 @@ class UnsupervisedNet(nn.Module):
                      This number is required in order to specify the
                      output dimensions of the MLP
         """
-        super(UnsupervisedNet, self).__init__()
+        super(CifarNet, self).__init__()
 
         self.conv = nn.Sequential(
             nn.Conv2d(n_channels, 64, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
-            #
+
             nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
-            #
-            nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
-            #
-            nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1),
+            #nn.BatchNorm2d(128),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
 
-            nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
+
+            nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(512),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
         )
 
-        self.test_linear = nn.Sequential(
-            nn.Linear(2048, classes),
+        self.head = nn.Sequential(
+            nn.Linear(4608, classes)
+        )
+
+        self.softmax = nn.Sequential(
             nn.Softmax(dim=1)
         )
 
@@ -69,6 +71,7 @@ class UnsupervisedNet(nn.Module):
         conv = self.conv(x)
         encoding = torch.flatten(conv, 1)
 
-        test_preds = self.test_linear(encoding)
+        preds = self.head(encoding)
+        probs = self.softmax(preds)
 
-        return encoding, test_preds
+        return encoding, probs
