@@ -35,18 +35,22 @@ class UnsupervisedNet(nn.Module):
             #
             nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
+            nn.BatchNorm2d(128),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
             #
             nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
+            nn.BatchNorm2d(256),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
             #
             nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
+            nn.BatchNorm2d(512),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
 
             nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
+            nn.BatchNorm2d(512),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
         )
 

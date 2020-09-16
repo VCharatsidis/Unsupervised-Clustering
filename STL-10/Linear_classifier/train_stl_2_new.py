@@ -420,15 +420,15 @@ def train():
                     print("models saved iter: " + str(iteration))
                     torch.save(encoder, actual_best_path)
 
-                    # if clusters >= MIN_CLUSTERS_TO_SAVE:
-                    #     for key in numbers_classes_dict.keys():
-                    #         numpy_cluster = torch.zeros([len(numbers_classes_dict[key]), 1, SIZE, SIZE])
-                    #         counter = 0
-                    #         for index in numbers_classes_dict[key]:
-                    #             numpy_cluster[counter] = orig_image.cpu().detach()[index]
-                    #             counter += 1
-                    #         if counter > 0:
-                    #             save_cluster(numpy_cluster, key, iteration)
+                    if clusters >= MIN_CLUSTERS_TO_SAVE:
+                        for key in numbers_classes_dict.keys():
+                            numpy_cluster = torch.zeros([len(numbers_classes_dict[key]), 1, SIZE, SIZE])
+                            counter = 0
+                            for index in numbers_classes_dict[key]:
+                                numpy_cluster[counter] = orig_image.cpu().detach()[index]
+                                counter += 1
+                            if counter > 0:
+                                save_cluster(numpy_cluster, key, iteration)
 
 
 def to_tensor(X):

@@ -28,7 +28,7 @@ LEARNING_RATE_DEFAULT = 1e-4
 
 MAX_STEPS_DEFAULT = 500000
 
-BATCH_SIZE_DEFAULT = 800
+BATCH_SIZE_DEFAULT = 300
 
 #INPUT_NET = 3072
 INPUT_NET = 5120
@@ -128,7 +128,7 @@ def entropy_minmax_loss(preds_1, preds_2, total_mean):
     product = product.mean(dim=0)
 
     coeff = 0.8
-    product = coeff * product + (1 - coeff) * total_mean.to('cuda')
+    # product = coeff * product + (1 - coeff) * total_mean.to('cuda')
     total_mean = coeff * total_mean + (1 - coeff) * product.detach().to('cpu')
 
     class_logs = torch.log(product)
@@ -143,6 +143,8 @@ def forward_block(X, ids, encoder, optimizer, train, total_mean):
 
     ids = np.random.choice(len(X), size=BATCH_SIZE_DEFAULT, replace=False)
     image = X[ids, :]
+
+    show_gray(image)
 
     fourth = BATCH_SIZE_DEFAULT // 4
     image_1 = transformation(aug_ids[0], image[0:fourth])
@@ -159,6 +161,24 @@ def forward_block(X, ids, encoder, optimizer, train, total_mean):
 
     image_1 = torch.cat([image_1, image_3, image_5, image_7], dim=0)
     image_2 = torch.cat([image_2, image_4, image_6, image_8], dim=0)
+
+    # print(transformations_dict[aug_ids[2]])
+    # show_gray(image_3)
+    #
+    # print(transformations_dict[aug_ids[3]])
+    # show_gray(image_4)
+    #
+    # print(transformations_dict[aug_ids[4]])
+    # show_gray(image_5)
+    #
+    # print(transformations_dict[aug_ids[5]])
+    # show_gray(image_6)
+    #
+    # print(transformations_dict[aug_ids[6]])
+    # show_gray(image_7)
+    #
+    # print(transformations_dict[aug_ids[7]])
+    # show_gray(image_8)
 
     encoding, probs10 = encoder(image_1.to('cuda'))
     encoding, probs10_b = encoder(image_2.to('cuda'))
@@ -404,6 +424,7 @@ def train():
             print("train avg loss : ", avg_loss / BATCH_SIZE_DEFAULT)
             avg_loss = 0
             encoder.eval()
+            print("total mean: ", total_mean)
 
             print("ITERATION: ", iteration,
                   ",  batch size: ", BATCH_SIZE_DEFAULT,

@@ -9,6 +9,8 @@ from brain_stl import BinBrainSTL
 from stl_utils import *
 import random
 import sys
+from torchvision.utils import make_grid
+import matplotlib
 
 
 EPS = sys.float_info.epsilon
@@ -17,7 +19,6 @@ MAX_STEPS_DEFAULT = 500000
 
 BATCH_SIZE_DEFAULT = 400
 
-INPUT_NET = 2048
 EMBEDING_SIZE = 1024
 SIZE = 32
 
@@ -28,11 +29,14 @@ np.set_printoptions(formatter={'float': lambda x: "{0:0.4f}".format(x)})
 np.set_printoptions(threshold=sys.maxsize)
 FLAGS = None
 
-ELEMENTS_ABOVE_DIAG = ((BATCH_SIZE_DEFAULT - 1) * (BATCH_SIZE_DEFAULT)) / 2
 
-ranges = {}
-for i in range(BATCH_SIZE_DEFAULT-1):
-    ranges[i] = [(x + i + 1) % BATCH_SIZE_DEFAULT for x in range(BATCH_SIZE_DEFAULT)]
+
+# ranges = {}
+# for i in range(BATCH_SIZE_DEFAULT-1):
+#     ranges[i] = [(x+1+i) % BATCH_SIZE_DEFAULT for x in range(BATCH_SIZE_DEFAULT)]
+
+
+ELEMENTS_ABOVE_DIAG = BATCH_SIZE_DEFAULT * (BATCH_SIZE_DEFAULT-1)
 
 transformations_dict ={0: "original",
                        1: "scale",
@@ -45,14 +49,29 @@ transformations_dict ={0: "original",
                        8: "random crop 66",
                        9: "random crop 76",
                        10: "random_erease",
-                       11: "random crop"}
+                       11: "random crop 66 50% blur"}
 
 
-def energy_loss(pred):
-    vertical_mean = pred.mean(dim=1)
+def emergy_loss_per_dim(pred):
+    vertical_mean = pred.mean(dim=0)
     reverse_vertical_mean = 1 - vertical_mean
     log_rev_vert_mean = - torch.log(reverse_vertical_mean)
     energy = log_rev_vert_mean.mean(dim=0)
+
+    return energy
+
+
+def save_cluster(original_image, cluster, iteration):
+    sample = original_image.view(-1, 1, original_image.shape[2], original_image.shape[2])
+    sample = make_grid(sample, nrow=8).detach().numpy().astype(np.float).transpose(1, 2, 0)
+    matplotlib.image.imsave(f"stl_images_{iteration}_c_{cluster}.png", sample)
+
+
+def energy_loss_per_prediction(pred):
+    horizontal_mean = pred.mean(dim=1)
+    reverse_horizontal_mean = 1 - horizontal_mean
+    log_rev_horizontal_mean = - torch.log(reverse_horizontal_mean)
+    energy = log_rev_horizontal_mean.mean(dim=0)
 
     return energy
 
@@ -61,10 +80,13 @@ def binary_loss(preds_1, preds_2):
     '''
     The energy loss simply tries to keep alla elements of the predictions 0
     '''
-    energy_loss_1 = energy_loss(preds_1)
-    energy_loss_2 = energy_loss(preds_2)
+    energy_loss_1 = energy_loss_per_prediction(preds_1)
+    energy_loss_2 = energy_loss_per_prediction(preds_2)
 
-    mean_energy_loss = (energy_loss_1 + energy_loss_2) / 2
+    energy_loss_vertical_1 = emergy_loss_per_dim(preds_1)
+    energy_loss_vertical_2 = emergy_loss_per_dim(preds_2)
+
+    mean_energy_loss = (energy_loss_1 + energy_loss_2 + energy_loss_vertical_1 + energy_loss_vertical_2) / 4
 
     '''
     The 2 (can be more) transformations of the same image are attracted with the product mechanism
@@ -76,9 +98,9 @@ def binary_loss(preds_1, preds_2):
     push to have a value in every dimension of the representation. 
     So that there are not obsolete dimensions never used from one representation.
     '''
-    product_vertical_mean = product.mean(dim=0)
-    log_vertical_mean = - torch.log(product_vertical_mean+EPS)
-    batch_vertical_mean = log_vertical_mean.mean(dim=0)
+    # product_vertical_mean = product.mean(dim=0)
+    # log_vertical_mean = - torch.log(product_vertical_mean+EPS)
+    # batch_vertical_mean = log_vertical_mean.mean(dim=0)
 
     '''
     every product representation 
@@ -88,26 +110,50 @@ def binary_loss(preds_1, preds_2):
     down only if the transfromations of the same image attract each other while
     creating a preduct that not alligns with products of other images.
     '''
-
     rev_prod = 1 - product
-
-    transposed = rev_prod.transpose(0, 1)
-    nondiag = torch.mm(product, transposed)
-    nondiag = nondiag / EMBEDING_SIZE
-
-    log_nondiag = - torch.log(nondiag + EPS)
-    cleaned = torch.triu(log_nondiag, diagonal=1)
-
-    negative_repel = cleaned.sum(dim=0).sum(dim=0) / ELEMENTS_ABOVE_DIAG
+    positive = negative_repel(product, rev_prod)
 
     '''
     Finally, we combine the three losses above with whatever coefficients we want.
     Batch vertical mean might not be needed at all.
     '''
 
-    total_loss = 0.9 * mean_energy_loss + 0.07 * negative_repel + 0.03 * batch_vertical_mean
+    total_loss = 0.98 * mean_energy_loss + 0.01 * positive #+ 0.01 * batch_vertical_mean
 
     return total_loss
+
+
+def positive_attarct(preds_1, preds_2):
+    product = preds_1 * preds_2
+    product = product.mean(dim=1)
+    product = torch.log(product)
+    mean = product.mean()
+
+    return mean
+
+
+def negative_repel(product, rev_prod):
+    transposed = rev_prod.transpose(0, 1)
+    nondiag = torch.mm(product, transposed)
+    poruct_sum_per_prediction = product.sum(dim=1)
+
+    nondiag = nondiag / poruct_sum_per_prediction.detach()
+
+    log_nondiag = - torch.log(nondiag)
+
+    square = torch.ones(BATCH_SIZE_DEFAULT, BATCH_SIZE_DEFAULT)
+    zero_diag = square.fill_diagonal_(0)
+    cleaned = log_nondiag * zero_diag.cuda()
+
+    negative = cleaned.sum(dim=0).sum(dim=0) / ELEMENTS_ABOVE_DIAG
+
+    return negative
+
+
+def save_images(images, transformation):
+    print(transformations_dict[transformation])
+    numpy_cluster = images.cpu().detach()
+    save_cluster(numpy_cluster, transformations_dict[transformation], 0)
 
 
 def forward_block(X, ids, encoder, optimizer, train):
@@ -139,6 +185,15 @@ def forward_block(X, ids, encoder, optimizer, train):
 
     image_7 = transformation(aug_ids[6], image[3*fourth:])
     image_8 = transformation(aug_ids[7], image[3*fourth:])
+
+    # save_images(image_1, aug_ids[0])
+    # save_images(image_2, aug_ids[1])
+    # save_images(image_3, aug_ids[2])
+    # save_images(image_4, aug_ids[3])
+    # save_images(image_5, aug_ids[4])
+    # save_images(image_6, aug_ids[5])
+    # save_images(image_7, aug_ids[6])
+    # save_images(image_8, aug_ids[7])
 
     image_1 = torch.cat([image_1, image_3, image_5, image_7], dim=0)
     image_2 = torch.cat([image_2, image_4, image_6, image_8], dim=0)
@@ -191,33 +246,66 @@ def transformation(id, image):
         image = scale(image, SIZE, pad, fourth)
         image = image[:, :, pad:96 - pad, pad:96 - pad]
         color_jit_image = color_jitter(image)
-        return scale(color_jit_image, (color_jit_image.shape[2] - 8, color_jit_image.shape[3] - 8), 4,
+        scale_size = 12
+        pad = 6
+        if random.uniform(0,1) > 0.5:
+            scale_size = 8
+            pad = 4
+
+        return scale(color_jit_image, (color_jit_image.shape[2] - scale_size, color_jit_image.shape[3] - scale_size), pad,
                      fourth)
     elif id == 2:
         image = scale(image, SIZE, pad, fourth)
         image = image[:, :, pad:96 - pad, pad:96 - pad]
         color_jit_image = color_jitter(image)
-        return rotate(color_jit_image, 30)
+        return rotate(color_jit_image, 46)
+
     elif id == 3:
         image = scale(image, SIZE, pad, fourth)
         image = image[:, :, pad:96 - pad, pad:96 - pad]
         color_jit_image = color_jitter(image)
         return torch.abs(1 - color_jit_image)
+
     elif id == 4:
         image = scale(image, SIZE, pad, fourth)
         image = image[:, :, pad:96 - pad, pad:96 - pad]
         color_jit_image = color_jitter(image)
-        return sobel_total(color_jit_image, fourth)
+
+        sobeled = sobel_total(color_jit_image, fourth)
+
+        AA = sobeled.view(sobeled.size(0), -1)
+        AA -= AA.min(1, keepdim=True)[0]
+        AA /= AA.max(1, keepdim=True)[0]
+        AA = AA.view(fourth, 1, SIZE, SIZE)
+
+        return AA
+
     elif id == 5:
         image = scale(image, SIZE, pad, fourth)
         image = image[:, :, pad:96 - pad, pad:96 - pad]
         color_jit_image = color_jitter(image)
-        return sobel_filter_x(color_jit_image, fourth)
+        sobeled = sobel_filter_x(color_jit_image, fourth)
+
+        AA = sobeled.view(sobeled.size(0), -1)
+        AA -= AA.min(1, keepdim=True)[0]
+        AA /= AA.max(1, keepdim=True)[0]
+        AA = AA.view(fourth, 1, SIZE, SIZE)
+
+        return AA
+
     elif id == 6:
         image = scale(image, SIZE, pad, fourth)
         image = image[:, :, pad:96 - pad, pad:96 - pad]
         color_jit_image = color_jitter(image)
-        return sobel_filter_y(color_jit_image, fourth)
+        sobeled = sobel_filter_y(color_jit_image, fourth)
+
+        AA = sobeled.view(sobeled.size(0), -1)
+        AA -= AA.min(1, keepdim=True)[0]
+        AA /= AA.max(1, keepdim=True)[0]
+        AA = AA.view(fourth, 1,  SIZE, SIZE)
+
+        return AA
+
     elif id == 7:
         image = scale(image, SIZE, pad, fourth)
         image = image[:, :, pad:96 - pad, pad:96 - pad]
@@ -233,7 +321,7 @@ def transformation(id, image):
         return random_crop(crop_preparation, SIZE, fourth, SIZE)
 
     elif id == 9:
-        crop_size2 = 76
+        crop_size2 = 74
         crop_pad2 = (96 - crop_size2) // 2
         color_jit_image = color_jitter(image)
         crop_preparation2 = scale(color_jit_image, crop_size2, crop_pad2, fourth)
@@ -244,16 +332,18 @@ def transformation(id, image):
         image = scale(image, SIZE, pad, fourth)
         image = image[:, :, pad:96 - pad, pad:96 - pad]
         color_jit_image = color_jitter(image)
-        if random.uniform(0, 1) > 0.5:
-            color_jit_image = gaussian_blur(color_jit_image)
+
         return random_erease(color_jit_image, fourth)
 
     elif id == 11:
-        crop_size2 = 76
+        crop_size2 = 66
         crop_pad2 = (96 - crop_size2) // 2
         color_jit_image = color_jitter(image)
         crop_preparation2 = scale(color_jit_image, crop_size2, crop_pad2, fourth)
         crop_preparation2 = crop_preparation2[:, :, crop_pad2:96 - crop_pad2, crop_pad2:96 - crop_pad2]
+        if random.uniform(0, 1) > 0.5:
+            crop_preparation2 = gaussian_blur(crop_preparation2)
+
         return random_crop(crop_preparation2, SIZE, fourth, SIZE)
 
     print("Error in transformation of the image.")
@@ -341,17 +431,20 @@ def train():
     print(encoder)
     print("X_train: ", X_train.shape, " X_validation: ", X_validation.shape, " targets: ", y_validation.shape)
 
+    train_loss = 0
     for iteration in range(MAX_STEPS_DEFAULT):
         encoder.train()
 
         ids = np.random.choice(len(X_train), size=BATCH_SIZE_DEFAULT, replace=False)
         train = True
-        test_preds_1, test_preds_2, test_total_loss = forward_block(X_train, ids, encoder, optimizer, train)
+        test_preds_1, test_preds_2, loss = forward_block(X_train, ids, encoder, optimizer, train)
+        train_loss += loss.item()
 
         if iteration % EVAL_FREQ_DEFAULT == 0:
             encoder.eval()
             print("==================================================================================")
-
+            print("train loss: ", train_loss / EVAL_FREQ_DEFAULT)
+            train_loss = 0
             test_loss = measure_acc_augments(X_validation, encoder)
 
             if test_loss < test_best_loss:
@@ -365,7 +458,6 @@ def train():
                   ",  lr: ", LEARNING_RATE_DEFAULT,
                   ",  best loss iter: ", max_loss_iter,
                   ",  negatives: ", NEGATIVES)
-
 
 
 def to_tensor(X):

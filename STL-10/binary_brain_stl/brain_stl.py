@@ -35,18 +35,22 @@ class BinBrainSTL(nn.Module):
 
             nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
+            nn.BatchNorm2d(128),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
 
             nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
+            nn.BatchNorm2d(256),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
 
             nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
+            nn.BatchNorm2d(512),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
 
             nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
+            nn.BatchNorm2d(512),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
         )
 
@@ -72,8 +76,8 @@ class BinBrainSTL(nn.Module):
         conv = self.conv(x)
         encoding = torch.flatten(conv, 1)
 
-        test_preds = self.brain(encoding)
+        logits = self.brain(encoding)
 
-        binaries = self.sigmoid(test_preds)
+        binaries = self.sigmoid(logits)
 
-        return encoding, test_preds, binaries
+        return encoding, logits, binaries

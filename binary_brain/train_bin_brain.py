@@ -19,6 +19,7 @@ from torchvision import models
 EPS = sys.float_info.epsilon
 
 
+
 fcn = models.segmentation.fcn_resnet101(pretrained=True).eval()
 
 #EPS=sys.float_info.epsilon

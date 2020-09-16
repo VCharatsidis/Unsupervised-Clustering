@@ -19,7 +19,16 @@ LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 500000
 
 BATCH_SIZE_DEFAULT = 300
-INPUT_NET = 1024
+USE_EMBEDDING = True
+
+INPUT_NET = 2048
+if USE_EMBEDDING:
+    INPUT_NET = 1024
+
+PRINT = True and USE_EMBEDDING
+ROUND = False and USE_EMBEDDING
+PRODUCT = False and USE_EMBEDDING
+
 SIZE = 32
 NETS = 1
 EVAL_FREQ_DEFAULT = 100
@@ -53,7 +62,7 @@ DESCRIPTION = ["Supervised NET with 75% augments per batch."]
 
 DESCRIPTION = ["LOSS: product loss multiplied by mean ", " Image size: " + str(SIZE)\
               +",  BATCH SIZE: " + str(batch_size)\
-              +",  lr: " + str(lr) + ",  train iters: 300000"
+              +",  lr: " + str(lr)
               ,",  embedding dim: " + str(INPUT_NET)\
               ,",  augments compared: " + str(augments_compared)\
               +",  heads: " + str(heads)\
@@ -76,27 +85,67 @@ def forward_block(X, ids, classifier, optimizer, train, targets):
     images = scale(images, SIZE, pad, BATCH_SIZE_DEFAULT)
     images = images[:, :, pad:96 - pad, pad:96 - pad]
 
+    if PRODUCT:
+        color_jit_image = color_jitter(images)
+        sobeled = sobel_total(color_jit_image, BATCH_SIZE_DEFAULT)
+
     with torch.no_grad():
+        if PRODUCT:
+            sobeled_encodings, _, p_sobeled = encoder(sobeled.to('cuda'))
+
         encodings, logits, p = encoder(images.to('cuda'))
 
-    print(p[0].data.cpu().numpy())
-    print(np.where(p[0].data.cpu().numpy() > 0.5))
-    print(np.where(p[0].data.cpu().numpy() > 0.5)[0].shape)
+    if PRODUCT:
+        p = p * p_sobeled
 
-    print(p[1].data.cpu().numpy())
-    print(np.where(p[1].data.cpu().numpy() > 0.5))
-    print(np.where(p[1].data.cpu().numpy() > 0.5)[0].shape)
+    if ROUND:
+        p = torch.round(p)
 
-    print(p[2].data.cpu().numpy())
-    print(np.where(p[2].data.cpu().numpy() > 0.5))
-    print(np.where(p[2].data.cpu().numpy() > 0.5)[0].shape)
+    if PRINT:
+        print("=========== p =================")
+        sum = p.data.cpu().numpy().sum(axis=0)
+        print(sum)
 
-    print(p[4].data.cpu().numpy())
-    print(np.where(p[4].data.cpu().numpy() > 0.5))
-    print(np.where(p[4].data.cpu().numpy() > 0.5)[0].shape)
+        mean = p.data.cpu().numpy().mean(axis=0)
+        print(mean)
+
+        print("max value: ", np.amax(mean))
+        print("max value index: ", np.argmax(mean))
+        print("mean value: ", np.mean(mean))
 
 
-    preds = classifier(p)
+
+        print(p[1].data.cpu().numpy())
+        print(np.where(p[1].data.cpu().numpy() > 0.5))
+        print(np.where(p[1].data.cpu().numpy() > 0.5)[0].shape)
+
+        print(p[2].data.cpu().numpy())
+        print(np.where(p[2].data.cpu().numpy() > 0.5))
+        print(np.where(p[2].data.cpu().numpy() > 0.5)[0].shape)
+
+
+    # product = p * p_sobeled
+
+    # print("=========== product =================")
+    # print(product.data.cpu().numpy().sum(axis=0))
+    #
+    # print(product[1].data.cpu().numpy())
+    # print(np.where(product[1].data.cpu().numpy() > 0.5))
+    # print(np.where(product[1].data.cpu().numpy() > 0.5)[0].shape)
+    #
+    # print(product[2].data.cpu().numpy())
+    # print(np.where(product[2].data.cpu().numpy() > 0.5))
+    # print(np.where(product[2].data.cpu().numpy() > 0.5)[0].shape)
+
+    #concat_encodings = torch.cat([encodings, sobeled_encodings], dim=1)
+
+
+
+    #concat = torch.cat([p, p_sobeled], dim=1)
+    if USE_EMBEDDING:
+        preds = classifier(p)
+    else:
+        preds = classifier(encodings)
 
     targets_tensor = Variable(torch.LongTensor(targets[ids])).cuda()
 
@@ -171,12 +220,15 @@ def print_params(model):
 
 
 def train():
+    cut = 5000
     fileName = "..\\data\\stl10_binary\\train_X.bin"
     X_train = read_all_images(fileName)
+    X_train = X_train[:cut, :]
 
     train_y_File = "..\\data\\stl10_binary\\train_y.bin"
     y_train = read_labels(train_y_File)
     y_train = np.array([x % 10 for x in y_train])
+    y_train = y_train[:cut]
 
     testFile = "..\\data\\stl10_binary\\test_X.bin"
     X_test = read_all_images(testFile)
@@ -184,7 +236,6 @@ def train():
     test_y_File = "..\\data\\stl10_binary\\test_y.bin"
     targets = read_labels(test_y_File)
     targets = np.array([x % 10 for x in targets])
-    print(targets)
 
     script_directory = os.path.split(os.path.abspath(__file__))[0]
 
@@ -194,6 +245,7 @@ def train():
     linearClassifier = LinearNet(INPUT_NET).cuda()
     optimizer = torch.optim.Adam(linearClassifier.parameters(), lr=LEARNING_RATE_DEFAULT)
 
+    print("X train shape: ", X_train.shape, " train y shape: ", y_train.shape, " X test shape: ", X_test.shape, " X test y:", targets.shape)
     best_accuracy = 0
     iter_acc = 0
     patience = 50

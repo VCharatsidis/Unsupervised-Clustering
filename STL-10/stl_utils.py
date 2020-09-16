@@ -188,12 +188,14 @@ def sobel_filter_y(X, batch_size):
                       [0, 0, 0],
                       [-1, -2, -1]])
 
+    # b /= 8
     b = b.view((1, 1, 3, 3))
 
     conv2 = nn.Conv2d(1, 1, kernel_size=3, stride=1, padding=1, bias=False)
     conv2.weight = nn.Parameter(b)
 
     G_y = conv2(Variable(X)).data.view(batch_size, 1, X.shape[2],  X.shape[3])
+    #G_y /= 8
 
     return G_y
 
@@ -203,12 +205,14 @@ def sobel_filter_x(X, batch_size):
                       [2, 0, -2],
                       [1, 0, -1]])
 
+    # a/=8
     a = a.view((1, 1, 3, 3))
 
     conv1 = nn.Conv2d(1, 1, kernel_size=3, stride=1, padding=1, bias=False)
     conv1.weight = nn.Parameter(a)
 
     G_x = conv1(Variable(X)).data.view(batch_size, 1, X.shape[2], X.shape[3])
+    #G_x /= 8
 
     return G_x
 
