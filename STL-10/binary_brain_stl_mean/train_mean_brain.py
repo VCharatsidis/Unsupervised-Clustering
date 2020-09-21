@@ -67,87 +67,20 @@ def save_cluster(original_image, cluster, iteration):
     matplotlib.image.imsave(f"stl_images_{iteration}_c_{cluster}.png", sample)
 
 
-def energy_loss_per_prediction(pred):
-    horizontal_mean = pred.mean(dim=1)
-    reverse_horizontal_mean = 1 - horizontal_mean
-    log_rev_horizontal_mean = - torch.log(reverse_horizontal_mean)
-    energy = log_rev_horizontal_mean.mean(dim=0)
+def mean_binary(preds_1, preds_2, total_mean):
+    pred_product = preds_1 * preds_2
+    product = pred_product * (1 - total_mean.detach().cuda())
 
-    return energy
+    sum_product = pred_product.sum(dim=1)
 
+    print("product ", product.shape)
+    print("sum product ", sum_product.shape)
+    sum_pred_1 = product / (EMBEDING_SIZE//20 + sum_product)
 
-def binary_loss(preds_1, preds_2):
-    '''
-    The energy loss simply tries to keep alla elements of the predictions 0
-    '''
-    energy_loss_1 = energy_loss_per_prediction(preds_1)
-    energy_loss_2 = energy_loss_per_prediction(preds_2)
+    log_1 = - torch.log(sum_pred_1)
+    attract_1 = log_1.mean()
 
-    energy_loss_vertical_1 = emergy_loss_per_dim(preds_1)
-    energy_loss_vertical_2 = emergy_loss_per_dim(preds_2)
-
-    mean_energy_loss = (energy_loss_1 + energy_loss_2 + energy_loss_vertical_1 + energy_loss_vertical_2) / 4
-
-    '''
-    The 2 (can be more) transformations of the same image are attracted with the product mechanism
-    '''
-    product = preds_1 * preds_2
-
-    '''
-    The three lines below (batch vertical mean)
-    push to have a value in every dimension of the representation. 
-    So that there are not obsolete dimensions never used from one representation.
-    '''
-    # product_vertical_mean = product.mean(dim=0)
-    # log_vertical_mean = - torch.log(product_vertical_mean+EPS)
-    # batch_vertical_mean = log_vertical_mean.mean(dim=0)
-
-    '''
-    every product representation 
-    which is the combined representation of both transformations
-    of the same image, repels every other product representations
-    which comes from different images. As a matter of fact the loss goes
-    down only if the transfromations of the same image attract each other while
-    creating a preduct that not alligns with products of other images.
-    '''
-    rev_prod = 1 - product
-    positive = negative_repel(product, rev_prod)
-
-    '''
-    Finally, we combine the three losses above with whatever coefficients we want.
-    Batch vertical mean might not be needed at all.
-    '''
-
-    total_loss = 0.98 * mean_energy_loss + 0.01 * positive #+ 0.01 * batch_vertical_mean
-
-    return total_loss
-
-
-def positive_attarct(preds_1, preds_2):
-    product = preds_1 * preds_2
-    product = product.mean(dim=1)
-    product = torch.log(product)
-    mean = product.mean()
-
-    return mean
-
-
-def negative_repel(product, rev_prod):
-    transposed = rev_prod.transpose(0, 1)
-    nondiag = torch.mm(product, transposed)
-    poruct_sum_per_prediction = product.sum(dim=1)
-
-    nondiag = nondiag / poruct_sum_per_prediction.detach()
-
-    log_nondiag = - torch.log(nondiag)
-
-    square = torch.ones(BATCH_SIZE_DEFAULT, BATCH_SIZE_DEFAULT)
-    zero_diag = square.fill_diagonal_(0)
-    cleaned = log_nondiag * zero_diag.cuda()
-
-    negative = cleaned.sum(dim=0).sum(dim=0) / ELEMENTS_ABOVE_DIAG
-
-    return negative
+    return attract_1
 
 
 def save_images(images, transformation):
@@ -156,7 +89,7 @@ def save_images(images, transformation):
     save_cluster(numpy_cluster, transformations_dict[transformation], 0)
 
 
-def forward_block(X, ids, encoder, optimizer, train):
+def forward_block(X, ids, encoder, optimizer, train, mean):
     number_transforms = len(transformations_dict.keys())
     aug_ids = np.random.choice(number_transforms, size=number_transforms, replace=False)
 
@@ -186,47 +119,25 @@ def forward_block(X, ids, encoder, optimizer, train):
     image_7 = transformation(aug_ids[6], image[3*fourth:])
     image_8 = transformation(aug_ids[7], image[3*fourth:])
 
-    # save_images(image_1, aug_ids[0])
-    # save_images(image_2, aug_ids[1])
-    # save_images(image_3, aug_ids[2])
-    # save_images(image_4, aug_ids[3])
-    # save_images(image_5, aug_ids[4])
-    # save_images(image_6, aug_ids[5])
-    # save_images(image_7, aug_ids[6])
-    # save_images(image_8, aug_ids[7])
-
     image_1 = torch.cat([image_1, image_3, image_5, image_7], dim=0)
     image_2 = torch.cat([image_2, image_4, image_6, image_8], dim=0)
 
-    # print(transformations_dict[aug_ids[2]])
-    # show_gray(image_3)
-    #
-    # print(transformations_dict[aug_ids[3]])
-    # show_gray(image_4)
-    #
-    # print(transformations_dict[aug_ids[4]])
-    # show_gray(image_5)
-    #
-    # print(transformations_dict[aug_ids[5]])
-    # show_gray(image_6)
-    #
-    # print(transformations_dict[aug_ids[6]])
-    # show_gray(image_7)
-    #
-    # print(transformations_dict[aug_ids[7]])
-    # show_gray(image_8)
+    _, _, preds_1 = encoder(image_1.to('cuda'))
+    _, _, preds_2 = encoder(image_2.to('cuda'))
 
-    _, _, test_preds_1 = encoder(image_1.to('cuda'))
-    _, _, test_preds_2 = encoder(image_2.to('cuda'))
+    if train:
+        current_mean = (preds_1.mean(dim=0).detach() + preds_2.mean(dim=0).detach()) / 2
+        coeff = 0.6
+        mean = coeff * mean + (1-coeff) * current_mean.cpu()
 
-    test_total_loss = binary_loss(test_preds_1, test_preds_2)
+    total_loss = mean_binary(preds_1, preds_2, mean)
 
     if train:
         optimizer.zero_grad()
-        test_total_loss.backward()
+        total_loss.backward()
         optimizer.step()
 
-    return test_preds_1, test_preds_2, test_total_loss
+    return preds_1, preds_2, total_loss, mean
 
 
 def transformation(id, image):
@@ -248,7 +159,7 @@ def transformation(id, image):
         color_jit_image = color_jitter(image)
         scale_size = 12
         pad = 6
-        if random.uniform(0,1) > 0.5:
+        if random.uniform(0, 1) > 0.5:
             scale_size = 8
             pad = 4
 
@@ -352,7 +263,7 @@ def transformation(id, image):
     return image
 
 
-def measure_acc_augments(x_test, encoder):
+def measure_acc_augments(x_test, encoder, mean):
     size = BATCH_SIZE_DEFAULT
     runs = len(x_test) // size
     sum_loss = 0
@@ -361,7 +272,7 @@ def measure_acc_augments(x_test, encoder):
         test_ids = range(j * size, (j + 1) * size)
 
         with torch.no_grad():
-            test_preds_1, test_preds_2, test_total_loss = forward_block(x_test, test_ids, encoder, [], False)
+            test_preds_1, test_preds_2, test_total_loss, mean = forward_block(x_test, test_ids, encoder, [], False, mean)
 
         sum_loss += test_total_loss.item()
 
@@ -431,13 +342,15 @@ def train():
     print(encoder)
     print("X_train: ", X_train.shape, " X_validation: ", X_validation.shape, " targets: ", y_validation.shape)
 
+    mean = torch.ones([EMBEDING_SIZE]) * 0.5 * torch.ones([EMBEDING_SIZE]) * 0.5
+
     train_loss = 0
     for iteration in range(MAX_STEPS_DEFAULT):
         encoder.train()
 
         ids = np.random.choice(len(X_train), size=BATCH_SIZE_DEFAULT, replace=False)
         train = True
-        test_preds_1, test_preds_2, loss = forward_block(X_train, ids, encoder, optimizer, train)
+        test_preds_1, test_preds_2, loss, mean = forward_block(X_train, ids, encoder, optimizer, train, mean)
         train_loss += loss.item()
 
         if iteration % EVAL_FREQ_DEFAULT == 0:

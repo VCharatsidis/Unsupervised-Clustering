@@ -19,15 +19,18 @@ LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 500000
 
 BATCH_SIZE_DEFAULT = 300
-USE_EMBEDDING = True
+USE_EMBEDDING = False
 
 INPUT_NET = 2048
 if USE_EMBEDDING:
-    INPUT_NET = 1024
+    INPUT_NET = 128
 
-PRINT = True and USE_EMBEDDING
-ROUND = False and USE_EMBEDDING
+PRINT = False and USE_EMBEDDING
+ROUND = False and USE_EMBEDDING and not PRINT
 PRODUCT = False and USE_EMBEDDING
+AGREEMENT = False and USE_EMBEDDING
+
+
 
 SIZE = 32
 NETS = 1
@@ -40,6 +43,58 @@ np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
 
 FLAGS = None
 
+encoder_name = "..\\binary_brain_stl_mean\\stl_binary"
+
+encoder = torch.load(encoder_name+".model")
+encoder.eval()
+
+
+
+
+if AGREEMENT:
+    fileName = "..\\data\\stl10_binary\\train_X.bin"
+    X_train = read_all_images(fileName)
+    anchors_ids = range(0, 1000)
+    anchor_images = torch.from_numpy(X_train[anchors_ids, :])
+
+
+    def make_anchors(anchor_images):
+        x_train = rgb2gray(anchor_images)
+        x_tensor = to_tensor(x_train)
+        x_tensor = x_tensor.unsqueeze(0)
+        anchor_images = x_tensor.transpose(0, 1)
+        anchor_images = anchor_images.transpose(2, 3)
+
+        anchor_images = anchor_images / 255.0
+
+        pad = (96 - SIZE) // 2
+        anchor_images = scale(anchor_images, SIZE, pad, BATCH_SIZE_DEFAULT)
+        anchor_images = anchor_images[:, :, pad:96 - pad, pad:96 - pad]
+
+        with torch.no_grad():
+            _, _, anchor_predictions = encoder(anchor_images.to('cuda'))
+
+        return anchor_predictions
+
+
+    anchor_predictions = make_anchors(anchor_images)
+    print(anchor_predictions.shape)
+
+    for i in range(2):
+        anchors_ids = range(i * 1000 + 1000, (i + 1) * 1000 + 1000)
+        anchor_images = torch.from_numpy(X_train[anchors_ids, :])
+        z = make_anchors(anchor_images)
+        anchor_predictions = torch.cat([anchor_predictions, z], dim=0)
+
+    print(anchor_predictions.shape)
+
+
+    INPUT_NET = anchor_predictions.shape[0]
+
+
+ELEMENTS_EXCEPT_DIAG = BATCH_SIZE_DEFAULT * (BATCH_SIZE_DEFAULT - 1)
+square = torch.ones(BATCH_SIZE_DEFAULT, BATCH_SIZE_DEFAULT)
+zero_diag = square.fill_diagonal_(0)
 
 ############ UNSUPERVISED INFO #############################
 
@@ -49,11 +104,8 @@ lr = 1e-4
 augments_compared = 2
 heads = 1
 
-encoder_name = "stl_binary"
-SUPERVISED_FILE_NAME = "supervised_encoder_loss"
+#encoder_name = "..\\fix_binaries\\stl_binary"
 
-encoder = torch.load(encoder_name+".model")
-encoder.eval()
 
 loss = nn.CrossEntropyLoss()
 
@@ -87,32 +139,46 @@ def forward_block(X, ids, classifier, optimizer, train, targets):
 
     if PRODUCT:
         color_jit_image = color_jitter(images)
+        rotated = rotate(color_jit_image, 46)
+
+        color_jit_image = color_jitter(images)
         sobeled = sobel_total(color_jit_image, BATCH_SIZE_DEFAULT)
+
+        AA = sobeled.view(sobeled.size(0), -1)
+        AA -= AA.min(1, keepdim=True)[0]
+        AA /= AA.max(1, keepdim=True)[0]
+        sobeled = AA.view(BATCH_SIZE_DEFAULT, 1, SIZE, SIZE)
 
     with torch.no_grad():
         if PRODUCT:
+            rot_encodings, _, p_rot = encoder(rotated.to('cuda'))
             sobeled_encodings, _, p_sobeled = encoder(sobeled.to('cuda'))
 
-        encodings, logits, p = encoder(images.to('cuda'))
+        encodings, _, p = encoder(images.to('cuda'))
 
     if PRODUCT:
-        p = p * p_sobeled
+        p = p * p_sobeled * p_rot
+
+    if AGREEMENT:
+        p = agreement(p)
 
     if ROUND:
         p = torch.round(p)
 
     if PRINT:
         print("=========== p =================")
+        print("batch mean ones: ",
+              (np.where(p.data.cpu().numpy() > 0.5))[0].shape[0] / (p[0].shape[0] * BATCH_SIZE_DEFAULT))
+
         sum = p.data.cpu().numpy().sum(axis=0)
-        print(sum)
+        #print(sum)
 
         mean = p.data.cpu().numpy().mean(axis=0)
-        print(mean)
+        #print(mean)
 
         print("max value: ", np.amax(mean))
         print("max value index: ", np.argmax(mean))
         print("mean value: ", np.mean(mean))
-
 
 
         print(p[1].data.cpu().numpy())
@@ -122,6 +188,10 @@ def forward_block(X, ids, classifier, optimizer, train, targets):
         print(p[2].data.cpu().numpy())
         print(np.where(p[2].data.cpu().numpy() > 0.5))
         print(np.where(p[2].data.cpu().numpy() > 0.5)[0].shape)
+
+
+        common_ones = p[1].data.cpu().numpy() * p[2].data.cpu().numpy()
+        print("comon ones: ", np.where(common_ones > 0.5)[0].shape[0])
 
 
     # product = p * p_sobeled
@@ -177,6 +247,21 @@ def accuracy(predictions, targets):
    #accur = sum / float(targets.shape[0])
 
    return sum
+
+
+def agreement(preds_1):
+    transposed = anchor_predictions.transpose(0, 1)
+    nondiag = torch.mm(preds_1, transposed)
+
+    nondiag = nondiag / anchor_predictions.sum(dim=1)
+
+    #log_nondiag = - torch.log(nondiag)
+
+    #cleaned = nondiag * zero_diag.cuda()
+
+    #negative = cleaned.sum(dim=0).sum(dim=0) / ELEMENTS_EXCEPT_DIAG
+
+    return nondiag
 
 
 def measure_acc_augments(X_test, classifier, targets):

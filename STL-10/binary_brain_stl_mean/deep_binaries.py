@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch
 
 
-class BinBrainSTL(nn.Module):
+class DeepBinBrainSTL(nn.Module):
     """
     This class implements a Multi-layer Perceptron in PyTorch.
     It handles the different layers and parameters of the model.
@@ -25,7 +25,7 @@ class BinBrainSTL(nn.Module):
                      This number is required in order to specify the
                      output dimensions of the MLP
         """
-        super(BinBrainSTL, self).__init__()
+        super(DeepBinBrainSTL, self).__init__()
 
         self.conv = nn.Sequential(
             nn.Conv2d(n_channels, 64, kernel_size=3, stride=1, padding=1),
@@ -54,7 +54,9 @@ class BinBrainSTL(nn.Module):
         )
 
         self.brain = nn.Sequential(
-            nn.Linear(2048, EMBEDING_SIZE)
+            nn.Linear(2048, 512),
+            nn.ReLU(),
+            nn.Linear(512, EMBEDING_SIZE)
         )
 
         self.sigmoid = nn.Sequential(

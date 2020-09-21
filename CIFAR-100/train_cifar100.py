@@ -64,12 +64,20 @@ transformations_dict = {0: "original",
                        8: "random crop",
                        9: "random crop",
                        10: "random crop",
-                       11: "random crop"}
+                       11: "random crop",
+                       12: "image 1",
+                       13: "image 2"}
 
 
 labels_to_imags = {}
 for i in range(CLASSES):
     labels_to_imags[i] = i
+
+
+def save_images(images, transformation):
+    print(transformations_dict[transformation])
+    numpy_cluster = images.cpu().detach()
+    save_cluster(numpy_cluster, transformations_dict[transformation], 0)
 
 
 def transformation(id, image):
@@ -87,11 +95,35 @@ def transformation(id, image):
     elif id == 3:
         return torch.abs(1 - color_jitter(image))
     elif id == 4:
-        return sobel_total(color_jitter(image), quarter)
+        sobeled = sobel_total(color_jitter(image), quarter)
+
+        AA = sobeled.view(sobeled.size(0), -1)
+        AA -= AA.min(1, keepdim=True)[0]
+        AA /= AA.max(1, keepdim=True)[0]
+        AA = AA.view(quarter, 1, SIZE, SIZE)
+
+        return AA
+
     elif id == 5:
-        return sobel_filter_x(color_jitter(image), quarter)
+        sobeled = sobel_filter_x(color_jitter(image), quarter)
+
+        AA = sobeled.view(sobeled.size(0), -1)
+        AA -= AA.min(1, keepdim=True)[0]
+        AA /= AA.max(1, keepdim=True)[0]
+        AA = AA.view(quarter, 1, SIZE, SIZE)
+
+        return AA
+
     elif id == 6:
-        return sobel_filter_y(color_jitter(image), quarter)
+        sobeled = sobel_filter_y(color_jitter(image), quarter)
+
+        AA = sobeled.view(sobeled.size(0), -1)
+        AA -= AA.min(1, keepdim=True)[0]
+        AA /= AA.max(1, keepdim=True)[0]
+        AA = AA.view(quarter, 1, SIZE, SIZE)
+
+        return AA
+
     elif id == 7:
         return gaussian_blur(color_jitter(image))
 
@@ -105,7 +137,14 @@ def transformation(id, image):
         t = random_crop(color_jitter(image), 22, quarter, 22)
         scaled_up = scale_up(t, 32, 32, quarter)
         sobeled = sobel_total(scaled_up, quarter)
-        return sobeled
+
+        AA = sobeled.view(sobeled.size(0), -1)
+        AA -= AA.min(1, keepdim=True)[0]
+        AA /= AA.max(1, keepdim=True)[0]
+        AA = AA.view(quarter, 1, SIZE, SIZE)
+
+        return AA
+
 
     elif id == 10:
         t = random_crop(color_jitter(image), 22, quarter, 22)
@@ -159,26 +198,20 @@ def forward_block(X, ids, encoder, optimizer, train, total_mean):
     image_7 = transformation(aug_ids[6], image[3 * fourth:])
     image_8 = transformation(aug_ids[7], image[3 * fourth:])
 
+    save_images(image_1, aug_ids[0])
+    save_images(image_2, aug_ids[1])
+    save_images(image_3, aug_ids[2])
+    save_images(image_4, aug_ids[3])
+    save_images(image_5, aug_ids[4])
+    save_images(image_6, aug_ids[5])
+    save_images(image_7, aug_ids[6])
+    save_images(image_8, aug_ids[7])
+
     image_1 = torch.cat([image_1, image_3, image_5, image_7], dim=0)
     image_2 = torch.cat([image_2, image_4, image_6, image_8], dim=0)
 
-    # print(transformations_dict[aug_ids[2]])
-    # show_gray(image_3)
-    #
-    # print(transformations_dict[aug_ids[3]])
-    # show_gray(image_4)
-    #
-    # print(transformations_dict[aug_ids[4]])
-    # show_gray(image_5)
-    #
-    # print(transformations_dict[aug_ids[5]])
-    # show_gray(image_6)
-    #
-    # print(transformations_dict[aug_ids[6]])
-    # show_gray(image_7)
-    #
-    # print(transformations_dict[aug_ids[7]])
-    # show_gray(image_8)
+    save_images(image_1, 12)
+    save_images(image_2, 13)
 
     encoding, probs10 = encoder(image_1.to('cuda'))
     encoding, probs10_b = encoder(image_2.to('cuda'))
@@ -196,7 +229,7 @@ def forward_block(X, ids, encoder, optimizer, train, total_mean):
 def save_cluster(original_image, cluster, iteration):
     sample = original_image.view(-1, 1, original_image.shape[2], original_image.shape[3])
     sample = make_grid(sample, nrow=8).detach().numpy().astype(np.float).transpose(1, 2, 0)
-    matplotlib.image.imsave(f"new_images/iter_{iteration}_c_{cluster}.png", sample)
+    matplotlib.image.imsave(f"iter_{iteration}_c_{cluster}.png", sample)
 
 
 def save_image(original_image, index, name, cluster=0):
