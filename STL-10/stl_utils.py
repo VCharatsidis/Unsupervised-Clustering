@@ -157,7 +157,6 @@ def scale_up(X, size, size_y, batch_size):
 
 def scale(X, size, pad, batch_size=BATCH_SIZE_DEFAULT):
     X_copy = copy.deepcopy(X)
-
     X_copy = Variable(torch.FloatTensor(X_copy))
 
     # if random.uniform(0, 1) > 0.5:
@@ -174,45 +173,47 @@ def scale(X, size, pad, batch_size=BATCH_SIZE_DEFAULT):
     return X_copy
 
 
-def sobel_total(X, batch_size):
-    G_x = sobel_filter_x(X, batch_size)
-    G_y = sobel_filter_y(X, batch_size)
+def sobel_total(X, batch_size, one_dim=False):
+    G_x = sobel_filter_x(X, batch_size, one_dim)
+    G_y = sobel_filter_y(X, batch_size, one_dim)
 
     G = torch.sqrt(torch.pow(G_x, 2) + torch.pow(G_y, 2))
 
     return G
 
 
-def sobel_filter_y(X, batch_size):
+def sobel_filter_y(X, batch_size, one_dim=False):
     b = torch.Tensor([[1, 2, 1],
                       [0, 0, 0],
                       [-1, -2, -1]])
 
-    # b /= 8
+    # if one_dim:
+    #     b = b.view((1, 3, 3))
+    # else:
     b = b.view((1, 1, 3, 3))
 
     conv2 = nn.Conv2d(1, 1, kernel_size=3, stride=1, padding=1, bias=False)
     conv2.weight = nn.Parameter(b)
 
     G_y = conv2(Variable(X)).data.view(batch_size, 1, X.shape[2],  X.shape[3])
-    #G_y /= 8
 
     return G_y
 
 
-def sobel_filter_x(X, batch_size):
+def sobel_filter_x(X, batch_size, one_dim=False):
     a = torch.Tensor([[1, 0, -1],
                       [2, 0, -2],
                       [1, 0, -1]])
 
-    # a/=8
+    # if one_dim:
+    #     #     a = a.view((1, 3, 3))
+    #     # else:
     a = a.view((1, 1, 3, 3))
 
-    conv1 = nn.Conv2d(1, 1, kernel_size=3, stride=1, padding=1, bias=False)
+    conv1 = nn.Conv2d(in_channels=1, out_channels=1, kernel_size=3, stride=1, padding=1, bias=False)
     conv1.weight = nn.Parameter(a)
 
     G_x = conv1(Variable(X)).data.view(batch_size, 1, X.shape[2], X.shape[3])
-    #G_x /= 8
 
     return G_x
 
@@ -234,6 +235,7 @@ def vertical_flip(X, batch_size=BATCH_SIZE_DEFAULT):
 def horizontal_flip(X, batch_size=BATCH_SIZE_DEFAULT):
     X_copy = copy.deepcopy(X)
     X_copy = Variable(torch.FloatTensor(X_copy))
+    print(X_copy.shape)
 
     for i in range(X_copy.shape[0]):
         transformation = transforms.RandomHorizontalFlip(1)
@@ -328,6 +330,7 @@ def random_crop(X, size, batch_size, size_y):
 def color_jitter(X):
     X_copy = copy.deepcopy(X)
     X_copy = Variable(torch.FloatTensor(X_copy))
+    print(X_copy.shape)
 
     for i in range(X_copy.shape[0]):
         transformation = transforms.ColorJitter(brightness=0.45, contrast=0.45, saturation=0.45, hue=0.45)
