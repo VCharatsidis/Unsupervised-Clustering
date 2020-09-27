@@ -34,38 +34,43 @@ def gaussian_blur(X):
     if random.uniform(0, 1) > 0.5:
         radius = 1
 
+    horiz_flip = transforms.RandomHorizontalFlip(0.5)
+    jitter = transforms.ColorJitter(brightness=0.45, contrast=0.45, saturation=0.45, hue=0.45)
+    transformation = transforms.Compose([GaussianSmoothing([0, radius])])
+    trans = transforms.Compose([horiz_flip, jitter, transformation, transforms.ToTensor()])
+
     for i in range(X_copy.shape[0]):
-        transformation = transforms.Compose([GaussianSmoothing([0, radius])])
-        trans = transforms.Compose([transformation, transforms.ToTensor()])
         a = F.to_pil_image(X_copy[i])
         X_copy[i] = trans(a)
 
     return X_copy
 
 
-def guassian_noise(X):
-    X_copy = copy.deepcopy(X)
-    X_copy = Variable(torch.FloatTensor(X_copy))
-
-    for i in range(X_copy.shape[0]):
-        transformation = AddGaussianNoise(0., 0.01)
-        trans = transforms.Compose([transforms.ToTensor(), transformation])
-        a = F.to_pil_image(X_copy[i])
-        X_copy[i] = trans(a)
-
-    return X_copy
+# def guassian_noise(X):
+#     X_copy = copy.deepcopy(X)
+#     X_copy = Variable(torch.FloatTensor(X_copy))
+#
+#     for i in range(X_copy.shape[0]):
+#         transformation = AddGaussianNoise(0., 0.01)
+#         trans = transforms.Compose([transforms.ToTensor(), transformation])
+#         a = F.to_pil_image(X_copy[i])
+#         X_copy[i] = trans(a)
+#
+#     return X_copy
 
 
 def rotate(X, degrees):
     X_copy = copy.deepcopy(X)
     X_copy = Variable(torch.FloatTensor(X_copy))
 
-    for i in range(X_copy.shape[0]):
-        #transformation = transforms.RandomRotation(degrees=[-degrees, degrees], fill=(0,))
-        transformation = transforms.RandomRotation(degrees=[-degrees, degrees])
-        trans = transforms.Compose([transformation, transforms.ToTensor()])
-        a = F.to_pil_image(X_copy[i])
+    horiz_flip = transforms.RandomHorizontalFlip(0.5)
+    jitter = transforms.ColorJitter(brightness=0.45, contrast=0.45, saturation=0.45, hue=0.45)
+    # transformation = transforms.RandomRotation(degrees=[-degrees, degrees], fill=(0,))
+    transformation = transforms.RandomRotation(degrees=[-degrees, degrees])
+    trans = transforms.Compose([horiz_flip, jitter, transformation, transforms.ToTensor()])
 
+    for i in range(X_copy.shape[0]):
+        a = F.to_pil_image(X_copy[i])
         X_copy[i] = trans(a)
 
     return X_copy
@@ -147,12 +152,12 @@ def scale_up(X, size, size_y, batch_size):
     X_copy = copy.deepcopy(X)
     X_put = torch.zeros([batch_size, X.shape[1], size, size_y])
 
+    transformation = transforms.Resize(size=(size, size_y))
+    trans = transforms.Compose([transformation, transforms.ToTensor()])
+
     for i in range(X_copy.shape[0]):
-        transformation = transforms.Resize(size=(size, size_y))
-        trans = transforms.Compose([transformation, transforms.ToTensor()])
         a = F.to_pil_image(X_copy[i])
-        trans_image = trans(a)
-        X_put[i] = trans_image
+        X_put[i] = trans(a)
 
     return X_put
 
@@ -165,12 +170,14 @@ def scale(X, size, pad, batch_size=BATCH_SIZE_DEFAULT):
     #     size = 20
     #     pad = 4
 
+    horiz_flip = transforms.RandomHorizontalFlip(0.5)
+    jitter = transforms.ColorJitter(brightness=0.45, contrast=0.45, saturation=0.45, hue=0.45)
+    transformation = transforms.Resize(size=size, interpolation=2)
+    trans = transforms.Compose([horiz_flip, jitter, transformation, transforms.Pad(pad), transforms.ToTensor()])
+
     for i in range(X_copy.shape[0]):
-        transformation = transforms.Resize(size=size, interpolation=2)
-        trans = transforms.Compose([transformation, transforms.Pad(pad), transforms.ToTensor()])
         a = F.to_pil_image(X_copy[i])
-        trans_image = trans(a)
-        X_copy[i] = trans_image
+        X_copy[i] = trans(a)
 
     return X_copy
 
@@ -218,12 +225,13 @@ def vertical_flip(X, batch_size=BATCH_SIZE_DEFAULT):
     X_copy = copy.deepcopy(X)
     X_copy = Variable(torch.FloatTensor(X_copy))
 
+    jitter = transforms.ColorJitter(brightness=0.45, contrast=0.45, saturation=0.45, hue=0.45)
+    transformation = transforms.RandomVerticalFlip(1)
+    trans = transforms.Compose([jitter, transformation, transforms.ToTensor()])
+
     for i in range(X_copy.shape[0]):
-        transformation = transforms.RandomVerticalFlip(1)
-        trans = transforms.Compose([transformation, transforms.ToTensor()])
         a = F.to_pil_image(X_copy[i])
-        trans_image = trans(a)
-        X_copy[i] = trans_image
+        X_copy[i] = trans(a)
 
     return X_copy
 
@@ -232,12 +240,12 @@ def horizontal_flip(X, batch_size=BATCH_SIZE_DEFAULT):
     X_copy = copy.deepcopy(X)
     X_copy = Variable(torch.FloatTensor(X_copy))
 
+    transformation = transforms.RandomHorizontalFlip(1)
+    trans = transforms.Compose([transformation, transforms.ToTensor()])
+
     for i in range(X_copy.shape[0]):
-        transformation = transforms.RandomHorizontalFlip(1)
-        trans = transforms.Compose([transformation, transforms.ToTensor()])
         a = F.to_pil_image(X_copy[i])
-        trans_image = trans(a)
-        X_copy[i] = trans_image
+        X_copy[i] = trans(a)
 
     return X_copy
 
@@ -262,12 +270,14 @@ def random_erease(X, batch_size=BATCH_SIZE_DEFAULT):
     X_copy = copy.deepcopy(X)
     X_copy = Variable(torch.FloatTensor(X_copy))
 
+    horiz_flip = transforms.RandomHorizontalFlip(0.5)
+    jitter = transforms.ColorJitter(brightness=0.45, contrast=0.45, saturation=0.45, hue=0.45)
+    transformation = RandomErasing()
+    trans = transforms.Compose([horiz_flip, jitter, transforms.ToTensor(), transformation])
+
     for i in range(X_copy.shape[0]):
-        transformation = RandomErasing()
-        trans = transforms.Compose([transforms.ToTensor(), transformation])
         a = F.to_pil_image(X_copy[i])
-        trans_image = trans(a)
-        X_copy[i] = trans_image
+        X_copy[i] = trans(a)
 
     return X_copy
 
@@ -306,18 +316,80 @@ def to_tensor(X):
     return X
 
 
+def randcom_crop_upscale(X, size, batch_size, size_y, up_size_x, up_size_y):
+    X_copy = copy.deepcopy(X)
+    X_copy = Variable(torch.FloatTensor(X_copy))
+
+    horiz_flip = transforms.RandomHorizontalFlip(0.5)
+    jitter = transforms.ColorJitter(brightness=0.45, contrast=0.45, saturation=0.45, hue=0.45)
+    random_crop = transforms.RandomCrop(size=(size, size_y))
+    resize = transforms.Resize(size=(up_size_x, up_size_y))
+
+    trans = transforms.Compose([horiz_flip, jitter, random_crop, resize, transforms.ToTensor()])
+
+    for i in range(X_copy.shape[0]):
+        a = F.to_pil_image(X_copy[i])
+        X_copy[i] = trans(a)
+
+    return X_copy
+
+
+def rc_upscale_rotate(X, size, batch_size, size_y, up_size_x, up_size_y, degrees):
+    X_copy = copy.deepcopy(X)
+    X_copy = Variable(torch.FloatTensor(X_copy))
+
+    horiz_flip = transforms.RandomHorizontalFlip(0.5)
+    jitter = transforms.ColorJitter(brightness=0.45, contrast=0.45, saturation=0.45, hue=0.45)
+    random_crop = transforms.RandomCrop(size=(size, size_y))
+    resize = transforms.Resize(size=(up_size_x, up_size_y))
+    rotate = transforms.RandomRotation(degrees=[-degrees, degrees])
+
+    trans = transforms.Compose([horiz_flip, jitter, random_crop, resize, rotate, transforms.ToTensor()])
+
+    for i in range(X_copy.shape[0]):
+        a = F.to_pil_image(X_copy[i])
+        X_copy[i] = trans(a)
+
+    return X_copy
+
+
+def randcom_crop_upscale_gauss_blur(X, size, batch_size, size_y, up_size_x, up_size_y):
+    X_copy = copy.deepcopy(X)
+    X_copy = Variable(torch.FloatTensor(X_copy))
+
+    radius = 2
+    if random.uniform(0, 1) > 0.5:
+        radius = 1
+
+    horiz_flip = transforms.RandomHorizontalFlip(0.5)
+    jitter = transforms.ColorJitter(brightness=0.45, contrast=0.45, saturation=0.45, hue=0.45)
+    random_crop = transforms.RandomCrop(size=(size, size_y))
+    resize = transforms.Resize(size=(up_size_x, up_size_y))
+    gaussian = transforms.Compose([GaussianSmoothing([0, radius])])
+
+    trans = transforms.Compose([horiz_flip, jitter, random_crop, resize, gaussian, transforms.ToTensor()])
+
+    for i in range(X_copy.shape[0]):
+        a = F.to_pil_image(X_copy[i])
+        X_copy[i] = trans(a)
+
+    return X_copy
+
+
 def random_crop(X, size, batch_size, size_y):
     X_copy = copy.deepcopy(X)
     X_copy = Variable(torch.FloatTensor(X_copy))
 
     X_res = torch.zeros([batch_size, X.shape[1], size, size_y])
 
+    horiz_flip = transforms.RandomHorizontalFlip(0.5)
+    jitter = transforms.ColorJitter(brightness=0.45, contrast=0.45, saturation=0.45, hue=0.45)
+    transformation = transforms.RandomCrop(size=(size, size_y))
+    trans = transforms.Compose([horiz_flip, jitter, transformation, transforms.ToTensor()])
+
     for i in range(X_copy.shape[0]):
-        transformation = transforms.RandomCrop(size=(size, size_y))
-        trans = transforms.Compose([transformation, transforms.ToTensor()])
         a = F.to_pil_image(X_copy[i])
-        trans_image = trans(a)
-        X_res[i] = trans_image
+        X_res[i] = trans(a)
 
     return X_res
 
@@ -326,12 +398,13 @@ def color_jitter(X):
     X_copy = copy.deepcopy(X)
     X_copy = Variable(torch.FloatTensor(X_copy))
 
+    horiz_flip = transforms.RandomHorizontalFlip(0.5)
+    transformation = transforms.ColorJitter(brightness=0.45, contrast=0.45, saturation=0.45, hue=0.45)
+    trans = transforms.Compose([horiz_flip, transformation, transforms.ToTensor()])
+
     for i in range(X_copy.shape[0]):
-        transformation = transforms.ColorJitter(brightness=0.45, contrast=0.45, saturation=0.45, hue=0.45)
-        trans = transforms.Compose([transformation, transforms.ToTensor()])
         a = F.to_pil_image(X_copy[i])
-        trans_image = trans(a)
-        X_copy[i] = trans_image
+        X_copy[i] = trans(a)
 
     return X_copy
 

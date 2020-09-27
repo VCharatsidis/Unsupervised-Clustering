@@ -63,22 +63,23 @@ for i in range(CLASSES):
 class_numbers = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 0: 0}
 
 
-transformations_dict = {0: "original",
-                       1: "scale",
-                       2: "rotate",
-                       3: "reverse pixel value",
-                       4: "sobel total",
-                       5: "sobel x",
-                       6: "sobel y",
-                       7: "gaussian blur",
-                       8: "random crop1",
-                       9: "random crop2",
-                       10: "random crop3",
-                       11: "random crop4",
-                       12: "random crop5",
-                       13: "random crop6",
-                        14: "random crop7",
-                        15:"random crop8"}
+transformations_dict = {0: "original 0",
+                       1: "scale 1",
+                       2: "rotate 2",
+                       3: "reverse pixel value 3",
+                       4: "sobel total 4",
+                       5: "sobel x 5",
+                       6: "sobel y 6",
+                       7: "gaussian blur 7",
+                       8: "randcom_crop_upscale_gauss_blur 8",
+                       9: "randcom_crop_upscale sobel 9",
+                       10: "random crop reverse pixel 10",
+                       11: "random crop rotate 11",
+                       12: "random crop soble rotate 12",
+                       13: "randcom_crop_upscale 13",
+                        14: "randcom_crop_upscale 14",
+                        15:"randcom_crop_upscale sobel y 15",
+                        16: " randcom crop 18x18 16"}
 
 
 labels_to_imags = {}
@@ -105,98 +106,80 @@ def fix_sobel(sobeled, quarter, image):
 def transformation(id, image):
     quarter = BATCH_SIZE_DEFAULT//4
 
-    if random.uniform(0, 1) > 0.5:
-        image = horizontal_flip(image, quarter)
-
     if id == 0:
         return color_jitter(image)
+
     elif id == 1:
-        return scale(color_jitter(image), (image.shape[2] - 8, image.shape[3] - 8), 4, quarter)
+        return scale(image, (image.shape[2] - 8, image.shape[3] - 8), 4, quarter)
+
     elif id == 2:
-        return rotate(color_jitter(image), 46)
+        return rotate(image, 46)
+
     elif id == 3:
         return torch.abs(1 - color_jitter(image))
+
     elif id == 4:
         sobeled = sobel_total(color_jitter(image), quarter)
-
         AA = fix_sobel(sobeled, quarter, image)
 
         return AA
 
     elif id == 5:
         sobeled = sobel_filter_x(color_jitter(image), quarter)
-
         AA = fix_sobel(sobeled, quarter, image)
 
         return AA
 
     elif id == 6:
         sobeled = sobel_filter_y(color_jitter(image), quarter)
-
         AA = fix_sobel(sobeled, quarter, image)
 
         return AA
 
     elif id == 7:
-        return gaussian_blur(color_jitter(image))
+        return gaussian_blur(image)
 
     elif id == 8:
-        t = random_crop(color_jitter(image), 22, quarter, 22)
-        scaled_up = scale_up(t, 32, 32, quarter)
-        blured = gaussian_blur(scaled_up)
+        blured = randcom_crop_upscale_gauss_blur(image, 22, quarter, 22, 32, 32)
+
         return blured
 
     elif id == 9:
-        t = random_crop(color_jitter(image), 22, quarter, 22)
-        scaled_up = scale_up(t, 32, 32, quarter)
+        scaled_up = randcom_crop_upscale(image, 22, quarter, 22, 32, 32)
         sobeled = sobel_total(scaled_up, quarter)
-
         AA = fix_sobel(sobeled, quarter, image)
 
         return AA
 
     elif id == 10:
-        t = random_crop(color_jitter(image), 22, quarter, 22)
-        scaled_up = scale_up(t, 32, 32, quarter)
+        scaled_up = randcom_crop_upscale(image, 22, quarter, 22, 32, 32)
         rev = torch.abs(1 - scaled_up)
         return rev
 
     elif id == 11:
-        t = random_crop(color_jitter(image), 22, quarter, 22)
-        scaled_up = scale_up(t, 32, 32, quarter)
-        rot = rotate(scaled_up, 46)
+        rot = rc_upscale_rotate(image, 22, quarter, 22, 32, 32, -46)
         return rot
 
     elif id == 12:
-        t = random_crop(color_jitter(image), 22, quarter, 22)
-        scaled_up = scale_up(t, 32, 32, quarter)
-        blured = gaussian_blur(scaled_up)
-        rot = rotate(blured, 46)
-        return rot
+        scaled_up = randcom_crop_upscale(image, 20, quarter, 20, 32, 32)
+        return scaled_up
 
     elif id == 13:
-        t = random_crop(color_jitter(image), 22, quarter, 22)
-        scaled_up = scale_up(t, 32, 32, quarter)
+        scaled_up = randcom_crop_upscale(image, 22, quarter, 22, 32, 32)
 
         return scaled_up
 
     elif id == 14:
-        t = random_crop(color_jitter(image), 22, quarter, 22)
-        scaled_up = scale_up(t, 32, 32, quarter)
+        scaled_up = randcom_crop_upscale(image, 26, quarter, 26, 32, 32)
         return scaled_up
 
     elif id == 15:
-        t = random_crop(color_jitter(image), 22, quarter, 22)
-        scaled_up = scale_up(t, 32, 32, quarter)
-        sobeled = sobel_filter_x(scaled_up, quarter)
+        scaled_up = randcom_crop_upscale(image, 22, quarter, 22, 32, 32)
 
-        AA = fix_sobel(sobeled, quarter, image)
-
-        return AA
+        return scaled_up
 
     elif id == 16:
-        t = random_crop(color_jitter(image), 26, quarter, 26)
-        scaled_up = scale_up(t, 32, 32, quarter)
+        scaled_up = randcom_crop_upscale(image, 18, quarter, 18, 32, 32)
         return scaled_up
 
     print("Error in transformation of the image.")
@@ -245,7 +228,7 @@ def queue_agreement(product, denominator, rev_prod):
 
 def forward_block(X, ids, encoder, optimizer, train, rev_product):
     global first
-    number_transforms = 16
+    number_transforms = 17
     aug_ids = np.random.choice(number_transforms, size=number_transforms, replace=False)
 
     image = X[ids, :]
