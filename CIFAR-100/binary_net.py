@@ -28,7 +28,7 @@ class DeepBinBrainCifar(nn.Module):
         super(DeepBinBrainCifar, self).__init__()
 
         self.conv = nn.Sequential(
-            nn.Conv2d(n_channels, 64, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(n_channels, 64, kernel_size=5, stride=1, padding=1),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
 
@@ -50,13 +50,14 @@ class DeepBinBrainCifar(nn.Module):
             # nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1),
             # nn.ReLU(),
             # nn.BatchNorm2d(512),
-            # nn.MaxPool2d(kernel_size=4, stride=2, padding=1),
+            # nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
         )
 
         self.brain = nn.Sequential(
-            nn.Linear(8192, 512),
+            nn.Linear(8192, 4096),
             nn.ReLU(),
-            nn.Linear(512, EMBEDING_SIZE)
+            nn.BatchNorm1d(4096),
+            nn.Linear(4096, EMBEDING_SIZE)
         )
 
         self.sigmoid = nn.Sequential(

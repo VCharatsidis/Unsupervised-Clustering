@@ -30,7 +30,7 @@ MAX_STEPS_DEFAULT = 500000
 
 BATCH_SIZE_DEFAULT = 128
 
-EMBEDINGS = 32
+EMBEDINGS = 4096
 SIZE = 32
 SIZE_Y = 32
 NETS = 1
@@ -49,10 +49,9 @@ square = torch.ones(BATCH_SIZE_DEFAULT, BATCH_SIZE_DEFAULT)
 ZERO_DIAG = square.fill_diagonal_(0)
 first_part = torch.cat([ZERO_DIAG, ZERO_DIAG, ZERO_DIAG, ZERO_DIAG], dim=1)
 adj_matrix = torch.cat([first_part, first_part, first_part, first_part], dim=0)
-print(adj_matrix)
 
 
-ELEMENTS_EXCEPT_DIAG = 2 * BATCH_SIZE_DEFAULT * (BATCH_SIZE_DEFAULT - 1)
+#ELEMENTS_EXCEPT_DIAG = 2 * BATCH_SIZE_DEFAULT * (BATCH_SIZE_DEFAULT - 1)
 
 first = True
 
@@ -72,12 +71,14 @@ transformations_dict = {0: "original",
                        5: "sobel x",
                        6: "sobel y",
                        7: "gaussian blur",
-                       8: "random crop",
-                       9: "random crop",
-                       10: "random crop",
-                       11: "random crop",
-                       12: "image 1",
-                       13: "image 2"}
+                       8: "random crop1",
+                       9: "random crop2",
+                       10: "random crop3",
+                       11: "random crop4",
+                       12: "random crop5",
+                       13: "random crop6",
+                        14: "random crop7",
+                        15:"random crop8"}
 
 
 labels_to_imags = {}
@@ -91,12 +92,12 @@ def save_images(images, transformation):
     save_cluster(numpy_cluster, transformations_dict[transformation], 0)
 
 
-def fix_sobeled(sobeled, quarter):
-    AA = sobeled.view(sobeled.size(0), -1)
-    print("AA", AA.shape)
+def fix_sobel(sobeled, quarter, image):
+
+    AA = sobeled.reshape(sobeled.size(0), sobeled.size(1) * sobeled.size(2) * sobeled.size(3))
     AA -= AA.min(1, keepdim=True)[0]
     AA /= AA.max(1, keepdim=True)[0]
-    AA = AA.view(quarter, 1, SIZE, SIZE)
+    AA = AA.view(quarter, image.shape[1], SIZE, SIZE)
 
     return AA
 
@@ -118,21 +119,21 @@ def transformation(id, image):
     elif id == 4:
         sobeled = sobel_total(color_jitter(image), quarter)
 
-        AA = fix_sobeled(sobeled, quarter)
+        AA = fix_sobel(sobeled, quarter, image)
 
         return AA
 
     elif id == 5:
         sobeled = sobel_filter_x(color_jitter(image), quarter)
 
-        AA = fix_sobeled(sobeled, quarter)
+        AA = fix_sobel(sobeled, quarter, image)
 
         return AA
 
     elif id == 6:
         sobeled = sobel_filter_y(color_jitter(image), quarter)
 
-        AA = fix_sobeled(sobeled, quarter)
+        AA = fix_sobel(sobeled, quarter, image)
 
         return AA
 
@@ -150,7 +151,7 @@ def transformation(id, image):
         scaled_up = scale_up(t, 32, 32, quarter)
         sobeled = sobel_total(scaled_up, quarter)
 
-        AA = fix_sobeled(sobeled, quarter)
+        AA = fix_sobel(sobeled, quarter, image)
 
         return AA
 
@@ -189,7 +190,8 @@ def transformation(id, image):
         scaled_up = scale_up(t, 32, 32, quarter)
         sobeled = sobel_filter_x(scaled_up, quarter)
 
-        AA = fix_sobeled(sobeled, quarter)
+        AA = fix_sobel(sobeled, quarter, image)
+
         return AA
 
     elif id == 16:
@@ -210,16 +212,19 @@ def new_agreement(product, denominator, rev_prod):
     denominator = denominator + denominator.unsqueeze(dim=1)
 
     attraction = attraction / denominator
-    #print(attraction)
-    attraction = - torch.log(attraction) * (1-adj_matrix.cuda())
+    #attraction[(attraction < EPS).data] = EPS
+    #attraction = - torch.log(attraction) * (1-adj_matrix.cuda())
 
     repel = repel / denominator
-    repel = - torch.log(repel) * adj_matrix.cuda()
+    #repel[(repel < EPS).data] = EPS
+    #repel = - torch.log(repel) * adj_matrix.cuda()
 
-    # print(attraction)
-    # print("===================")
+    total_matrix = repel * adj_matrix.cuda() + attraction * (1-adj_matrix.cuda())
+    log_total = - torch.log(total_matrix)
 
-    total = (BATCH_SIZE_DEFAULT - 1) * attraction + repel
+    diagonal_elements_bonus = (BATCH_SIZE_DEFAULT - 2) * (1-adj_matrix.cuda()) * log_total
+
+    total = log_total + diagonal_elements_bonus
 
     mean_total = total.mean()
 
@@ -238,7 +243,28 @@ def queue_agreement(product, denominator, rev_prod):
     return negative
 
 
-def forward_block(X, ids, encoder, optimizer, train, rev_product):
+def adjacency_matrix(ids, y_train, adj_matrix):
+    for i in range(BATCH_SIZE_DEFAULT):
+        for j in range(BATCH_SIZE_DEFAULT):
+            if y_train[ids[i]] == y_train[ids[j]]:
+                adj_matrix[i][j] = 0
+
+                adj_matrix[i + BATCH_SIZE_DEFAULT][j] = 0
+                adj_matrix[i + 2 * BATCH_SIZE_DEFAULT][j] = 0
+                adj_matrix[i + 3 * BATCH_SIZE_DEFAULT][j] = 0
+
+                adj_matrix[i][j + BATCH_SIZE_DEFAULT] = 0
+                adj_matrix[i][j + 2 * BATCH_SIZE_DEFAULT] = 0
+                adj_matrix[i][j + 3 * BATCH_SIZE_DEFAULT] = 0
+
+                adj_matrix[i + BATCH_SIZE_DEFAULT][j + BATCH_SIZE_DEFAULT] = 0
+                adj_matrix[i + 2 * BATCH_SIZE_DEFAULT][j + 2 * BATCH_SIZE_DEFAULT] = 0
+                adj_matrix[i + 3 * BATCH_SIZE_DEFAULT][j + 3 * BATCH_SIZE_DEFAULT] = 0
+
+    return adj_matrix
+
+
+def forward_block(X, ids, encoder, optimizer, train, rev_product, y_train):
     global first
     number_transforms = 16
     aug_ids = np.random.choice(number_transforms, size=number_transforms, replace=False)
@@ -274,6 +300,14 @@ def forward_block(X, ids, encoder, optimizer, train, rev_product):
     # save_images(image_6, aug_ids[5])
     # save_images(image_7, aug_ids[6])
     # save_images(image_8, aug_ids[7])
+    # save_images(image_9, aug_ids[8])
+    # save_images(image_10, aug_ids[9])
+    # save_images(image_11, aug_ids[10])
+    # save_images(image_12, aug_ids[11])
+    # save_images(image_13, aug_ids[12])
+    # save_images(image_14, aug_ids[13])
+    # save_images(image_15, aug_ids[14])
+    # save_images(image_16, aug_ids[15])
 
     image_1 = torch.cat([image_1, image_5, image_9, image_13], dim=0)
     image_2 = torch.cat([image_2, image_6, image_10, image_14], dim=0)
@@ -294,6 +328,8 @@ def forward_block(X, ids, encoder, optimizer, train, rev_product):
 
     current_reverse = 1 - all_predictions
     denominator = torch.cat([probs10_a.sum(dim=1), probs10_b.sum(dim=1), probs10_c.sum(dim=1), probs10_d.sum(dim=1)], dim=0)
+
+    adj_matrix = adjacency_matrix(ids, y_train, adj_matrix)
 
     new_loss = new_agreement(all_predictions, denominator, current_reverse)
 
@@ -318,13 +354,13 @@ def forward_block(X, ids, encoder, optimizer, train, rev_product):
 
 
 def save_cluster(original_image, cluster, iteration):
-    sample = original_image.view(-1, 1, original_image.shape[2], original_image.shape[3])
+    sample = original_image.view(-1, original_image.shape[1], original_image.shape[2], original_image.shape[3])
     sample = make_grid(sample, nrow=8).detach().numpy().astype(np.float).transpose(1, 2, 0)
     matplotlib.image.imsave(f"iter_{iteration}_c_{cluster}.png", sample)
 
 
 def save_image(original_image, index, name, cluster=0):
-    sample = original_image.view(-1, 1, original_image.shape[2], original_image.shape[3])
+    sample = original_image.view(-1, original_image.shape[1], original_image.shape[2], original_image.shape[3])
     sample = make_grid(sample, nrow=8).detach().numpy().astype(np.float).transpose(1, 2, 0)
     matplotlib.image.imsave(f"gen_images/c_{cluster}/{name}_index_{index}.png", sample)
 
@@ -377,12 +413,10 @@ def preproccess_cifar(x):
 
     x = x.transpose(1, 3)
 
-    # pad = (SIZE-SIZE_Y) // 2
-    # x = x[:, :, :, pad: SIZE - pad]
-    x = rgb2gray(x)
+    #x = rgb2gray(x)
+    #x = x.unsqueeze(0)
+    #x = x.transpose(0, 1)
 
-    x = x.unsqueeze(0)
-    x = x.transpose(0, 1)
     x /= 255
 
     return x
@@ -447,10 +481,10 @@ def train():
 
     script_directory = os.path.split(os.path.abspath(__file__))[0]
 
-    filepath = 'cifar100_models\\disentangle' + '.model'
+    filepath = 'cifar100_models\\color_disentangle' + '.model'
     clusters_net_path = os.path.join(script_directory, filepath)
 
-    encoder = DeepBinBrainCifar(1, EMBEDINGS).to('cuda')
+    encoder = DeepBinBrainCifar(3, EMBEDINGS).to('cuda')
 
     print(encoder)
 
@@ -496,7 +530,7 @@ def train():
             iteration += 1
             total_iters += 1
 
-            if iteration >= 30:
+            if iteration >= 50:
                 rev_product = rev_product[4 * BATCH_SIZE_DEFAULT:, :]
 
         print("==================================================================================")

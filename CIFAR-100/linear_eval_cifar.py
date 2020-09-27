@@ -18,11 +18,11 @@ LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 500000
 
 BATCH_SIZE_DEFAULT = 300
-USE_EMBEDDING = False
+USE_EMBEDDING = True
 
 INPUT_NET = 8192
 if USE_EMBEDDING:
-    INPUT_NET = 32
+    INPUT_NET = 4096
 
 PRINT = False and USE_EMBEDDING
 ROUND = False and USE_EMBEDDING and not PRINT
@@ -42,7 +42,7 @@ np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
 
 FLAGS = None
 
-encoder_name = "cifar100_models\\disentangle"
+encoder_name = "cifar100_models\\color_disentangle"
 
 encoder = torch.load(encoder_name+".model")
 encoder.eval()
@@ -130,10 +130,11 @@ def forward_block(X, ids, classifier, optimizer, train, targets):
         color_jit_image = color_jitter(images)
         sobeled = sobel_total(color_jit_image, BATCH_SIZE_DEFAULT)
 
-        AA = sobeled.view(sobeled.size(0), -1)
+        AA = sobeled.reshape(sobeled.size(0), sobeled.size(1) * sobeled.size(2) * sobeled.size(3))
         AA -= AA.min(1, keepdim=True)[0]
         AA /= AA.max(1, keepdim=True)[0]
-        sobeled = AA.view(BATCH_SIZE_DEFAULT, 1, SIZE, SIZE)
+        sobeled = AA.view(BATCH_SIZE_DEFAULT, images.shape[1], SIZE, SIZE)
+
 
     with torch.no_grad():
         if PRODUCT:
@@ -316,17 +317,16 @@ def unpickle(file):
     return dict
 
 
-def preproccess_cifar(x):
+def preproccess_cifar(x, channels=3):
     x = to_tensor(x)
 
     x = x.transpose(1, 3)
 
-    # pad = (SIZE-SIZE_Y) // 2
-    # x = x[:, :, :, pad: SIZE - pad]
-    x = rgb2gray(x)
+    if channels == 1:
+        x = rgb2gray(x)
+        x = x.unsqueeze(0)
+        x = x.transpose(0, 1)
 
-    x = x.unsqueeze(0)
-    x = x.transpose(0, 1)
     x /= 255
 
     return x
