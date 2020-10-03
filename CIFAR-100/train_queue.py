@@ -28,9 +28,9 @@ LEARNING_RATE_DEFAULT = 1e-4
 
 MAX_STEPS_DEFAULT = 500000
 
-BATCH_SIZE_DEFAULT = 512
+BATCH_SIZE_DEFAULT = 128
 
-EMBEDINGS = 512
+EMBEDINGS = 4096
 SIZE = 32
 SIZE_Y = 32
 NETS = 1
@@ -60,20 +60,24 @@ for i in range(CLASSES):
 class_numbers = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 0: 0}
 
 
-transformations_dict = {0: "original",
-                       1: "scale",
-                       2: "rotate",
-                       3: "reverse pixel value",
-                       4: "sobel total",
-                       5: "sobel x",
-                       6: "sobel y",
-                       7: "gaussian blur",
-                       8: "random crop",
-                       9: "random crop",
-                       10: "random crop",
-                       11: "random crop",
-                       12: "image 1",
-                       13: "image 2"}
+
+transformations_dict = {0: "original 0",
+                       1: "scale 1",
+                       2: "rotate 2",
+                       3: "reverse pixel value 3",
+                       4: "sobel total 4",
+                       5: "sobel x 5",
+                       6: "sobel y 6",
+                       7: "gaussian blur 7",
+                       8: "randcom_crop_upscale_gauss_blur 8",
+                       9: "randcom_crop_upscale sobel 9",
+                       10: "random crop reverse pixel 10",
+                       11: "rotate -46 11",
+                       12: "random crop soble rotate 12",
+                       13: "randcom_crop_upscale 13",
+                        14: "randcom_crop_upscale 14",
+                        15:"randcom_crop_upscale sobel y 15",
+                        16: " randcom crop 18x18 16"}
 
 
 labels_to_imags = {}
@@ -87,115 +91,93 @@ def save_images(images, transformation):
     save_cluster(numpy_cluster, transformations_dict[transformation], 0)
 
 
+def fix_sobel(sobeled, quarter, image):
+
+    AA = sobeled.reshape(sobeled.size(0), sobeled.size(1) * sobeled.size(2) * sobeled.size(3))
+    AA -= AA.min(1, keepdim=True)[0]
+    AA /= AA.max(1, keepdim=True)[0]
+    AA = AA.view(quarter, image.shape[1], SIZE, SIZE)
+
+    return AA
+
+
 def transformation(id, image):
     quarter = BATCH_SIZE_DEFAULT//4
 
-    if random.uniform(0, 1) > 0.5:
-        image = horizontal_flip(image, quarter)
-
     if id == 0:
         return color_jitter(image)
+
     elif id == 1:
-        return scale(color_jitter(image), (image.shape[2] - 8, image.shape[3] - 8), 4, quarter)
+        return scale(image, (image.shape[2] - 8, image.shape[3] - 8), 4, quarter)
+
     elif id == 2:
-        return rotate(color_jitter(image), 46)
+        return rotate(image, 46)
+
     elif id == 3:
         return torch.abs(1 - color_jitter(image))
+
     elif id == 4:
         sobeled = sobel_total(color_jitter(image), quarter)
-
-        AA = sobeled.view(sobeled.size(0), -1)
-        AA -= AA.min(1, keepdim=True)[0]
-        AA /= AA.max(1, keepdim=True)[0]
-        AA = AA.view(quarter, 1, SIZE, SIZE)
+        AA = fix_sobel(sobeled, quarter, image)
 
         return AA
 
     elif id == 5:
         sobeled = sobel_filter_x(color_jitter(image), quarter)
-
-        AA = sobeled.view(sobeled.size(0), -1)
-        AA -= AA.min(1, keepdim=True)[0]
-        AA /= AA.max(1, keepdim=True)[0]
-        AA = AA.view(quarter, 1, SIZE, SIZE)
+        AA = fix_sobel(sobeled, quarter, image)
 
         return AA
 
     elif id == 6:
         sobeled = sobel_filter_y(color_jitter(image), quarter)
-
-        AA = sobeled.view(sobeled.size(0), -1)
-        AA -= AA.min(1, keepdim=True)[0]
-        AA /= AA.max(1, keepdim=True)[0]
-        AA = AA.view(quarter, 1, SIZE, SIZE)
+        AA = fix_sobel(sobeled, quarter, image)
 
         return AA
 
     elif id == 7:
-        return gaussian_blur(color_jitter(image))
+        return gaussian_blur(image)
 
     elif id == 8:
-        t = random_crop(color_jitter(image), 22, quarter, 22)
-        scaled_up = scale_up(t, 32, 32, quarter)
-        blured = gaussian_blur(scaled_up)
+        blured = randcom_crop_upscale_gauss_blur(image, 22, quarter, 22, 32, 32)
+
         return blured
 
     elif id == 9:
-        t = random_crop(color_jitter(image), 22, quarter, 22)
-        scaled_up = scale_up(t, 32, 32, quarter)
+        scaled_up = randcom_crop_upscale(image, 22, quarter, 22, 32, 32)
         sobeled = sobel_total(scaled_up, quarter)
-
-        AA = sobeled.view(sobeled.size(0), -1)
-        AA -= AA.min(1, keepdim=True)[0]
-        AA /= AA.max(1, keepdim=True)[0]
-        AA = AA.view(quarter, 1, SIZE, SIZE)
+        AA = fix_sobel(sobeled, quarter, image)
 
         return AA
 
     elif id == 10:
-        t = random_crop(color_jitter(image), 22, quarter, 22)
-        scaled_up = scale_up(t, 32, 32, quarter)
+        scaled_up = randcom_crop_upscale(image, 22, quarter, 22, 32, 32)
         rev = torch.abs(1 - scaled_up)
         return rev
 
     elif id == 11:
-        t = random_crop(color_jitter(image), 22, quarter, 22)
-        scaled_up = scale_up(t, 32, 32, quarter)
-        rot = rotate(scaled_up, 46)
+        rot = rotate(image, -46)
         return rot
 
     elif id == 12:
-        t = random_crop(color_jitter(image), 22, quarter, 22)
-        scaled_up = scale_up(t, 32, 32, quarter)
-        blured = gaussian_blur(scaled_up)
-        rot = rotate(blured, 46)
-        return rot
+        scaled_up = randcom_crop_upscale(image, 20, quarter, 20, 32, 32)
+        return scaled_up
 
     elif id == 13:
-        t = random_crop(color_jitter(image), 22, quarter, 22)
-        scaled_up = scale_up(t, 32, 32, quarter)
+        scaled_up = randcom_crop_upscale(image, 22, quarter, 22, 32, 32)
 
         return scaled_up
 
     elif id == 14:
-        t = random_crop(color_jitter(image), 22, quarter, 22)
-        scaled_up = scale_up(t, 32, 32, quarter)
+        scaled_up = randcom_crop_upscale(image, 26, quarter, 26, 32, 32)
         return scaled_up
 
     elif id == 15:
-        t = random_crop(color_jitter(image), 22, quarter, 22)
-        scaled_up = scale_up(t, 32, 32, quarter)
-        sobeled = sobel_filter_x(scaled_up, quarter)
+        scaled_up = randcom_crop_upscale(image, 22, quarter, 22, 32, 32)
 
-        AA = sobeled.view(sobeled.size(0), -1)
-        AA -= AA.min(1, keepdim=True)[0]
-        AA /= AA.max(1, keepdim=True)[0]
-        AA = AA.view(quarter, 1, SIZE, SIZE)
-        return AA
+        return scaled_up
 
     elif id == 16:
-        t = random_crop(color_jitter(image), 26, quarter, 26)
-        scaled_up = scale_up(t, 32, 32, quarter)
+        scaled_up = randcom_crop_upscale(image, 18, quarter, 18, 32, 32)
         return scaled_up
 
     print("Error in transformation of the image.")
@@ -238,23 +220,23 @@ def forward_block(X, ids, encoder, optimizer, train, rev_product):
     fourth = BATCH_SIZE_DEFAULT // 4
     image_1 = transformation(aug_ids[0], image[0:fourth])
     image_2 = transformation(aug_ids[1], image[0:fourth])
-    # image_3 = transformation(aug_ids[2], image[0:fourth])
-    # image_4 = transformation(aug_ids[3], image[0:fourth])
+    image_3 = transformation(aug_ids[2], image[0:fourth])
+    image_4 = transformation(aug_ids[3], image[0:fourth])
 
     image_5 = transformation(aug_ids[4], image[fourth: 2 * fourth])
     image_6 = transformation(aug_ids[5], image[fourth: 2 * fourth])
-    # image_7 = transformation(aug_ids[6], image[fourth: 2 * fourth])
-    # image_8 = transformation(aug_ids[7], image[fourth: 2 * fourth])
+    image_7 = transformation(aug_ids[6], image[fourth: 2 * fourth])
+    image_8 = transformation(aug_ids[7], image[fourth: 2 * fourth])
 
     image_9 = transformation(aug_ids[8], image[2 * fourth: 3 * fourth])
     image_10 = transformation(aug_ids[9], image[2 * fourth: 3 * fourth])
-    # image_11 = transformation(aug_ids[10], image[2 * fourth: 3 * fourth])
-    # image_12 = transformation(aug_ids[11], image[2 * fourth: 3 * fourth])
+    image_11 = transformation(aug_ids[10], image[2 * fourth: 3 * fourth])
+    image_12 = transformation(aug_ids[11], image[2 * fourth: 3 * fourth])
 
     image_13 = transformation(aug_ids[12], image[3 * fourth:])
     image_14 = transformation(aug_ids[13], image[3 * fourth:])
-    # image_15 = transformation(aug_ids[14], image[3 * fourth:])
-    # image_16 = transformation(aug_ids[15], image[3 * fourth:])
+    image_15 = transformation(aug_ids[14], image[3 * fourth:])
+    image_16 = transformation(aug_ids[15], image[3 * fourth:])
 
     # save_images(image_1, aug_ids[0])
     # save_images(image_2, aug_ids[1])
@@ -264,11 +246,19 @@ def forward_block(X, ids, encoder, optimizer, train, rev_product):
     # save_images(image_6, aug_ids[5])
     # save_images(image_7, aug_ids[6])
     # save_images(image_8, aug_ids[7])
+    # save_images(image_9, aug_ids[8])
+    # save_images(image_10, aug_ids[9])
+    # save_images(image_11, aug_ids[10])
+    # save_images(image_12, aug_ids[11])
+    # save_images(image_13, aug_ids[12])
+    # save_images(image_14, aug_ids[13])
+    # save_images(image_15, aug_ids[14])
+    # save_images(image_16, aug_ids[15])
 
     image_1 = torch.cat([image_1, image_5, image_9, image_13], dim=0)
     image_2 = torch.cat([image_2, image_6, image_10, image_14], dim=0)
-    # image_3 = torch.cat([image_3, image_7, image_11, image_15], dim=0)
-    # image_4 = torch.cat([image_4, image_8, image_12, image_16], dim=0)
+    image_3 = torch.cat([image_3, image_7, image_11, image_15], dim=0)
+    image_4 = torch.cat([image_4, image_8, image_12, image_16], dim=0)
 
     # save_images(image_1, 12)
     # save_images(image_2, 13)
@@ -277,12 +267,12 @@ def forward_block(X, ids, encoder, optimizer, train, rev_product):
 
     _, _, probs10_a = encoder(image_1.to('cuda'))
     _, _, probs10_b = encoder(image_2.to('cuda'))
-    # _, _, probs10_c = encoder(image_3.to('cuda'))
-    # _, _, probs10_d = encoder(image_4.to('cuda'))
+    _, _, probs10_c = encoder(image_3.to('cuda'))
+    _, _, probs10_d = encoder(image_4.to('cuda'))
 
-    product = probs10_a * probs10_b  # * probs10_c * probs10_d
+    product = probs10_a * probs10_b * probs10_c * probs10_d
     current_rev = 1 - product
-    denominator = probs10_a.sum(dim=1) + probs10_b.sum(dim=1) #+ probs10_c.sum(dim=1) + probs10_d.sum(dim=1)
+    denominator = probs10_a.sum(dim=1) + probs10_b.sum(dim=1) + probs10_c.sum(dim=1) + probs10_d.sum(dim=1)
 
     new_loss = new_agreement(product, denominator, current_rev)
 
@@ -307,7 +297,7 @@ def forward_block(X, ids, encoder, optimizer, train, rev_product):
 
 
 def save_cluster(original_image, cluster, iteration):
-    sample = original_image.view(-1, 1, original_image.shape[2], original_image.shape[3])
+    sample = original_image.view(-1, original_image.shape[1], original_image.shape[2], original_image.shape[3])
     sample = make_grid(sample, nrow=8).detach().numpy().astype(np.float).transpose(1, 2, 0)
     matplotlib.image.imsave(f"iter_{iteration}_c_{cluster}.png", sample)
 
@@ -365,13 +355,12 @@ def preproccess_cifar(x):
     x = to_tensor(x)
 
     x = x.transpose(1, 3)
+    x = x.transpose(2, 3)
 
     # pad = (SIZE-SIZE_Y) // 2
     # x = x[:, :, :, pad: SIZE - pad]
-    x = rgb2gray(x)
+    #x = rgb2gray(x)
 
-    x = x.unsqueeze(0)
-    x = x.transpose(0, 1)
     x /= 255
 
     return x
@@ -439,7 +428,7 @@ def train():
     filepath = 'cifar100_models\\queue' + '.model'
     clusters_net_path = os.path.join(script_directory, filepath)
 
-    encoder = DeepBinBrainCifar(1, EMBEDINGS).to('cuda')
+    encoder = DeepBinBrainCifar(3, EMBEDINGS).to('cuda')
 
     print(encoder)
 
@@ -491,6 +480,9 @@ def train():
         print("==================================================================================")
         print("batch mean ones: ",
               (np.where(probs10.data.cpu().numpy() > 0.5))[0].shape[0] / (probs10[0].shape[0] * BATCH_SIZE_DEFAULT))
+
+        count_common_elements(probs10, EMBEDINGS)
+        print()
 
         print("train avg loss : ", avg_loss / EVAL_FREQ_DEFAULT)
         avg_loss = 0

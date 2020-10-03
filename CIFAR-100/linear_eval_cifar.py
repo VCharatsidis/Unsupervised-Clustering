@@ -20,12 +20,12 @@ MAX_STEPS_DEFAULT = 500000
 BATCH_SIZE_DEFAULT = 300
 USE_EMBEDDING = True
 
-INPUT_NET = 8192
+INPUT_NET = 6400
 if USE_EMBEDDING:
     INPUT_NET = 4096
 
 PRINT = False and USE_EMBEDDING
-ROUND = False and USE_EMBEDDING and not PRINT
+ROUND = True and USE_EMBEDDING and not PRINT
 PRODUCT = False and USE_EMBEDDING
 AGREEMENT = False and USE_EMBEDDING
 
@@ -124,8 +124,7 @@ def forward_block(X, ids, classifier, optimizer, train, targets):
     #images = to_tensor(images)
 
     if PRODUCT:
-        color_jit_image = color_jitter(images)
-        rotated = rotate(color_jit_image, 46)
+        rotated = rotate(images, 46)
 
         color_jit_image = color_jitter(images)
         sobeled = sobel_total(color_jit_image, BATCH_SIZE_DEFAULT)
@@ -134,7 +133,6 @@ def forward_block(X, ids, classifier, optimizer, train, targets):
         AA -= AA.min(1, keepdim=True)[0]
         AA /= AA.max(1, keepdim=True)[0]
         sobeled = AA.view(BATCH_SIZE_DEFAULT, images.shape[1], SIZE, SIZE)
-
 
     with torch.no_grad():
         if PRODUCT:
@@ -321,11 +319,12 @@ def preproccess_cifar(x, channels=3):
     x = to_tensor(x)
 
     x = x.transpose(1, 3)
+    x = x.transpose(2, 3)
 
-    if channels == 1:
-        x = rgb2gray(x)
-        x = x.unsqueeze(0)
-        x = x.transpose(0, 1)
+    # if channels == 1:
+    #     x = rgb2gray(x)
+    #     x = x.unsqueeze(0)
+    #     x = x.transpose(0, 1)
 
     x /= 255
 
@@ -376,6 +375,7 @@ def train():
 
     X_test = np.array(X_test)
     X_test = preproccess_cifar(X_test)
+
     print("test shape", X_test.shape)
     targets = np.array(targets)
     print("targets shape", targets.shape)

@@ -157,7 +157,7 @@ def transformation(id, image):
         return rev
 
     elif id == 11:
-        rot = rc_upscale_rotate(image, 22, quarter, 22, 32, 32, -46)
+        rot = rotate(image, -46)
         return rot
 
     elif id == 12:
@@ -372,6 +372,7 @@ def preproccess_cifar(x):
     x = to_tensor(x)
 
     x = x.transpose(1, 3)
+    x = x.transpose(2, 3)
 
     #x = rgb2gray(x)
     #x = x.unsqueeze(0)

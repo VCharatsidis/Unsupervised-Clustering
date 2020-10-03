@@ -144,106 +144,87 @@ def save_image(original_image, index, name, cluster=0):
 def transformation(id, image):
 
     pad = (96 - SIZE) // 2
-
-    if random.uniform(0, 1) > 0.5:
-        image = horizontal_flip(image, BATCH_SIZE_DEFAULT)
+    quarter = BATCH_SIZE_DEFAULT // 4
 
     if id == 0:
-        image = scale(image, SIZE, pad, BATCH_SIZE_DEFAULT)
+        image = scale(image, SIZE, pad, quarter)
         image = image[:, :, pad:96 - pad, pad:96 - pad]
         color_jit_image = color_jitter(image)
         return color_jit_image
 
     elif id == 1:
-        image = scale(image, SIZE, pad, BATCH_SIZE_DEFAULT)
+        image = scale(image, SIZE, pad, quarter)
         image = image[:, :, pad:96 - pad, pad:96 - pad]
-        color_jit_image = color_jitter(image)
-        return scale(color_jit_image, (color_jit_image.shape[2] - 8, color_jit_image.shape[3] - 8), 4, BATCH_SIZE_DEFAULT)
+        return scale(image, (image.shape[2] - 8, image.shape[3] - 8), 4, quarter)
+
     elif id == 2:
-        image = scale(image, SIZE, pad, BATCH_SIZE_DEFAULT)
+        image = scale(image, SIZE, pad, quarter)
         image = image[:, :, pad:96 - pad, pad:96 - pad]
-        color_jit_image = color_jitter(image)
-        return rotate(color_jit_image, 30)
+        return rotate(image, 46)
+
     elif id == 3:
-        image = scale(image, SIZE, pad, BATCH_SIZE_DEFAULT)
+        image = scale(image, SIZE, pad, quarter)
         image = image[:, :, pad:96 - pad, pad:96 - pad]
-        color_jit_image = color_jitter(image)
-        return torch.abs(1 - color_jit_image)
+        return torch.abs(1 - image)
+
     elif id == 4:
-        image = scale(image, SIZE, pad, BATCH_SIZE_DEFAULT)
+        image = scale(image, SIZE, pad, quarter)
         image = image[:, :, pad:96 - pad, pad:96 - pad]
         color_jit_image = color_jitter(image)
-        return sobel_total(color_jit_image, BATCH_SIZE_DEFAULT)
+        sobeled = sobel_total(color_jit_image, quarter)
+        AA = fix_sobel(sobeled, quarter, image, SIZE, SIZE)
+
+        return AA
+
     elif id == 5:
-        image = scale(image, SIZE, pad, BATCH_SIZE_DEFAULT)
+        image = scale(image, SIZE, pad, quarter)
         image = image[:, :, pad:96 - pad, pad:96 - pad]
         color_jit_image = color_jitter(image)
-        return sobel_filter_x(color_jit_image, BATCH_SIZE_DEFAULT)
+        sobeled = sobel_filter_x(color_jit_image, quarter)
+        AA = fix_sobel(sobeled, quarter, image, SIZE, SIZE)
+
+        return AA
+
     elif id == 6:
-        image = scale(image, SIZE, pad, BATCH_SIZE_DEFAULT)
+        image = scale(image, SIZE, pad, quarter)
         image = image[:, :, pad:96 - pad, pad:96 - pad]
         color_jit_image = color_jitter(image)
-        return sobel_filter_y(color_jit_image, BATCH_SIZE_DEFAULT)
+        sobeled = sobel_filter_y(color_jit_image, quarter)
+        AA = fix_sobel(sobeled, quarter, image, SIZE, SIZE)
+
+        return AA
+
     elif id == 7:
-        image = scale(image, SIZE, pad, BATCH_SIZE_DEFAULT)
+        image = scale(image, SIZE, pad, quarter)
         image = image[:, :, pad:96 - pad, pad:96 - pad]
-        color_jit_image = color_jitter(image)
-        return gaussian_blur(color_jit_image)
+        return gaussian_blur(image)
 
     elif id == 8:
         crop_size = 56
         crop_pad = (96 - crop_size) // 2
-        color_jit_image = color_jitter(image)
-        crop_preparation = scale(color_jit_image, crop_size, crop_pad, BATCH_SIZE_DEFAULT)
+        crop_preparation = scale(image, crop_size, crop_pad, quarter)
         crop_preparation = crop_preparation[:, :, crop_pad:96 - crop_pad, crop_pad:96 - crop_pad]
-        return random_crop(crop_preparation, SIZE, BATCH_SIZE_DEFAULT, SIZE)
+        return just_random_crop(crop_preparation, SIZE, quarter, SIZE)
 
     elif id == 9:
-        crop_size2 = 66
+        crop_size2 = 60
         crop_pad2 = (96 - crop_size2) // 2
-        color_jit_image = color_jitter(image)
-        crop_preparation2 = scale(color_jit_image, crop_size2, crop_pad2, BATCH_SIZE_DEFAULT)
+        crop_preparation2 = scale(image, crop_size2, crop_pad2, quarter)
         crop_preparation2 = crop_preparation2[:, :, crop_pad2:96 - crop_pad2, crop_pad2:96 - crop_pad2]
-        return random_crop(crop_preparation2, SIZE, BATCH_SIZE_DEFAULT, SIZE)
-
-    elif id == 10:
-        color_jit_image = color_jitter(image)
-        soft_bin_hf = binary(color_jit_image)
-        soft_bin_hf = scale(soft_bin_hf, SIZE, pad, BATCH_SIZE_DEFAULT)
-        soft_bin_hf = soft_bin_hf[:, :, pad:96 - pad, pad:96 - pad]
-        rev_soft_bin_hf = torch.abs(1 - soft_bin_hf)
-        rev_soft_bin_hf /= 255
-        return rev_soft_bin_hf
-
-    elif id == 11:
-        color_jit_image = color_jitter(image)
-        soft_bin_hf = binary(color_jit_image)
-        soft_bin_hf = scale(soft_bin_hf, SIZE, pad, BATCH_SIZE_DEFAULT)
-        soft_bin_hf = soft_bin_hf[:, :, pad:96 - pad, pad:96 - pad]
-        return soft_bin_hf
+        return just_random_crop(crop_preparation2, SIZE, quarter, SIZE)
 
     elif id == 12:
-        image = scale(image, SIZE, pad, BATCH_SIZE_DEFAULT)
+        image = scale(image, SIZE, pad, quarter)
         image = image[:, :, pad:96 - pad, pad:96 - pad]
-        color_jit_image = color_jitter(image)
-        return random_erease(color_jit_image, BATCH_SIZE_DEFAULT)
+        return random_erease(image, quarter)
 
     elif id == 13:
         crop_size2 = 66
         crop_pad2 = (96 - crop_size2) // 2
-        color_jit_image = color_jitter(image)
-        crop_preparation2 = scale(color_jit_image, crop_size2, crop_pad2, BATCH_SIZE_DEFAULT)
+        crop_preparation2 = scale(image, crop_size2, crop_pad2, quarter)
         crop_preparation2 = crop_preparation2[:, :, crop_pad2:96 - crop_pad2, crop_pad2:96 - crop_pad2]
-        return random_crop(crop_preparation2, SIZE, BATCH_SIZE_DEFAULT, SIZE)
+        return just_random_crop(crop_preparation2, SIZE, quarter, SIZE)
 
-    elif id == 14:
-        color_jit_image = color_jitter(image)
-        soft_bin_hf = binary(color_jit_image)
-        soft_bin_hf = scale(soft_bin_hf, SIZE, pad, BATCH_SIZE_DEFAULT)
-        soft_bin_hf = soft_bin_hf[:, :, pad:96 - pad, pad:96 - pad]
-        rev_soft_bin_hf = torch.abs(1 - soft_bin_hf)
-        rev_soft_bin_hf /= 255
-        return rev_soft_bin_hf
 
     print("Error in transformation of the image.")
     print("id ", id)
@@ -338,12 +319,12 @@ def print_params(model):
 
 
 def train():
-    train_path = "../data/unlabeled_X.bin"
+    train_path = "../data_2/train_X.bin"
 
     print(train_path)
     X_train = read_all_images(train_path)
 
-    X_train = rgb2gray(X_train)
+    #X_train = rgb2gray(X_train)
 
     X_train = to_tensor(X_train)
     X_train = X_train.unsqueeze(0)
@@ -352,14 +333,17 @@ def train():
 
     X_train /= 255
 
+    print(X_train.shape)
+    input()
+
     # train_y_File = "..\\data\\stl10_binary\\train_y.bin"
     # y_train = read_labels(train_y_File)
 
     ########### test ##############################
-    testFile = "../data/test_X.bin"
+    testFile = "../data_2/test_X.bin"
     X_test = read_all_images(testFile)
 
-    X_test = rgb2gray(X_test)
+    #X_test = rgb2gray(X_test)
 
     X_test = to_tensor(X_test)
     X_test = X_test.unsqueeze(0)

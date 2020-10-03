@@ -20,7 +20,7 @@ fcn = models.segmentation.fcn_resnet101(pretrained=True).eval()
 LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 300000
 
-BATCH_SIZE_DEFAULT = 300
+BATCH_SIZE_DEFAULT = 256
 
 INPUT_NET = 2048
 SIZE = 32
@@ -59,6 +59,22 @@ images_to_labels ={"airplane": 1,
                    "ship    ": 9,
                    "truck   ": 0}
 
+transformations_dict = {0: "original 0",
+                       1: "scale 1",
+                       2: "rotate 2",
+                       3: "reverse pixel value 3",
+                       4: "sobel total 4",
+                       5: "sobel x 5",
+                       6: "sobel y 6",
+                       7: "gaussian blur 7",
+                       8: "randcom_crop 56 8",
+                       9: "randcom_crop 60 9",
+                       10: "random erase 10",
+                       11: "random crop rotate 11",
+                       12: "random crop soble rotate 12",
+                       13: "randcom_crop_upscale 13"
+                        }
+
 
 def get_targets(number_classes):
     return (torch.ones([number_classes]).to('cuda')) / number_classes
@@ -73,27 +89,56 @@ def entropy_minmax_loss(preds_1, preds_2):
     return total_loss
 
 
+def save_images(images, transformation):
+    print(transformations_dict[transformation])
+    numpy_cluster = images.cpu().detach()
+    save_cluster(numpy_cluster, transformations_dict[transformation], 0)
+
+
 def forward_block(X, ids, encoder, optimizer, train):
     images = X[ids]
 
     if train:
-        images = rgb2gray(images)
+        #images = rgb2gray(images)
 
         images = to_tensor(images)
-        images = images.unsqueeze(0)
-        images = images.transpose(0, 1)
+        # images = images.unsqueeze(0)
+        # images = images.transpose(0, 1)
         images = images.transpose(2, 3)
 
         images /= 255
 
-    number_augments = 12
-    aug_ids = np.random.choice(number_augments, size=2, replace=False)
+    # print(images.shape)
+    # input()
 
-    image_1 = transformation(aug_ids[0], images)
-    image_2 = transformation(aug_ids[1], images)
+    number_augments = 11
+    aug_ids = np.random.choice(number_augments, size=number_augments, replace=False)
 
-    # show_gray(image_1)
-    # show_gray(image_2)
+    fourth = BATCH_SIZE_DEFAULT // 4
+
+    image_1 = transformation(aug_ids[0], images[0:fourth])
+    image_2 = transformation(aug_ids[1], images[0:fourth])
+
+    image_3 = transformation(aug_ids[2], images[fourth: 2 * fourth])
+    image_4 = transformation(aug_ids[3], images[fourth: 2 * fourth])
+
+    image_5 = transformation(aug_ids[4], images[2 * fourth: 3 * fourth])
+    image_6 = transformation(aug_ids[5], images[2 * fourth: 3 * fourth])
+
+    image_7 = transformation(aug_ids[6], images[3 * fourth:])
+    image_8 = transformation(aug_ids[7], images[3 * fourth:])
+
+    # save_images(image_1, aug_ids[0])
+    # save_images(image_2, aug_ids[1])
+    # save_images(image_3, aug_ids[2])
+    # save_images(image_4, aug_ids[3])
+    # save_images(image_5, aug_ids[4])
+    # save_images(image_6, aug_ids[5])
+    # save_images(image_7, aug_ids[6])
+    # save_images(image_8, aug_ids[7])
+
+    image_1 = torch.cat([image_1, image_3, image_5, image_7], dim=0)
+    image_2 = torch.cat([image_2, image_4, image_6, image_8], dim=0)
 
     _, test_preds_1 = encoder(image_1.to('cuda'))
     _, test_preds_2 = encoder(image_2.to('cuda'))
@@ -116,9 +161,14 @@ def batch_entropy(pred, targets):
 
 
 def save_cluster(original_image, cluster, iteration):
-    sample = original_image.view(-1, 1, original_image.shape[2], original_image.shape[2])
+    sample = original_image.view(-1, original_image.shape[1], original_image.shape[2], original_image.shape[3])
     sample = make_grid(sample, nrow=8).detach().numpy().astype(np.float).transpose(1, 2, 0)
-    matplotlib.image.imsave(f"new_images/iter_{iteration}_c_{cluster}.png", sample)
+    matplotlib.image.imsave(f"iter_{iteration}_c_{cluster}.png", sample)
+
+# def save_cluster(original_image, cluster, iteration):
+#     sample = original_image.view(-1, 1, original_image.shape[2], original_image.shape[2])
+#     sample = make_grid(sample, nrow=8).detach().numpy().astype(np.float).transpose(1, 2, 0)
+#     matplotlib.image.imsave(f"new_images/iter_{iteration}_c_{cluster}.png", sample)
 
 
 def save_image(original_image, index, name, cluster=0):
@@ -128,91 +178,88 @@ def save_image(original_image, index, name, cluster=0):
 
 
 def transformation(id, image):
-    pad = (96 - SIZE) // 2
-    fourth = BATCH_SIZE_DEFAULT
 
-    if random.uniform(0, 1) > 0.5:
-        image = horizontal_flip(image, fourth)
+    pad = (96 - SIZE) // 2
+    quarter = BATCH_SIZE_DEFAULT // 4
 
     if id == 0:
-        image = scale(image, SIZE, pad, fourth)
+        image = scale(image, SIZE, pad, quarter)
         image = image[:, :, pad:96 - pad, pad:96 - pad]
-        color_jit_image = color_jitter(image)
-        return color_jit_image
+        return image
 
     elif id == 1:
-        image = scale(image, SIZE, pad, fourth)
+        image = just_scale(image, SIZE, pad)
         image = image[:, :, pad:96 - pad, pad:96 - pad]
-        color_jit_image = color_jitter(image)
-        return scale(color_jit_image, (color_jit_image.shape[2] - 8, color_jit_image.shape[3] - 8), 4,
-                     fourth)
+        return scale(image, (image.shape[2] - 8, image.shape[3] - 8), 4, quarter)
+
     elif id == 2:
-        image = scale(image, SIZE, pad, fourth)
+        image = just_scale(image, SIZE, pad)
         image = image[:, :, pad:96 - pad, pad:96 - pad]
-        color_jit_image = color_jitter(image)
-        return rotate(color_jit_image, 30)
+        return rotate(image, 46)
 
     elif id == 3:
-        image = scale(image, SIZE, pad, fourth)
+        image = scale(image, SIZE, pad, quarter)
         image = image[:, :, pad:96 - pad, pad:96 - pad]
-        color_jit_image = color_jitter(image)
-        return torch.abs(1 - color_jit_image)
+        return torch.abs(1 - image)
 
     elif id == 4:
-        image = scale(image, SIZE, pad, fourth)
+        image = just_scale(image, SIZE, pad)
         image = image[:, :, pad:96 - pad, pad:96 - pad]
         color_jit_image = color_jitter(image)
-        return sobel_total(color_jit_image, fourth)
+        sobeled = sobel_total(color_jit_image, quarter)
+        AA = fix_sobel(sobeled, quarter, image, SIZE, SIZE)
+
+        return AA
 
     elif id == 5:
-        image = scale(image, SIZE, pad, fourth)
+        image = just_scale(image, SIZE, pad)
         image = image[:, :, pad:96 - pad, pad:96 - pad]
         color_jit_image = color_jitter(image)
-        return sobel_filter_x(color_jit_image, fourth)
+        sobeled = sobel_filter_x(color_jit_image, quarter)
+        AA = fix_sobel(sobeled, quarter, image, SIZE, SIZE)
+
+        return AA
 
     elif id == 6:
-        image = scale(image, SIZE, pad, fourth)
+        image = just_scale(image, SIZE, pad)
         image = image[:, :, pad:96 - pad, pad:96 - pad]
         color_jit_image = color_jitter(image)
-        return sobel_filter_y(color_jit_image, fourth)
+        sobeled = sobel_filter_y(color_jit_image, quarter)
+        AA = fix_sobel(sobeled, quarter, image, SIZE, SIZE)
+
+        return AA
 
     elif id == 7:
-        image = scale(image, SIZE, pad, fourth)
+        image = just_scale(image, SIZE, pad)
         image = image[:, :, pad:96 - pad, pad:96 - pad]
-        color_jit_image = color_jitter(image)
-        return gaussian_blur(color_jit_image)
+        return gaussian_blur(image)
 
     elif id == 8:
-        crop_size = 66
+        crop_size = 56
         crop_pad = (96 - crop_size) // 2
-        color_jit_image = color_jitter(image)
-        crop_preparation = scale(color_jit_image, crop_size, crop_pad, fourth)
+        crop_preparation = scale(image, crop_size, crop_pad, quarter)
         crop_preparation = crop_preparation[:, :, crop_pad:96 - crop_pad, crop_pad:96 - crop_pad]
-        return random_crop(crop_preparation, SIZE, fourth, SIZE)
+        return just_random_crop(crop_preparation, SIZE, quarter, SIZE)
 
     elif id == 9:
-        crop_size2 = 76
+        crop_size2 = 60
         crop_pad2 = (96 - crop_size2) // 2
-        color_jit_image = color_jitter(image)
-        crop_preparation2 = scale(color_jit_image, crop_size2, crop_pad2, fourth)
+        crop_preparation2 = scale(image, crop_size2, crop_pad2, quarter)
         crop_preparation2 = crop_preparation2[:, :, crop_pad2:96 - crop_pad2, crop_pad2:96 - crop_pad2]
-        return random_crop(crop_preparation2, SIZE, fourth, SIZE)
+        return just_random_crop(crop_preparation2, SIZE, quarter, SIZE)
 
     elif id == 10:
-        image = scale(image, SIZE, pad, fourth)
+        image = just_scale(image, SIZE, pad)
         image = image[:, :, pad:96 - pad, pad:96 - pad]
-        color_jit_image = color_jitter(image)
-        if random.uniform(0, 1) > 0.5:
-            color_jit_image = gaussian_blur(color_jit_image)
-        return random_erease(color_jit_image, fourth)
+        return random_erease(image, quarter)
 
     elif id == 11:
-        crop_size2 = 76
+        crop_size2 = 66
         crop_pad2 = (96 - crop_size2) // 2
-        color_jit_image = color_jitter(image)
-        crop_preparation2 = scale(color_jit_image, crop_size2, crop_pad2, fourth)
+        crop_preparation2 = scale(image, crop_size2, crop_pad2, quarter)
         crop_preparation2 = crop_preparation2[:, :, crop_pad2:96 - crop_pad2, crop_pad2:96 - crop_pad2]
-        return random_crop(crop_preparation2, SIZE, fourth, SIZE)
+        return just_random_crop(crop_preparation2, SIZE, quarter, SIZE)
+
 
     print("Error in transformation of the image.")
     print("id ", id)
@@ -236,7 +283,7 @@ def measure_acc_augments(X_test, encoder, targets):
         images = X_test[test_ids, :]
 
         pad = (96 - SIZE) // 2
-        images = scale(images, SIZE, pad, BATCH_SIZE_DEFAULT)
+        images = just_scale(images, SIZE, pad)
         images = images[:, :, pad:96 - pad, pad:96 - pad]
 
         _, p = encoder(images.to('cuda'))
@@ -327,24 +374,24 @@ def print_params(model):
 
 
 def train():
-    train_path = "..\\data_2\\stl10_binary\\unlabeled_X.bin"
+    train_path = "..\\data_2\\stl10_binary\\train_X.bin"
     print(train_path)
     X_train = read_all_images(train_path)
 
     ########### test ##############################
-    testFile = "..\\data\\stl10_binary\\train_X.bin"
+    testFile = "..\\data\\stl10_binary\\test_X.bin"
     X_validation = read_all_images(testFile)
 
-    X_validation = rgb2gray(X_validation)
+    #X_validation = rgb2gray(X_validation)
 
     X_validation = to_tensor(X_validation)
-    X_validation = X_validation.unsqueeze(0)
-    X_validation = X_validation.transpose(0, 1)
+    # X_validation = X_validation.unsqueeze(0)
+    # X_validation = X_validation.transpose(0, 1)
     X_validation = X_validation.transpose(2, 3)
 
     X_validation /= 255
 
-    test_y_File = "..\\data\\stl10_binary\\train_y.bin"
+    test_y_File = "..\\data\\stl10_binary\\test_y.bin"
     targets = read_labels(test_y_File)
 
     targets = np.array([x % 10 for x in targets])
@@ -359,7 +406,7 @@ def train():
     filepath = 'new_models\\virtual_best' + '.model'
     virtual_best_path = os.path.join(script_directory, filepath)
 
-    encoder = UnsupervisedNet(1, CLASSES).to('cuda')
+    encoder = UnsupervisedNet(3, CLASSES).to('cuda')
     optimizer = torch.optim.Adam(encoder.parameters(), lr=LEARNING_RATE_DEFAULT)
 
     min_miss_percentage = 100

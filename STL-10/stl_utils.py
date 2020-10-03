@@ -25,7 +25,6 @@ class AddGaussianNoise(object):
         return self.__class__.__name__ + '(mean={0}, std={1})'.format(self.mean, self.std)
 
 
-
 def gaussian_blur(X):
     X_copy = copy.deepcopy(X)
     X_copy = Variable(torch.FloatTensor(X_copy))
@@ -57,6 +56,15 @@ def gaussian_blur(X):
 #         X_copy[i] = trans(a)
 #
 #     return X_copy
+
+def fix_sobel(sobeled, quarter, image, SIZE_X, SIZE_Y):
+
+    AA = sobeled.reshape(sobeled.size(0), sobeled.size(1) * sobeled.size(2) * sobeled.size(3))
+    AA -= AA.min(1, keepdim=True)[0]
+    AA /= AA.max(1, keepdim=True)[0]
+    AA = AA.view(quarter, image.shape[1], SIZE_X, SIZE_Y)
+
+    return AA
 
 
 def rotate(X, degrees):
@@ -160,6 +168,23 @@ def scale_up(X, size, size_y, batch_size):
         X_put[i] = trans(a)
 
     return X_put
+
+
+def just_scale(X, size, pad):
+    X_copy = copy.deepcopy(X)
+    X_copy = Variable(torch.FloatTensor(X_copy))
+
+    # if random.uniform(0, 1) > 0.5:
+    #     size = 20
+    #     pad = 4
+    transformation = transforms.Resize(size=size, interpolation=2)
+    trans = transforms.Compose([transformation, transforms.Pad(pad), transforms.ToTensor()])
+
+    for i in range(X_copy.shape[0]):
+        a = F.to_pil_image(X_copy[i])
+        X_copy[i] = trans(a)
+
+    return X_copy
 
 
 def scale(X, size, pad, batch_size=BATCH_SIZE_DEFAULT):
@@ -376,6 +401,22 @@ def randcom_crop_upscale_gauss_blur(X, size, batch_size, size_y, up_size_x, up_s
     return X_copy
 
 
+def just_random_crop(X, size, batch_size, size_y):
+    X_copy = copy.deepcopy(X)
+    X_copy = Variable(torch.FloatTensor(X_copy))
+
+    X_res = torch.zeros([batch_size, X.shape[1], size, size_y])
+
+    transformation = transforms.RandomCrop(size=(size, size_y))
+    trans = transforms.Compose([transformation, transforms.ToTensor()])
+
+    for i in range(X_copy.shape[0]):
+        a = F.to_pil_image(X_copy[i])
+        X_res[i] = trans(a)
+
+    return X_res
+
+
 def random_crop(X, size, batch_size, size_y):
     X_copy = copy.deepcopy(X)
     X_copy = Variable(torch.FloatTensor(X_copy))
@@ -442,4 +483,19 @@ def show_mnist(first_image, w, h):
     plt.show()
 
 
+def count_common_elements(p, embedings_size):
+    sum_commons = 0
+    counter = 0
+    for i in range(p.shape[0]):
+        for j in range(p.shape[0]):
+            if i == j:
+                continue
 
+            product = p[i].data.cpu().numpy() * p[j].data.cpu().numpy()
+            commons = np.where(product > 0.5)[0].shape[0]
+            #print(commons)
+
+            sum_commons += commons
+            counter += 1
+
+    print("Mean common elements: ", (sum_commons / embedings_size) / counter)
