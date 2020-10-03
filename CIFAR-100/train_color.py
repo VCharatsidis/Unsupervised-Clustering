@@ -30,7 +30,7 @@ MAX_STEPS_DEFAULT = 500000
 
 BATCH_SIZE_DEFAULT = 128
 
-EMBEDINGS = 4096
+EMBEDINGS = 2048
 SIZE = 32
 SIZE_Y = 32
 NETS = 1
@@ -195,14 +195,11 @@ def new_agreement(product, denominator, rev_prod):
     denominator = denominator + denominator.unsqueeze(dim=1)
 
     attraction = attraction / denominator
-    #attraction[(attraction < EPS).data] = EPS
-    #attraction = - torch.log(attraction) * (1-adj_matrix.cuda())
-
     repel = repel / denominator
-    #repel[(repel < EPS).data] = EPS
-    #repel = - torch.log(repel) * adj_matrix.cuda()
 
     total_matrix = repel * adj_matrix.cuda() + attraction * (1-adj_matrix.cuda())
+    #total_matrix[(total_matrix < EPS).data] = EPS
+
     log_total = - torch.log(total_matrix)
 
     diagonal_elements_bonus = (BATCH_SIZE_DEFAULT - 2) * (1-adj_matrix.cuda()) * log_total
