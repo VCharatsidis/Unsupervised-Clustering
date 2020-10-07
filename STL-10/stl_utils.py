@@ -25,6 +25,7 @@ class AddGaussianNoise(object):
         return self.__class__.__name__ + '(mean={0}, std={1})'.format(self.mean, self.std)
 
 
+
 def gaussian_blur(X):
     X_copy = copy.deepcopy(X)
     X_copy = Variable(torch.FloatTensor(X_copy))
@@ -185,7 +186,6 @@ def just_scale(X, size, pad):
         X_copy[i] = trans(a)
 
     return X_copy
-
 
 def scale(X, size, pad, batch_size=BATCH_SIZE_DEFAULT):
     X_copy = copy.deepcopy(X)

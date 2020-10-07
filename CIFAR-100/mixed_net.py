@@ -1,20 +1,20 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-from self_attention import SelfAttention
+
 import torch.nn as nn
 import torch
 
 
 
-class DeepBinBrainCifar(nn.Module):
+class Mixed(nn.Module):
     """
     This class implements a Multi-layer Perceptron in PyTorch.
     It handles the different layers and parameters of the model.
     Once initialized an MLP object can perform forward.
     """
 
-    def __init__(self, n_channels, EMBEDING_SIZE):
+    def __init__(self, n_channels, EMBEDING_SIZE, classes):
         """
         Initializes MLP object.
         Args:
@@ -27,7 +27,7 @@ class DeepBinBrainCifar(nn.Module):
                      This number is required in order to specify the
                      output dimensions of the MLP
         """
-        super(DeepBinBrainCifar, self).__init__()
+        super(Mixed, self).__init__()
 
         self.conv = nn.Sequential(
             nn.Conv2d(n_channels, 64, kernel_size=3, stride=1, padding=1),
@@ -55,17 +55,25 @@ class DeepBinBrainCifar(nn.Module):
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
         )
 
-        # self.attention = nn.Sequential(
-        #         #     SelfAttention(128)
-        #         # )
+        conv_size = 4096
 
         self.brain = nn.Sequential(
+
+            nn.Linear(conv_size, 4096),
+            nn.ReLU(),
+            nn.BatchNorm1d(4096),
+
+            nn.Linear(4096, EMBEDING_SIZE)
+        )
+
+        self.classification = nn.Sequential(
 
             # nn.Linear(6400, 4096),
             # nn.ReLU(),
             # nn.BatchNorm1d(4096),
 
-            nn.Linear(4096, EMBEDING_SIZE)
+            nn.Linear(conv_size, classes),
+            nn.Softmax(dim=1)
         )
 
         self.sigmoid = nn.Sequential(
@@ -89,8 +97,10 @@ class DeepBinBrainCifar(nn.Module):
         # print("out", out.shape)
         # print("attention", attention.shape)
 
+        classification = self.classification(encoding.detach())
+
         logits = self.brain(encoding)
 
         binaries = self.sigmoid(logits)
 
-        return encoding, logits, binaries
+        return encoding, classification, binaries

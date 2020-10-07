@@ -17,10 +17,10 @@ import pickle
 LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 500000
 
-BATCH_SIZE_DEFAULT = 300
-USE_EMBEDDING = True
+BATCH_SIZE_DEFAULT = 200
+USE_EMBEDDING = False
 
-INPUT_NET = 6400
+INPUT_NET = 2304
 if USE_EMBEDDING:
     INPUT_NET = 4096
 
@@ -30,11 +30,10 @@ PRODUCT = False and USE_EMBEDDING
 AGREEMENT = False and USE_EMBEDDING
 
 
-
 SIZE = 32
 NETS = 1
 EVAL_FREQ_DEFAULT = 100
-PATIENCE = 50
+PATIENCE = 100
 
 
 np.set_printoptions(threshold=sys.maxsize)
@@ -42,7 +41,7 @@ np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
 
 FLAGS = None
 
-encoder_name = "cifar100_models\\color_disentangle"
+encoder_name = "cifar100_models\\alex_disentangle"
 
 encoder = torch.load(encoder_name+".model")
 encoder.eval()
@@ -167,9 +166,9 @@ def forward_block(X, ids, classifier, optimizer, train, targets):
         count_common_elements(p)
 
 
-        # print(p[1].data.cpu().numpy())
-        # print(np.where(p[1].data.cpu().numpy() > 0.5))
-        # print(np.where(p[1].data.cpu().numpy() > 0.5)[0].shape)
+        print(p[1].data.cpu().numpy())
+        print(np.where(p[1].data.cpu().numpy() > 0.5))
+        print(np.where(p[1].data.cpu().numpy() > 0.5)[0].shape)
         #
         # print(p[2].data.cpu().numpy())
         # print(np.where(p[2].data.cpu().numpy() > 0.5))
@@ -326,11 +325,12 @@ def preproccess_cifar(x, channels=3):
     #     x = x.unsqueeze(0)
     #     x = x.transpose(0, 1)
 
-    x /= 255
+    #x /= 255
 
     return x
 
 def train():
+    global EVAL_FREQ_DEFAULT
     with open('data\\train', 'rb') as fo:
         res = pickle.load(fo, encoding='bytes')
 
@@ -400,6 +400,9 @@ def train():
         ids = np.random.choice(len(X_train), size=BATCH_SIZE_DEFAULT, replace=False)
         train = True
         preds, mim = forward_block(X_train, ids, linearClassifier, optimizer, train, y_train)
+
+        if iteration > 4000:
+            EVAL_FREQ_DEFAULT = 50
 
         if iteration % EVAL_FREQ_DEFAULT == 0:
             linearClassifier.eval()

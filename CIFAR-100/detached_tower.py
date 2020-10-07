@@ -8,8 +8,7 @@ import sys
 import argparse
 import os
 
-from binary_net import DeepBinBrainCifar
-from AlexNet import AlexNet
+from detached_net import DetachedNet
 
 from stl_utils import *
 import random
@@ -55,7 +54,7 @@ big_diag = torch.ones(4 * BATCH_SIZE_DEFAULT, 4 * BATCH_SIZE_DEFAULT)
 ZERO_BIG_DIAG = big_diag.fill_diagonal_(0)
 
 
-#ELEMENTS_EXCEPT_DIAG = 2 * BATCH_SIZE_DEFAULT * (BATCH_SIZE_DEFAULT - 1)
+ELEMENTS_EXCEPT_DIAG = 2 * BATCH_SIZE_DEFAULT * (BATCH_SIZE_DEFAULT - 1)
 
 first = True
 
@@ -81,9 +80,9 @@ transformations_dict = {0: "original 0",
                        11: "random crop rotate 11",
                        12: "random crop soble rotate 12",
                        13: "randcom_crop_upscale 13",
-                       14: "randcom_crop_upscale 14",
-                       15:"randcom_crop_upscale sobel y 15",
-                       16: " randcom crop 18x18 16"}
+                        14: "randcom_crop_upscale 14",
+                        15:"randcom_crop_upscale sobel y 15",
+                        16: " randcom crop 18x18 16"}
 
 
 labels_to_imags = {}
@@ -190,23 +189,21 @@ def transformation(id, image):
     return image
 
 
-def new_agreement(product, denominator, rev_prod):
-    transposed = rev_prod.transpose(0, 1)
+def new_agreement(product, denominator, product_b, denominator_b):
+    denominator = denominator + denominator_b.unsqueeze(dim=1)
 
-    attraction = torch.mm(product, product.transpose(0, 1))
-    repel = torch.mm(product, transposed)
+    attraction = torch.mm(product, product_b.transpose(0, 1))
+    attraction = attraction.mean(dim=1) / denominator
 
-    denominator = denominator + denominator.unsqueeze(dim=1)
+    rev = 1 - product
+    repel = torch.mm(product, rev.transpose(0, 1))
+    repel = repel.mean(dim=1) / denominator
 
-    attraction = attraction / denominator
-    repel = repel / denominator
+    total = repel * adj_matrix.cuda() + attraction * (1 - adj_matrix.cuda())
 
-    total_matrix = repel * adj_matrix.cuda() + attraction * (1-adj_matrix.cuda())
-    #total_matrix[(total_matrix < EPS).data] = EPS
+    log_total = - torch.log(total)
 
-    log_total = - torch.log(total_matrix)
-
-    diagonal_elements_bonus = 1.25 * ZERO_BIG_DIAG.cuda() * (BATCH_SIZE_DEFAULT - 1) * (1-adj_matrix.cuda()) * log_total
+    diagonal_elements_bonus = 1.2 * ZERO_BIG_DIAG.cuda() * (BATCH_SIZE_DEFAULT - 1) * (1 - adj_matrix.cuda()) * log_total
 
     total = log_total + diagonal_elements_bonus
 
@@ -282,36 +279,25 @@ def forward_block(X, ids, encoder, optimizer, train, rev_product):
 
     #print(list(encoder.brain[0].weight))
 
-    _, _, probs10_a = encoder(image_1.to('cuda'))
-    _, _, probs10_b = encoder(image_2.to('cuda'))
-    _, _, probs10_c = encoder(image_3.to('cuda'))
-    _, _, probs10_d = encoder(image_4.to('cuda'))
+    _, _, p1, p1_b = encoder(image_1.to('cuda'))
+    _, _, p2, p2_b = encoder(image_2.to('cuda'))
+    _, _, p3, p3_b = encoder(image_3.to('cuda'))
+    _, _, p4, p4_b = encoder(image_4.to('cuda'))
 
-    all_predictions = torch.cat([probs10_a, probs10_b, probs10_c, probs10_d], dim=0)
+    all_predictions = torch.cat([p1, p2, p3, p4], dim=0)
+    all_predictions_b = torch.cat([p1_b, p2_b, p3_b, p4_b], dim=0)
 
-    current_reverse = 1 - all_predictions
-    denominator = torch.cat([probs10_a.sum(dim=1), probs10_b.sum(dim=1), probs10_c.sum(dim=1), probs10_d.sum(dim=1)], dim=0)
+    denominator = torch.cat([p1.sum(dim=1), p2.sum(dim=1), p3.sum(dim=1), p4.sum(dim=1)], dim=0)
+    denominator_b = torch.cat([p1_b.sum(dim=1), p2_b.sum(dim=1), p3_b.sum(dim=1), p4_b.sum(dim=1)], dim=0)
 
-    new_loss = new_agreement(all_predictions, denominator, current_reverse)
-
-    if first or not train:
-        # print("first: ", first)
-        total_loss = new_loss
-        rev_product = current_reverse.detach()
-        first = False
-
-    else:
-        #print("queue_agreement")
-        old_loss = queue_agreement(all_predictions, denominator, rev_product)
-        rev_product = torch.cat([rev_product, current_reverse.detach()])
-        total_loss = new_loss + old_loss
+    total_loss = new_agreement(all_predictions, denominator, all_predictions_b, denominator_b)
 
     if train:
         optimizer.zero_grad()
         total_loss.backward()
         optimizer.step()
 
-    return probs10_a, probs10_b, total_loss, rev_product
+    return p1, p1_b, total_loss, rev_product
 
 
 def save_cluster(original_image, cluster, iteration):
@@ -379,7 +365,7 @@ def preproccess_cifar(x):
     #x = x.unsqueeze(0)
     #x = x.transpose(0, 1)
 
-    #x /= 255
+    x /= 255
 
     return x
 
@@ -443,10 +429,10 @@ def train():
 
     script_directory = os.path.split(os.path.abspath(__file__))[0]
 
-    filepath = 'cifar100_models\\alex_disentangle' + '.model'
+    filepath = 'cifar100_models\\detached_disentangle' + '.model'
     clusters_net_path = os.path.join(script_directory, filepath)
 
-    encoder = AlexNet(EMBEDINGS).to('cuda')
+    encoder = DetachedNet(3, EMBEDINGS).to('cuda')
 
     print(encoder)
 

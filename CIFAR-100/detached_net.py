@@ -1,13 +1,13 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-from self_attention import SelfAttention
+
 import torch.nn as nn
 import torch
 
 
 
-class DeepBinBrainCifar(nn.Module):
+class DetachedNet(nn.Module):
     """
     This class implements a Multi-layer Perceptron in PyTorch.
     It handles the different layers and parameters of the model.
@@ -27,48 +27,42 @@ class DeepBinBrainCifar(nn.Module):
                      This number is required in order to specify the
                      output dimensions of the MLP
         """
-        super(DeepBinBrainCifar, self).__init__()
+        super(DetachedNet, self).__init__()
 
-        self.conv = nn.Sequential(
+        self.conv_1 = nn.Sequential(
             nn.Conv2d(n_channels, 64, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=1)
+        )
 
+        self.conv_2 = nn.Sequential(
             nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
             nn.BatchNorm2d(128),
-            nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=1)
+        )
 
+        self.conv_3 = nn.Sequential(
             nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
             nn.BatchNorm2d(256),
-            nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
-            #
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=1)
+        )
+
+        self.conv_4 = nn.Sequential(
             nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
             nn.BatchNorm2d(512),
-            nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
-
-            nn.Conv2d(512, 1024, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(),
-            nn.BatchNorm2d(1024),
-            nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=1)
         )
 
-        # self.attention = nn.Sequential(
-        #         #     SelfAttention(128)
-        #         # )
-
-        self.brain = nn.Sequential(
-
-            # nn.Linear(6400, 4096),
-            # nn.ReLU(),
-            # nn.BatchNorm1d(4096),
-
-            nn.Linear(4096, EMBEDING_SIZE)
+        self.brain_1 = nn.Sequential(
+            nn.Linear(6400, EMBEDING_SIZE),
+            nn.Sigmoid()
         )
 
-        self.sigmoid = nn.Sequential(
+        self.brain_2 = nn.Sequential(
+            nn.Linear(4608, EMBEDING_SIZE),
             nn.Sigmoid()
         )
 
@@ -83,14 +77,17 @@ class DeepBinBrainCifar(nn.Module):
           out: outputs of the network
         """
 
-        conv = self.conv(x)
-        encoding = torch.flatten(conv, 1)
-        #out, attention = self.attention(conv)
-        # print("out", out.shape)
-        # print("attention", attention.shape)
+        conv_1 = self.conv_1(x)
+        conv_2 = self.conv_2(conv_1)
+        conv_3 = self.conv_3(conv_2)
 
-        logits = self.brain(encoding)
+        encoding_1 = torch.flatten(conv_3, 1)
+        embedding_1 = self.brain_1(encoding_1)
 
-        binaries = self.sigmoid(logits)
+        conv_4 = self.conv_4(conv_3)
+        encoding_2 = torch.flatten(conv_4, 1)
+        embedding_2 = self.brain_2(encoding_2)
 
-        return encoding, logits, binaries
+        return encoding_1, encoding_2, embedding_1, embedding_2
+
+

@@ -8,8 +8,7 @@ import sys
 import argparse
 import os
 
-from binary_net import DeepBinBrainCifar
-from AlexNet import AlexNet
+from mixed_net import Mixed
 
 from stl_utils import *
 import random
@@ -38,10 +37,10 @@ NETS = 1
 
 EPOCHS = 1000
 
-CLASSES = 100
+CLASSES = 20
 DESCRIPTION = " Image size: " + str(SIZE) + " , Classes: " + str(CLASSES)
 
-EVAL_FREQ_DEFAULT = 250
+EVAL_FREQ_DEFAULT = 200
 MIN_CLUSTERS_TO_SAVE = 10
 np.set_printoptions(formatter={'float': lambda x: "{0:0.4f}".format(x)})
 FLAGS = None
@@ -55,7 +54,7 @@ big_diag = torch.ones(4 * BATCH_SIZE_DEFAULT, 4 * BATCH_SIZE_DEFAULT)
 ZERO_BIG_DIAG = big_diag.fill_diagonal_(0)
 
 
-#ELEMENTS_EXCEPT_DIAG = 2 * BATCH_SIZE_DEFAULT * (BATCH_SIZE_DEFAULT - 1)
+ELEMENTS_EXCEPT_DIAG = 2 * BATCH_SIZE_DEFAULT * (BATCH_SIZE_DEFAULT - 1)
 
 first = True
 
@@ -81,9 +80,9 @@ transformations_dict = {0: "original 0",
                        11: "random crop rotate 11",
                        12: "random crop soble rotate 12",
                        13: "randcom_crop_upscale 13",
-                       14: "randcom_crop_upscale 14",
-                       15:"randcom_crop_upscale sobel y 15",
-                       16: " randcom crop 18x18 16"}
+                        14: "randcom_crop_upscale 14",
+                        15:"randcom_crop_upscale sobel y 15",
+                        16: " randcom crop 18x18 16"}
 
 
 labels_to_imags = {}
@@ -190,7 +189,7 @@ def transformation(id, image):
     return image
 
 
-def new_agreement(product, denominator, rev_prod):
+def new_agreement(product, denominator, rev_prod, class_adj_matrix):
     transposed = rev_prod.transpose(0, 1)
 
     attraction = torch.mm(product, product.transpose(0, 1))
@@ -210,9 +209,13 @@ def new_agreement(product, denominator, rev_prod):
 
     total = log_total + diagonal_elements_bonus
 
-    mean_total = total.mean()
+    zero_out_same_class_elements = total * class_adj_matrix.cuda()
 
-    return mean_total
+    sum_non_zero_elements = class_adj_matrix.sum()
+
+    total_cleaned = zero_out_same_class_elements.sum() / sum_non_zero_elements.cuda()
+
+    return total_cleaned
 
 
 def queue_agreement(product, denominator, rev_prod):
@@ -227,7 +230,7 @@ def queue_agreement(product, denominator, rev_prod):
     return negative
 
 
-def forward_block(X, ids, encoder, optimizer, train, rev_product):
+def forward_block(X, ids, encoder, optimizer, train, rev_product, moving_mean):
     global first
     number_transforms = 17
     aug_ids = np.random.choice(number_transforms, size=number_transforms, replace=False)
@@ -282,37 +285,86 @@ def forward_block(X, ids, encoder, optimizer, train, rev_product):
 
     #print(list(encoder.brain[0].weight))
 
-    _, _, probs10_a = encoder(image_1.to('cuda'))
-    _, _, probs10_b = encoder(image_2.to('cuda'))
-    _, _, probs10_c = encoder(image_3.to('cuda'))
-    _, _, probs10_d = encoder(image_4.to('cuda'))
+    _, classes_a, probs10_a = encoder(image_1.to('cuda'))
+    _, classes_b, probs10_b = encoder(image_2.to('cuda'))
+    _, classes_c, probs10_c = encoder(image_3.to('cuda'))
+    _, classes_d, probs10_d = encoder(image_4.to('cuda'))
 
     all_predictions = torch.cat([probs10_a, probs10_b, probs10_c, probs10_d], dim=0)
 
     current_reverse = 1 - all_predictions
     denominator = torch.cat([probs10_a.sum(dim=1), probs10_b.sum(dim=1), probs10_c.sum(dim=1), probs10_d.sum(dim=1)], dim=0)
 
-    new_loss = new_agreement(all_predictions, denominator, current_reverse)
+    labels, max_elems = assign_labels(classes_a, classes_b, classes_c, classes_d)
+
+    #round_max = torch.round(max_elems).mean()
+
+    class_adj_m = class_adj_matrix(labels)
+
+    new_loss = new_agreement(all_predictions, denominator, current_reverse, class_adj_m)
+    classification_loss, mean = class_mean_probs_loss(classes_a, classes_b, classes_c, classes_d, moving_mean)
 
     if first or not train:
         # print("first: ", first)
         total_loss = new_loss
-        rev_product = current_reverse.detach()
-        first = False
+        # rev_product = current_reverse.detach()
+        first = True
 
+    # The else is obsolete
     else:
-        #print("queue_agreement")
+        print("queue_agreement")
         old_loss = queue_agreement(all_predictions, denominator, rev_product)
         rev_product = torch.cat([rev_product, current_reverse.detach()])
         total_loss = new_loss + old_loss
 
     if train:
+        moving_mean = 0.8 * moving_mean.cuda() + 0.2 * mean
         optimizer.zero_grad()
+        classification_loss.backward()
         total_loss.backward()
         optimizer.step()
 
-    return probs10_a, probs10_b, total_loss, rev_product
+    return probs10_a, probs10_b, total_loss, rev_product, classification_loss, moving_mean
 
+
+def assign_labels(a, b, c, d):
+    predictions = (a + b + c + d) / 4
+
+    max_elems, indexes = predictions.max(dim=1)
+
+    # print(max_elems.shape)
+    # print(indexes.shape)
+    #
+    # #print(a[0], b[0], c[0], d[0])
+    # #print(predictions[0])
+    # print(indexes[0])
+
+    return indexes, max_elems
+
+
+def class_adj_matrix(labels):
+    square = torch.ones(BATCH_SIZE_DEFAULT, BATCH_SIZE_DEFAULT)
+
+    labels_vertical = labels.unsqueeze(dim=1)
+    square[(labels == labels_vertical).data] = 0
+    square.fill_diagonal_(1)
+
+    first_part = torch.cat([square, square, square, square], dim=1)
+    class_adj_matrix = torch.cat([first_part, first_part, first_part, first_part], dim=0)
+
+    return class_adj_matrix
+
+
+def class_mean_probs_loss(a, b, c, d, moving_mean):
+    product = a * b * c * d
+    current_mean = product.mean(dim=0)
+
+    interpolation = moving_mean.detach().cuda() * 0.8 + current_mean * 0.2
+
+    log = - torch.log(interpolation)
+    scalar = log.mean()
+
+    return scalar, current_mean
 
 def save_cluster(original_image, cluster, iteration):
     sample = original_image.view(-1, original_image.shape[1], original_image.shape[2], original_image.shape[3])
@@ -326,25 +378,28 @@ def save_image(original_image, index, name, cluster=0):
     matplotlib.image.imsave(f"gen_images/c_{cluster}/{name}_index_{index}.png", sample)
 
 
-def measure_acc_augments(x_test, encoder, rev_product):
+def measure_acc_augments(x_test, encoder, rev_product, moving_mean):
     size = BATCH_SIZE_DEFAULT
     runs = len(x_test) // size
     sum_loss = 0
-
+    sum_class_loss = 0
     print(rev_product.shape)
 
     for j in range(runs):
         test_ids = range(j * size, (j + 1) * size)
 
         with torch.no_grad():
-            test_preds_1, test_preds_2, test_total_loss, rev_product = forward_block(x_test, test_ids, encoder, [], False, rev_product)
+            test_preds_1, test_preds_2, test_total_loss, rev_product, class_loss, moving_mean = forward_block(x_test, test_ids, encoder, [], False, rev_product, moving_mean)
 
         sum_loss += test_total_loss.item()
+        sum_class_loss += class_loss.item()
 
     avg_loss = sum_loss / runs
+    avg_class_loss = sum_class_loss / runs
 
     print()
     print("Avg test loss: ", avg_loss)
+    print("Avg test class loss: ", avg_class_loss)
     print()
 
     return avg_loss
@@ -379,7 +434,7 @@ def preproccess_cifar(x):
     #x = x.unsqueeze(0)
     #x = x.transpose(0, 1)
 
-    #x /= 255
+    x /= 255
 
     return x
 
@@ -443,10 +498,10 @@ def train():
 
     script_directory = os.path.split(os.path.abspath(__file__))[0]
 
-    filepath = 'cifar100_models\\alex_disentangle' + '.model'
+    filepath = 'cifar100_models\\mixed_disentangle' + '.model'
     clusters_net_path = os.path.join(script_directory, filepath)
 
-    encoder = AlexNet(EMBEDINGS).to('cuda')
+    encoder = Mixed(3, EMBEDINGS, CLASSES).to('cuda')
 
     print(encoder)
 
@@ -463,12 +518,12 @@ def train():
 
     print("X_train: ", X_train.shape, " X_test: ", X_test.shape, " targets: ", targets.shape)
 
-    # test_dict = {1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 0: []}
-    # for idx, i in enumerate(targets):
-    #     test_dict[i].append(idx)
+
+    moving_mean = torch.ones(CLASSES) / CLASSES
 
     avg_loss = 0
     total_iters = 0
+    avg_class_loss = 0
 
     for epoch in range(EPOCHS):
         print("Epoch: ", epoch)
@@ -486,8 +541,9 @@ def train():
             iter_ids = ids[current_ids]
 
             train = True
-            probs10, probs10_b, total_loss, rev_product = forward_block(X_train, iter_ids, encoder, optimizer, train, rev_product)
+            probs10, probs10_b, total_loss, rev_product, class_loss, moving_mean = forward_block(X_train, iter_ids, encoder, optimizer, train, rev_product, moving_mean)
             avg_loss += total_loss.item()
+            avg_class_loss += class_loss.item()
             iteration += 1
             total_iters += 1
 
@@ -502,10 +558,12 @@ def train():
         print()
 
         print("train avg loss : ", avg_loss / EVAL_FREQ_DEFAULT)
+        print("train avg class loss : ", avg_class_loss / EVAL_FREQ_DEFAULT)
         avg_loss = 0
+        avg_class_loss = 0
         encoder.eval()
 
-        test_loss = measure_acc_augments(X_test, encoder, rev_product)
+        test_loss = measure_acc_augments(X_test, encoder, rev_product, moving_mean)
 
         if test_loss < test_best_loss:
             test_best_loss = test_loss
