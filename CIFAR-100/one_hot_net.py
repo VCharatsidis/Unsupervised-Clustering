@@ -6,14 +6,14 @@ import torch.nn as nn
 import torch
 
 
-class DeepBinBrainCifar(nn.Module):
+class OneHotNet(nn.Module):
     """
     This class implements a Multi-layer Perceptron in PyTorch.
     It handles the different layers and parameters of the model.
     Once initialized an MLP object can perform forward.
     """
 
-    def __init__(self, n_channels, EMBEDING_SIZE):
+    def __init__(self, n_channels, classes):
         """
         Initializes MLP object.
         Args:
@@ -26,7 +26,7 @@ class DeepBinBrainCifar(nn.Module):
                      This number is required in order to specify the
                      output dimensions of the MLP
         """
-        super(DeepBinBrainCifar, self).__init__()
+        super(OneHotNet, self).__init__()
 
         self.conv = nn.Sequential(
             nn.Conv2d(n_channels, 64, kernel_size=3, stride=1, padding=1),
@@ -54,21 +54,17 @@ class DeepBinBrainCifar(nn.Module):
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
         )
 
-        # self.attention = nn.Sequential(
-        #         #     SelfAttention(128)
-        #         # )
-
         self.brain = nn.Sequential(
 
             # nn.Linear(6400, 4096),
             # nn.ReLU(),
             # nn.BatchNorm1d(4096),
 
-            nn.Linear(4096, EMBEDING_SIZE)
+            nn.Linear(4096, classes)
         )
 
-        self.sigmoid = nn.Sequential(
-            nn.Sigmoid()
+        self.softmax = nn.Sequential(
+            nn.Softmax()
         )
 
 
@@ -90,6 +86,6 @@ class DeepBinBrainCifar(nn.Module):
 
         logits = self.brain(encoding)
 
-        binaries = self.sigmoid(logits)
+        probs = self.softmax(logits)
 
-        return encoding, logits, binaries
+        return encoding, logits, probs

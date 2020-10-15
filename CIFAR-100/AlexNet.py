@@ -29,7 +29,7 @@ class AlexNet(nn.Module):
             nn.Linear(2304, 4096),
             nn.ReLU(inplace=True),
 
-            nn.Dropout(),
+            nn.BatchNorm1d(4096),
             nn.Linear(4096, num_classes),
             nn.Sigmoid()
         )

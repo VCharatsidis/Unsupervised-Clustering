@@ -8,7 +8,8 @@ import sys
 import argparse
 import os
 
-from mixed_net import Mixed
+from binary_net import DeepBinBrainCifar
+from AlexNet import AlexNet
 
 from stl_utils import *
 import random
@@ -29,9 +30,9 @@ LEARNING_RATE_DEFAULT = 1e-4
 
 MAX_STEPS_DEFAULT = 500000
 
-BATCH_SIZE_DEFAULT = 512
+BATCH_SIZE_DEFAULT = 256
 
-EMBEDINGS = 4096
+EMBEDINGS = 256
 SIZE = 32
 SIZE_Y = 32
 NETS = 1
@@ -41,22 +42,21 @@ EPOCHS = 1000
 CLASSES = 100
 DESCRIPTION = " Image size: " + str(SIZE) + " , Classes: " + str(CLASSES)
 
-EVAL_FREQ_DEFAULT = 200
+EVAL_FREQ_DEFAULT = 250
 MIN_CLUSTERS_TO_SAVE = 10
 np.set_printoptions(formatter={'float': lambda x: "{0:0.4f}".format(x)})
 FLAGS = None
 
 square = torch.ones(BATCH_SIZE_DEFAULT, BATCH_SIZE_DEFAULT)
 ZERO_DIAG = square.fill_diagonal_(0)
-first_part = torch.cat([ZERO_DIAG, ZERO_DIAG], dim=1)
-adj_matrix = torch.cat([first_part, first_part], dim=0)
-adj_matrix = adj_matrix.cuda()
+first_part = torch.cat([ZERO_DIAG, ZERO_DIAG, ZERO_DIAG, ZERO_DIAG], dim=1)
+adj_matrix = torch.cat([first_part, first_part, first_part, first_part], dim=0)
 
-big_diag = torch.ones(2 * BATCH_SIZE_DEFAULT, 2 * BATCH_SIZE_DEFAULT)
-ZERO_BIG_DIAG = big_diag.fill_diagonal_(0).cuda()
+big_diag = torch.ones(4 * BATCH_SIZE_DEFAULT, 4 * BATCH_SIZE_DEFAULT)
+ZERO_BIG_DIAG = big_diag.fill_diagonal_(0)
 
 
-ELEMENTS_EXCEPT_DIAG = 2 * BATCH_SIZE_DEFAULT * (BATCH_SIZE_DEFAULT - 1)
+#ELEMENTS_EXCEPT_DIAG = 2 * BATCH_SIZE_DEFAULT * (BATCH_SIZE_DEFAULT - 1)
 
 first = True
 
@@ -82,9 +82,9 @@ transformations_dict = {0: "original 0",
                        11: "random crop rotate 11",
                        12: "random crop soble rotate 12",
                        13: "randcom_crop_upscale 13",
-                        14: "randcom_crop_upscale 14",
-                        15:"randcom_crop_upscale sobel y 15",
-                        16: " randcom crop 18x18 16"}
+                       14: "randcom_crop_upscale 14",
+                       15:"randcom_crop_upscale sobel y 15",
+                       16: " randcom crop 18x18 16"}
 
 
 labels_to_imags = {}
@@ -98,33 +98,194 @@ def save_images(images, transformation):
     save_cluster(numpy_cluster, transformations_dict[transformation], 0)
 
 
-def new_agreement(product, denominator, rev_prod, class_adj_matrix):
-    transposed = rev_prod.transpose(0, 1)
+def fix_sobel(sobeled, quarter, image):
 
-    attraction = torch.mm(product, product.transpose(0, 1))
-    repel = torch.mm(product, transposed)
+    AA = sobeled.reshape(sobeled.size(0), sobeled.size(1) * sobeled.size(2) * sobeled.size(3))
+    AA -= AA.min(1, keepdim=True)[0]
+    AA /= AA.max(1, keepdim=True)[0]
+    AA = AA.view(quarter, image.shape[1], SIZE, SIZE)
+
+    return AA
+
+
+def transformation(id, image):
+    quarter = image.shape[0]
+
+    if id == 0:
+        return color_jitter(image)
+
+    elif id == 1:
+        return scale(image, (image.shape[2] - 8, image.shape[3] - 8), 4, quarter)
+
+    elif id == 2:
+        return rotate(image, 46)
+
+    elif id == 3:
+        return torch.abs(1 - color_jitter(image))
+
+    elif id == 4:
+        sobeled = sobel_total(color_jitter(image), quarter)
+        AA = fix_sobel(sobeled, quarter, image)
+
+        return AA
+
+    elif id == 5:
+        sobeled = sobel_filter_x(color_jitter(image), quarter)
+        AA = fix_sobel(sobeled, quarter, image)
+
+        return AA
+
+    elif id == 6:
+        sobeled = sobel_filter_y(color_jitter(image), quarter)
+        AA = fix_sobel(sobeled, quarter, image)
+
+        return AA
+
+    elif id == 7:
+        return gaussian_blur(image)
+
+    elif id == 8:
+        blured = randcom_crop_upscale_gauss_blur(image, 22, quarter, 22, 32, 32)
+
+        return blured
+
+    elif id == 9:
+        scaled_up = randcom_crop_upscale(image, 22, quarter, 22, 32, 32)
+        sobeled = sobel_total(scaled_up, quarter)
+        AA = fix_sobel(sobeled, quarter, image)
+
+        return AA
+
+    elif id == 10:
+        scaled_up = randcom_crop_upscale(image, 22, quarter, 22, 32, 32)
+        rev = torch.abs(1 - scaled_up)
+        return rev
+
+    elif id == 11:
+        rot = rotate(image, -46)
+        return rot
+
+    elif id == 12:
+        scaled_up = randcom_crop_upscale(image, 20, quarter, 20, 32, 32)
+        return scaled_up
+
+    elif id == 13:
+        scaled_up = randcom_crop_upscale(image, 22, quarter, 22, 32, 32)
+
+        return scaled_up
+
+    elif id == 14:
+        scaled_up = randcom_crop_upscale(image, 26, quarter, 26, 32, 32)
+        return scaled_up
+
+    elif id == 15:
+        scaled_up = randcom_crop_upscale(image, 22, quarter, 22, 32, 32)
+
+        return scaled_up
+
+    elif id == 16:
+        scaled_up = randcom_crop_upscale(image, 18, quarter, 18, 32, 32)
+        return scaled_up
+
+    print("Error in transformation of the image.")
+    return image
+
+
+def decorelated_penalized_attarction(a, b, c, d):
+    penalty = (a.sum(dim=0) + b.sum(dim=0) + c.sum(dim=0) + d.sum(dim=0)) / 8 + 4
+
+    p1 = (a * b) / penalty
+    p2 = (a * c) / penalty
+    p3 = (a * d) / penalty
+    p4 = (b * c) / penalty
+    p5 = (b * d) / penalty
+    p6 = (c * d) / penalty
+
+    # penalty = (a.mean(dim=0) + b.mean(dim=0) + c.mean(dim=0) + d.mean(dim=0)) / 8
+    # penalty = 1 - penalty
+    # penalty = 0.5 * penalty + 0.5
+    #
+    # p1 = a * b * penalty
+    # p2 = a * c * penalty
+    # p3 = a * d * penalty
+    # p4 = b * c * penalty
+    # p5 = b * d * penalty
+    # p6 = c * d * penalty
+
+    p1 = p1.sum(dim=1)
+    p2 = p2.sum(dim=1)
+    p3 = p3.sum(dim=1)
+    p4 = p4.sum(dim=1)
+    p5 = p5.sum(dim=1)
+    p6 = p6.sum(dim=1)
+
+    sum1 = a.sum(dim=1) + b.sum(dim=1) + 10
+    sum2 = a.sum(dim=1) + c.sum(dim=1) + 10
+    sum3 = a.sum(dim=1) + d.sum(dim=1) + 10
+    sum4 = b.sum(dim=1) + c.sum(dim=1) + 10
+    sum5 = b.sum(dim=1) + d.sum(dim=1) + 10
+    sum6 = c.sum(dim=1) + d.sum(dim=1) + 10
+
+    p1 = p1 / sum1
+    p2 = p2 / sum2
+    p3 = p3 / sum3
+    p4 = p4 / sum4
+    p5 = p5 / sum5
+    p6 = p6 / sum6
+
+    log1 = - torch.log(p1)
+    log2 = - torch.log(p2)
+    log3 = - torch.log(p3)
+    log4 = - torch.log(p4)
+    log5 = - torch.log(p5)
+    log6 = - torch.log(p6)
+
+    scalar = log1.mean() + log2.mean() + log3.mean() + log4.mean() + log5.mean() + log6.mean()
+
+    return scalar
+
+
+def concentrated_penalized_attraction(a, b, c, d):
+    penalty = (a.sum(dim=0) + b.sum(dim=0) + c.sum(dim=0) + d.sum(dim=0)) / 16 + 1
+
+    product = (a * b * c * d) / penalty
+    product = product.sum(dim=1)
+
+    sums = a.sum(dim=1) #+ b.sum(dim=1) + c.sum(dim=1) + d.sum(dim=1)
+
+    product = product / sums
+    log = - torch.log(product)
+
+    scalar = log.mean()
+
+    return scalar
+
+
+def new_agreement(product, denominator, rev_prod):
+    #transposed = rev_prod.transpose(0, 1)
+
+    penalty = 1 - product.mean(dim=0)
+
+    product_penalized = product * penalty
+
+    attraction = torch.mm(product, product_penalized.transpose(0, 1))
+    #repel = torch.mm(product, transposed)
 
     denominator = denominator + denominator.unsqueeze(dim=1)
 
-    attraction = attraction / denominator
-    repel = repel / denominator
+    attraction = (attraction / denominator) * (1-adj_matrix.cuda())
+    repel = torch.ones(4*BATCH_SIZE_DEFAULT, 4*BATCH_SIZE_DEFAULT)
 
-    total_matrix = repel * adj_matrix + attraction * (1 - adj_matrix)
+    total_matrix = repel.cuda() * adj_matrix.cuda() + attraction
     #total_matrix[(total_matrix < EPS).data] = EPS
 
     log_total = - torch.log(total_matrix)
 
-    diagonal_elements_bonus = ZERO_BIG_DIAG * (BATCH_SIZE_DEFAULT - 1) * (1 - adj_matrix) * log_total
+    total = log_total
 
-    total = log_total + diagonal_elements_bonus
+    mean_total = total.sum() / (1-adj_matrix.cuda()).sum()
 
-    zero_out_same_class_elements = total * class_adj_matrix.detach().cuda()
-
-    sum_non_zero_elements = class_adj_matrix.detach().sum()
-
-    total_cleaned = zero_out_same_class_elements.sum() / sum_non_zero_elements.cuda()
-
-    return total_cleaned
+    return mean_total
 
 
 def queue_agreement(product, denominator, rev_prod):
@@ -139,38 +300,34 @@ def queue_agreement(product, denominator, rev_prod):
     return negative
 
 
-def forward_block(X, ids, encoder, optimizer, train, rev_product, moving_mean):
+def forward_block(X, ids, encoder, optimizer, train, rev_product):
     global first
     number_transforms = 17
     aug_ids = np.random.choice(number_transforms, size=number_transforms, replace=False)
 
     image = X[ids, :]
 
-    eight = image.shape[0] // 8
+    fourth = image.shape[0] // 4
 
-    image_1 = transformation(aug_ids[0], image[0:eight], SIZE, SIZE_Y)
-    image_2 = transformation(aug_ids[1], image[0:eight], SIZE, SIZE_Y)
+    image_1 = transformation(aug_ids[0], image[0:fourth])
+    image_2 = transformation(aug_ids[1], image[0:fourth])
+    image_3 = transformation(aug_ids[2], image[0:fourth])
+    image_4 = transformation(aug_ids[3], image[0:fourth])
 
-    image_3 = transformation(aug_ids[2], image[eight: 2 * eight], SIZE, SIZE_Y)
-    image_4 = transformation(aug_ids[3], image[eight: 2 * eight], SIZE, SIZE_Y)
+    image_5 = transformation(aug_ids[4], image[fourth: 2 * fourth])
+    image_6 = transformation(aug_ids[5], image[fourth: 2 * fourth])
+    image_7 = transformation(aug_ids[6], image[fourth: 2 * fourth])
+    image_8 = transformation(aug_ids[7], image[fourth: 2 * fourth])
 
-    image_5 = transformation(aug_ids[4], image[2 * eight: 3 * eight], SIZE, SIZE_Y)
-    image_6 = transformation(aug_ids[5], image[2 * eight: 3 * eight], SIZE, SIZE_Y)
+    image_9 = transformation(aug_ids[8], image[2 * fourth: 3 * fourth])
+    image_10 = transformation(aug_ids[9], image[2 * fourth: 3 * fourth])
+    image_11 = transformation(aug_ids[10], image[2 * fourth: 3 * fourth])
+    image_12 = transformation(aug_ids[11], image[2 * fourth: 3 * fourth])
 
-    image_7 = transformation(aug_ids[6], image[3 * eight: 4 * eight], SIZE, SIZE_Y)
-    image_8 = transformation(aug_ids[7], image[3 * eight: 4 * eight], SIZE, SIZE_Y)
-
-    image_9 = transformation(aug_ids[8], image[4 * eight: 5 * eight], SIZE, SIZE_Y)
-    image_10 = transformation(aug_ids[9], image[4 * eight: 5 * eight], SIZE, SIZE_Y)
-
-    image_11 = transformation(aug_ids[10], image[5 * eight: 6 * eight], SIZE, SIZE_Y)
-    image_12 = transformation(aug_ids[11], image[5 * eight: 6 * eight], SIZE, SIZE_Y)
-
-    image_13 = transformation(aug_ids[12], image[6 * eight: 7 * eight], SIZE, SIZE_Y)
-    image_14 = transformation(aug_ids[13], image[6 * eight: 7 * eight], SIZE, SIZE_Y)
-
-    image_15 = transformation(aug_ids[14], image[7 * eight:], SIZE, SIZE_Y)
-    image_16 = transformation(aug_ids[15], image[7 * eight:], SIZE, SIZE_Y)
+    image_13 = transformation(aug_ids[12], image[3 * fourth:])
+    image_14 = transformation(aug_ids[13], image[3 * fourth:])
+    image_15 = transformation(aug_ids[14], image[3 * fourth:])
+    image_16 = transformation(aug_ids[15], image[3 * fourth:])
 
     # save_images(image_1, aug_ids[0])
     # save_images(image_2, aug_ids[1])
@@ -189,100 +346,36 @@ def forward_block(X, ids, encoder, optimizer, train, rev_product, moving_mean):
     # save_images(image_15, aug_ids[14])
     # save_images(image_16, aug_ids[15])
 
-    image_1 = torch.cat([image_1, image_3, image_5, image_7, image_9, image_11, image_13, image_15], dim=0)
-    image_2 = torch.cat([image_2, image_4, image_6, image_8, image_10, image_12, image_14, image_16], dim=0)
+    image_1 = torch.cat([image_1, image_5, image_9, image_13], dim=0)
+    image_2 = torch.cat([image_2, image_6, image_10, image_14], dim=0)
+    image_3 = torch.cat([image_3, image_7, image_11, image_15], dim=0)
+    image_4 = torch.cat([image_4, image_8, image_12, image_16], dim=0)
 
-    # save_images(image_1, 20)
-    # save_images(image_2, 21)
+    # save_images(image_1, 12)
+    # save_images(image_2, 13)
 
-    _, c_a, a = encoder(image_1.to('cuda'))
-    _, c_b, b = encoder(image_2.to('cuda'))
+    #print(list(encoder.brain[0].weight))
 
-    all_predictions = torch.cat([a, b], dim=0)
+    _, _, a = encoder(image_1.to('cuda'))
+    _, _, b = encoder(image_2.to('cuda'))
+    _, _, c = encoder(image_3.to('cuda'))
+    _, _, d = encoder(image_4.to('cuda'))
 
-    current_reverse = 1 - all_predictions
-    denominator = torch.cat([a.sum(dim=1), b.sum(dim=1)], dim=0)
+    # all_predictions = torch.cat([probs10_a, probs10_b, probs10_c, probs10_d], dim=0)
+    #
+    # current_reverse = 1 - all_predictions
+    # denominator = torch.cat([probs10_a.sum(dim=1), probs10_b.sum(dim=1), probs10_c.sum(dim=1), probs10_d.sum(dim=1)], dim=0)
+    #
+    # new_loss = new_agreement(all_predictions, denominator, current_reverse)
 
-    labels, max_elems = assign_labels(a, b)
-
-    #round_max = torch.round(max_elems).mean()
-    classification_loss, current_mean = class_mean_probs_loss(c_a, c_b, moving_mean)
-
-    max_mean, _ = moving_mean.max(dim=0)
-    current_max, _ = current_mean.max(dim=0)
-
-    if max_mean > 1.5 * moving_mean.mean() or max_mean < 0.5 or current_max > 10 * current_mean.mean():
-        class_adj_m = torch.ones(2*BATCH_SIZE_DEFAULT, 2*BATCH_SIZE_DEFAULT)
-    else:
-        print("mask used")
-        class_adj_m = class_adj_matrix(labels)
-
-    new_loss = new_agreement(all_predictions, denominator, current_reverse, class_adj_m)
-
-    if first or not train:
-        # print("first: ", first)
-        total_loss = new_loss + classification_loss
-        # rev_product = current_reverse.detach()
-        first = True
-
-    # The else is obsolete
-    else:
-        print("queue_agreement")
-        old_loss = queue_agreement(all_predictions, denominator, rev_product)
-        rev_product = torch.cat([rev_product, current_reverse.detach()])
-        total_loss = new_loss + old_loss
+    total_loss = decorelated_penalized_attarction(a, b, c, d)
 
     if train:
-        moving_mean = 0.95 * moving_mean.cuda() + 0.05 * current_mean.detach()
-
         optimizer.zero_grad()
         total_loss.backward()
         optimizer.step()
 
-    return a, b, total_loss, rev_product, classification_loss, moving_mean
-
-
-def assign_labels(a, b):
-    predictions = (a + b) / 2
-
-    max_elems, indexes = predictions.max(dim=1)
-
-    # print(max_elems.shape)
-    # print(indexes.shape)
-    #
-
-    # #print(predictions[0])
-    # print(indexes[0])
-
-    return indexes, max_elems
-
-
-def class_adj_matrix(labels):
-    square = torch.ones(BATCH_SIZE_DEFAULT, BATCH_SIZE_DEFAULT)
-
-    labels_vertical = labels.unsqueeze(dim=1)
-    square[(labels == labels_vertical).data] = 0
-    square.fill_diagonal_(1)
-
-    first_part = torch.cat([square, square], dim=1)
-    class_adj_matrix = torch.cat([first_part, first_part], dim=0)
-
-    return class_adj_matrix
-
-
-def class_mean_probs_loss(a, b, moving_mean):
-    product = a * b
-    current_mean = product.mean(dim=0)
-
-    batch_sam = (a.mean(dim=0) + b.mean(dim=0)) / 2
-    result = current_mean / batch_sam
-
-    interpolation = moving_mean.detach().cuda() * 0.95 + result * 0.05
-
-    log = - torch.log(interpolation + EPS)
-    scalar = log.mean()
-
-    return scalar, result
+    return a, b, total_loss, rev_product
 
 
 def save_cluster(original_image, cluster, iteration):
@@ -297,28 +390,25 @@ def save_image(original_image, index, name, cluster=0):
     matplotlib.image.imsave(f"gen_images/c_{cluster}/{name}_index_{index}.png", sample)
 
 
-def measure_acc_augments(x_test, encoder, rev_product, moving_mean):
-    size = BATCH_SIZE_DEFAULT
+def measure_acc_augments(x_test, encoder, rev_product):
+    size = 200
     runs = len(x_test) // size
     sum_loss = 0
-    sum_class_loss = 0
+
     print(rev_product.shape)
 
     for j in range(runs):
         test_ids = range(j * size, (j + 1) * size)
 
         with torch.no_grad():
-            test_preds_1, test_preds_2, test_total_loss, rev_product, class_loss, moving_mean = forward_block(x_test, test_ids, encoder, [], False, rev_product, moving_mean)
+            test_preds_1, test_preds_2, test_total_loss, rev_product = forward_block(x_test, test_ids, encoder, [], False, rev_product)
 
         sum_loss += test_total_loss.item()
-        sum_class_loss += class_loss.item()
 
     avg_loss = sum_loss / runs
-    avg_class_loss = sum_class_loss / runs
 
     print()
     print("Avg test loss: ", avg_loss)
-    print("Avg test class loss: ", avg_class_loss)
     print()
 
     return avg_loss
@@ -402,10 +492,10 @@ def train():
 
     script_directory = os.path.split(os.path.abspath(__file__))[0]
 
-    filepath = 'cifar100_models\\mixed_disentangle' + '.model'
+    filepath = 'cifar100_models\\penalty_disentangle' + '.model'
     clusters_net_path = os.path.join(script_directory, filepath)
 
-    encoder = Mixed(3, EMBEDINGS, CLASSES).to('cuda')
+    encoder = DeepBinBrainCifar(3, EMBEDINGS).to('cuda')
 
     print(encoder)
 
@@ -422,12 +512,12 @@ def train():
 
     print("X_train: ", X_train.shape, " X_test: ", X_test.shape, " targets: ", targets.shape)
 
-
-    moving_mean = torch.ones(CLASSES) / (100*CLASSES)
+    # test_dict = {1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [], 9: [], 0: []}
+    # for idx, i in enumerate(targets):
+    #     test_dict[i].append(idx)
 
     avg_loss = 0
     total_iters = 0
-    avg_class_loss = 0
 
     for epoch in range(EPOCHS):
         print("Epoch: ", epoch)
@@ -445,9 +535,8 @@ def train():
             iter_ids = ids[current_ids]
 
             train = True
-            probs10, probs10_b, total_loss, rev_product, class_loss, moving_mean = forward_block(X_train, iter_ids, encoder, optimizer, train, rev_product, moving_mean)
+            probs10, probs10_b, total_loss, rev_product = forward_block(X_train, iter_ids, encoder, optimizer, train, rev_product)
             avg_loss += total_loss.item()
-            avg_class_loss += class_loss.item()
             iteration += 1
             total_iters += 1
 
@@ -455,7 +544,7 @@ def train():
                 rev_product = rev_product[4 * BATCH_SIZE_DEFAULT:, :]
 
         print("==================================================================================")
-        print("moving mean: ", moving_mean)
+        print("example prediction: ", probs10[0])
         print("batch mean ones: ",
               (np.where(probs10.data.cpu().numpy() > 0.5))[0].shape[0] / (probs10[0].shape[0] * BATCH_SIZE_DEFAULT))
 
@@ -463,12 +552,10 @@ def train():
         print()
 
         print("train avg loss : ", avg_loss / runs)
-        print("train avg class loss : ", avg_class_loss / runs)
         avg_loss = 0
-        avg_class_loss = 0
         encoder.eval()
 
-        test_loss = measure_acc_augments(X_test, encoder, rev_product, moving_mean)
+        test_loss = measure_acc_augments(X_test, encoder, rev_product)
 
         if test_loss < test_best_loss:
             test_best_loss = test_loss
@@ -490,6 +577,7 @@ def train():
 def count_common_elements(p):
     sum_commons = 0
     counter = 0
+    p = torch.round(p)
     for i in range(p.shape[0]):
         for j in range(p.shape[0]):
             if i == j:
@@ -504,6 +592,11 @@ def count_common_elements(p):
 
     print("Mean common elements: ", (sum_commons / EMBEDINGS) / counter)
 
+def to_tensor(X):
+    with torch.no_grad():
+        X = Variable(torch.FloatTensor(X))
+
+    return X
 
 
 def main():

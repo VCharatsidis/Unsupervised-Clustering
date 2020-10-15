@@ -59,18 +59,18 @@ class Mixed(nn.Module):
 
         self.brain = nn.Sequential(
 
-            nn.Linear(conv_size, 4096),
-            nn.ReLU(),
-            nn.BatchNorm1d(4096),
+            # nn.Linear(conv_size, 4096),
+            # nn.ReLU(),
+            # nn.BatchNorm1d(4096),
 
             nn.Linear(4096, EMBEDING_SIZE)
         )
 
         self.classification = nn.Sequential(
 
-            # nn.Linear(6400, 4096),
-            # nn.ReLU(),
-            # nn.BatchNorm1d(4096),
+            nn.Linear(conv_size, 4096),
+            nn.ReLU(),
+            nn.BatchNorm1d(4096),
 
             nn.Linear(conv_size, classes),
             nn.Softmax(dim=1)

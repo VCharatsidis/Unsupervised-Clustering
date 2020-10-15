@@ -9,7 +9,7 @@ import argparse
 import os
 
 from binary_net import DeepBinBrainCifar
-from AlexNet import AlexNet
+#from AlexNet import AlexNet
 
 from stl_utils import *
 import random
@@ -369,21 +369,6 @@ def print_params(model):
         print(param.data)
 
 
-def preproccess_cifar(x):
-    x = to_tensor(x)
-
-    x = x.transpose(1, 3)
-    x = x.transpose(2, 3)
-
-    #x = rgb2gray(x)
-    #x = x.unsqueeze(0)
-    #x = x.transpose(0, 1)
-
-    #x /= 255
-
-    return x
-
-
 def unpickle(file):
     import pickle
     with open(file, 'rb') as fo:
@@ -443,10 +428,10 @@ def train():
 
     script_directory = os.path.split(os.path.abspath(__file__))[0]
 
-    filepath = 'cifar100_models\\alex_disentangle' + '.model'
+    filepath = 'cifar100_models\\color' + '.model'
     clusters_net_path = os.path.join(script_directory, filepath)
 
-    encoder = AlexNet(EMBEDINGS).to('cuda')
+    encoder = DeepBinBrainCifar(3, EMBEDINGS).to('cuda')
 
     print(encoder)
 
@@ -501,7 +486,7 @@ def train():
         count_common_elements(probs10)
         print()
 
-        print("train avg loss : ", avg_loss / EVAL_FREQ_DEFAULT)
+        print("train avg loss : ", avg_loss / runs)
         avg_loss = 0
         encoder.eval()
 

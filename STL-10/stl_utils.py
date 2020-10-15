@@ -58,14 +58,21 @@ def gaussian_blur(X):
 #
 #     return X_copy
 
-def fix_sobel(sobeled, quarter, image, SIZE_X, SIZE_Y):
 
-    AA = sobeled.reshape(sobeled.size(0), sobeled.size(1) * sobeled.size(2) * sobeled.size(3))
-    AA -= AA.min(1, keepdim=True)[0]
-    AA /= AA.max(1, keepdim=True)[0]
-    AA = AA.view(quarter, image.shape[1], SIZE_X, SIZE_Y)
+def no_jitter_rotate(X, degrees):
+    X_copy = copy.deepcopy(X)
+    X_copy = Variable(torch.FloatTensor(X_copy))
 
-    return AA
+    horiz_flip = transforms.RandomHorizontalFlip(0.5)
+    # transformation = transforms.RandomRotation(degrees=[-degrees, degrees], fill=(0,))
+    transformation = transforms.RandomRotation(degrees=[-degrees, degrees])
+    trans = transforms.Compose([horiz_flip, transformation, transforms.ToTensor()])
+
+    for i in range(X_copy.shape[0]):
+        a = F.to_pil_image(X_copy[i])
+        X_copy[i] = trans(a)
+
+    return X_copy
 
 
 def rotate(X, degrees):
@@ -186,6 +193,7 @@ def just_scale(X, size, pad):
         X_copy[i] = trans(a)
 
     return X_copy
+
 
 def scale(X, size, pad, batch_size=BATCH_SIZE_DEFAULT):
     X_copy = copy.deepcopy(X)
@@ -334,11 +342,21 @@ def add_noise(X, batch_size=BATCH_SIZE_DEFAULT, max_noise_percentage=0.3):
     return to_tensor(X_copy)
 
 
-def to_tensor(X):
-    with torch.no_grad():
-        X = Variable(torch.FloatTensor(X))
+def no_jitter_random_corpse(X, size, batch_size, size_y, up_size_x, up_size_y):
+    X_copy = copy.deepcopy(X)
+    X_copy = Variable(torch.FloatTensor(X_copy))
 
-    return X
+    horiz_flip = transforms.RandomHorizontalFlip(0.5)
+    random_crop = transforms.RandomCrop(size=(size, size_y))
+    resize = transforms.Resize(size=(up_size_x, up_size_y))
+
+    trans = transforms.Compose([horiz_flip, random_crop, resize, transforms.ToTensor()])
+
+    for i in range(X_copy.shape[0]):
+        a = F.to_pil_image(X_copy[i])
+        X_copy[i] = trans(a)
+
+    return X_copy
 
 
 def randcom_crop_upscale(X, size, batch_size, size_y, up_size_x, up_size_y):
@@ -435,6 +453,38 @@ def random_crop(X, size, batch_size, size_y):
     return X_res
 
 
+def to_tensor(X):
+    X_copy = copy.deepcopy(X)
+    X_copy = Variable(torch.FloatTensor(X_copy))
+
+    trans = transforms.Compose([transforms.ToTensor()])
+
+    for i in range(X_copy.shape[0]):
+        a = F.to_pil_image(X_copy[i])
+        X_copy[i] = trans(a)
+
+    return X_copy
+
+
+def preproccess_cifar(x):
+
+    with torch.no_grad():
+        x = Variable(torch.FloatTensor(x))
+
+    x = x.transpose(1, 3)
+    x = x.transpose(2, 3)
+
+    #x = to_tensor(x)
+
+    #x = rgb2gray(x)
+    #x = x.unsqueeze(0)
+    #x = x.transpose(0, 1)
+
+    x /= 255
+
+    return x
+
+
 def color_jitter(X):
     X_copy = copy.deepcopy(X)
     X_copy = Variable(torch.FloatTensor(X_copy))
@@ -499,3 +549,96 @@ def count_common_elements(p, embedings_size):
             counter += 1
 
     print("Mean common elements: ", (sum_commons / embedings_size) / counter)
+
+
+def fix_sobel(sobeled, quarter, image, size_x, size_y):
+
+    AA = sobeled.reshape(sobeled.size(0), sobeled.size(1) * sobeled.size(2) * sobeled.size(3))
+    AA -= AA.min(1, keepdim=True)[0]
+    AA /= AA.max(1, keepdim=True)[0]
+    AA = AA.view(quarter, image.shape[1], size_x, size_y)
+
+    return AA
+
+
+def transformation(id, image, size_x, size_y):
+    quarter = image.shape[0]
+
+    if id == 0:
+        return color_jitter(image)
+
+    elif id == 1:
+        return scale(image, (image.shape[2] - 8, image.shape[3] - 8), 4, quarter)
+
+    elif id == 2:
+        return rotate(image, 46)
+
+    elif id == 3:
+        return torch.abs(1 - color_jitter(image))
+
+    elif id == 4:
+        sobeled = sobel_total(color_jitter(image), quarter)
+        AA = fix_sobel(sobeled, quarter, image, size_x, size_y)
+
+        return AA
+
+    elif id == 5:
+        sobeled = sobel_filter_x(color_jitter(image), quarter)
+        AA = fix_sobel(sobeled, quarter, image, size_x, size_y)
+
+        return AA
+
+    elif id == 6:
+        sobeled = sobel_filter_y(color_jitter(image), quarter)
+        AA = fix_sobel(sobeled, quarter, image, size_x, size_y)
+
+        return AA
+
+    elif id == 7:
+        return gaussian_blur(image)
+
+    elif id == 8:
+        blured = randcom_crop_upscale_gauss_blur(image, 22, quarter, 22, 32, 32)
+
+        return blured
+
+    elif id == 9:
+        scaled_up = randcom_crop_upscale(image, 22, quarter, 22, 32, 32)
+        sobeled = sobel_total(scaled_up, quarter)
+        AA = fix_sobel(sobeled, quarter, image, size_x, size_y)
+
+        return AA
+
+    elif id == 10:
+        scaled_up = randcom_crop_upscale(image, 22, quarter, 22, 32, 32)
+        rev = torch.abs(1 - scaled_up)
+        return rev
+
+    elif id == 11:
+        rot = no_jitter_rotate(image, -46)
+        return rot
+
+    elif id == 12:
+        scaled_up = randcom_crop_upscale(image, 20, quarter, 20, 32, 32)
+        return scaled_up
+
+    elif id == 13:
+        scaled_up = randcom_crop_upscale(image, 22, quarter, 22, 32, 32)
+
+        return scaled_up
+
+    elif id == 14:
+        scaled_up = randcom_crop_upscale(image, 26, quarter, 26, 32, 32)
+        return scaled_up
+
+    elif id == 15:
+        scaled_up = no_jitter_random_corpse(image, 22, quarter, 22, 32, 32)
+
+        return scaled_up
+
+    elif id == 16:
+        scaled_up = randcom_crop_upscale(image, 18, quarter, 18, 32, 32)
+        return scaled_up
+
+    print("Error in transformation of the image.")
+    return image

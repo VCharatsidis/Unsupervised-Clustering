@@ -20,7 +20,7 @@ MAX_STEPS_DEFAULT = 500000
 BATCH_SIZE_DEFAULT = 200
 USE_EMBEDDING = False
 
-INPUT_NET = 2304
+INPUT_NET = 4096
 if USE_EMBEDDING:
     INPUT_NET = 4096
 
@@ -41,7 +41,7 @@ np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
 
 FLAGS = None
 
-encoder_name = "cifar100_models\\alex_disentangle"
+encoder_name = "cifar100_models\\mixed_disentangle"
 
 encoder = torch.load(encoder_name+".model")
 encoder.eval()
@@ -120,7 +120,6 @@ DESCRIPTION = ["LOSS: product loss multiplied by mean ", " Image size: " + str(S
 
 def forward_block(X, ids, classifier, optimizer, train, targets):
     images = X[ids, :]
-    #images = to_tensor(images)
 
     if PRODUCT:
         rotated = rotate(images, 46)
@@ -169,33 +168,8 @@ def forward_block(X, ids, classifier, optimizer, train, targets):
         print(p[1].data.cpu().numpy())
         print(np.where(p[1].data.cpu().numpy() > 0.5))
         print(np.where(p[1].data.cpu().numpy() > 0.5)[0].shape)
-        #
-        # print(p[2].data.cpu().numpy())
-        # print(np.where(p[2].data.cpu().numpy() > 0.5))
-        # print(np.where(p[2].data.cpu().numpy() > 0.5)[0].shape)
 
 
-        # common_ones = p[1].data.cpu().numpy() * p[2].data.cpu().numpy()
-        # print("comon ones: ", np.where(common_ones > 0.5)[0].shape[0])
-
-
-    # product = p * p_sobeled
-
-    # print("=========== product =================")
-    # print(product.data.cpu().numpy().sum(axis=0))
-    #
-    # print(product[1].data.cpu().numpy())
-    # print(np.where(product[1].data.cpu().numpy() > 0.5))
-    # print(np.where(product[1].data.cpu().numpy() > 0.5)[0].shape)
-    #
-    # print(product[2].data.cpu().numpy())
-    # print(np.where(product[2].data.cpu().numpy() > 0.5))
-    # print(np.where(product[2].data.cpu().numpy() > 0.5)[0].shape)
-
-    #concat_encodings = torch.cat([encodings, sobeled_encodings], dim=1)
-
-
-    #concat = torch.cat([p, p_sobeled], dim=1)
     if USE_EMBEDDING:
         preds = classifier(p.detach())
     else:
@@ -314,21 +288,6 @@ def unpickle(file):
     return dict
 
 
-def preproccess_cifar(x, channels=3):
-    x = to_tensor(x)
-
-    x = x.transpose(1, 3)
-    x = x.transpose(2, 3)
-
-    # if channels == 1:
-    #     x = rgb2gray(x)
-    #     x = x.unsqueeze(0)
-    #     x = x.transpose(0, 1)
-
-    #x /= 255
-
-    return x
-
 def train():
     global EVAL_FREQ_DEFAULT
     with open('data\\train', 'rb') as fo:
@@ -349,8 +308,6 @@ def train():
     filenames = [t.decode('utf8') for t in test[b'filenames']]
     targets = test[b'fine_labels']
     test_data = test[b'data']
-
-
 
     X_train = list()
     for d in train_data:
@@ -444,13 +401,6 @@ def train():
                 file.write(accuracy_info)
                 file.close()
                 break
-
-
-def to_tensor(X):
-    with torch.no_grad():
-        X = Variable(torch.FloatTensor(X))
-
-    return X
 
 
 def main():

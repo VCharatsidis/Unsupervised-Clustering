@@ -9,7 +9,7 @@ import argparse
 import os
 
 from binary_net import DeepBinBrainCifar
-from AlexNet import AlexNet
+#from AlexNet import AlexNet
 
 from stl_utils import *
 import random
@@ -21,6 +21,7 @@ import pickle
 np.set_printoptions(formatter={'float': lambda x: "{0:0.4f}".format(x)})
 np.set_printoptions(threshold=sys.maxsize)
 torch.set_printoptions(threshold=sys.maxsize)
+torch.set_printoptions(sci_mode=False)
 
 EPS = sys.float_info.epsilon
 
@@ -29,7 +30,7 @@ LEARNING_RATE_DEFAULT = 1e-4
 
 MAX_STEPS_DEFAULT = 500000
 
-BATCH_SIZE_DEFAULT = 128
+BATCH_SIZE_DEFAULT = 512
 
 EMBEDINGS = 4096
 SIZE = 32
@@ -48,11 +49,13 @@ FLAGS = None
 
 square = torch.ones(BATCH_SIZE_DEFAULT, BATCH_SIZE_DEFAULT)
 ZERO_DIAG = square.fill_diagonal_(0)
-first_part = torch.cat([ZERO_DIAG, ZERO_DIAG, ZERO_DIAG, ZERO_DIAG], dim=1)
-adj_matrix = torch.cat([first_part, first_part, first_part, first_part], dim=0)
+first_part = torch.cat([ZERO_DIAG, ZERO_DIAG], dim=1)
+adj_matrix = torch.cat([first_part, first_part], dim=0)
+adj_matrix = adj_matrix.cuda()
 
-big_diag = torch.ones(4 * BATCH_SIZE_DEFAULT, 4 * BATCH_SIZE_DEFAULT)
+big_diag = torch.ones(2 * BATCH_SIZE_DEFAULT, 2 * BATCH_SIZE_DEFAULT)
 ZERO_BIG_DIAG = big_diag.fill_diagonal_(0)
+ZERO_BIG_DIAG = ZERO_BIG_DIAG.cuda()
 
 
 #ELEMENTS_EXCEPT_DIAG = 2 * BATCH_SIZE_DEFAULT * (BATCH_SIZE_DEFAULT - 1)
@@ -97,99 +100,6 @@ def save_images(images, transformation):
     save_cluster(numpy_cluster, transformations_dict[transformation], 0)
 
 
-def fix_sobel(sobeled, quarter, image):
-
-    AA = sobeled.reshape(sobeled.size(0), sobeled.size(1) * sobeled.size(2) * sobeled.size(3))
-    AA -= AA.min(1, keepdim=True)[0]
-    AA /= AA.max(1, keepdim=True)[0]
-    AA = AA.view(quarter, image.shape[1], SIZE, SIZE)
-
-    return AA
-
-
-def transformation(id, image):
-    quarter = BATCH_SIZE_DEFAULT//4
-
-    if id == 0:
-        return color_jitter(image)
-
-    elif id == 1:
-        return scale(image, (image.shape[2] - 8, image.shape[3] - 8), 4, quarter)
-
-    elif id == 2:
-        return rotate(image, 46)
-
-    elif id == 3:
-        return torch.abs(1 - color_jitter(image))
-
-    elif id == 4:
-        sobeled = sobel_total(color_jitter(image), quarter)
-        AA = fix_sobel(sobeled, quarter, image)
-
-        return AA
-
-    elif id == 5:
-        sobeled = sobel_filter_x(color_jitter(image), quarter)
-        AA = fix_sobel(sobeled, quarter, image)
-
-        return AA
-
-    elif id == 6:
-        sobeled = sobel_filter_y(color_jitter(image), quarter)
-        AA = fix_sobel(sobeled, quarter, image)
-
-        return AA
-
-    elif id == 7:
-        return gaussian_blur(image)
-
-    elif id == 8:
-        blured = randcom_crop_upscale_gauss_blur(image, 22, quarter, 22, 32, 32)
-
-        return blured
-
-    elif id == 9:
-        scaled_up = randcom_crop_upscale(image, 22, quarter, 22, 32, 32)
-        sobeled = sobel_total(scaled_up, quarter)
-        AA = fix_sobel(sobeled, quarter, image)
-
-        return AA
-
-    elif id == 10:
-        scaled_up = randcom_crop_upscale(image, 22, quarter, 22, 32, 32)
-        rev = torch.abs(1 - scaled_up)
-        return rev
-
-    elif id == 11:
-        rot = rotate(image, -46)
-        return rot
-
-    elif id == 12:
-        scaled_up = randcom_crop_upscale(image, 20, quarter, 20, 32, 32)
-        return scaled_up
-
-    elif id == 13:
-        scaled_up = randcom_crop_upscale(image, 22, quarter, 22, 32, 32)
-
-        return scaled_up
-
-    elif id == 14:
-        scaled_up = randcom_crop_upscale(image, 26, quarter, 26, 32, 32)
-        return scaled_up
-
-    elif id == 15:
-        scaled_up = randcom_crop_upscale(image, 22, quarter, 22, 32, 32)
-
-        return scaled_up
-
-    elif id == 16:
-        scaled_up = randcom_crop_upscale(image, 18, quarter, 18, 32, 32)
-        return scaled_up
-
-    print("Error in transformation of the image.")
-    return image
-
-
 def new_agreement(product, denominator, rev_prod):
     transposed = rev_prod.transpose(0, 1)
 
@@ -201,14 +111,14 @@ def new_agreement(product, denominator, rev_prod):
     attraction = attraction / denominator
     repel = repel / denominator
 
-    total_matrix = repel * adj_matrix.cuda() + attraction * (1-adj_matrix.cuda())
+    total_matrix = repel * adj_matrix + attraction * (1-adj_matrix)
     #total_matrix[(total_matrix < EPS).data] = EPS
 
     log_total = - torch.log(total_matrix)
 
-    diagonal_elements_bonus = 1.25 * ZERO_BIG_DIAG.cuda() * (BATCH_SIZE_DEFAULT - 1) * (1-adj_matrix.cuda()) * log_total
+    #diagonal_elements_bonus = ZERO_BIG_DIAG * (2*BATCH_SIZE_DEFAULT - 2) * (1-adj_matrix) * log_total
 
-    total = log_total + diagonal_elements_bonus
+    total = log_total  #+ diagonal_elements_bonus
 
     mean_total = total.mean()
 
@@ -234,26 +144,31 @@ def forward_block(X, ids, encoder, optimizer, train, rev_product):
 
     image = X[ids, :]
 
-    fourth = BATCH_SIZE_DEFAULT // 4
-    image_1 = transformation(aug_ids[0], image[0:fourth])
-    image_2 = transformation(aug_ids[1], image[0:fourth])
-    image_3 = transformation(aug_ids[2], image[0:fourth])
-    image_4 = transformation(aug_ids[3], image[0:fourth])
+    eight = image.shape[0] // 8
 
-    image_5 = transformation(aug_ids[4], image[fourth: 2 * fourth])
-    image_6 = transformation(aug_ids[5], image[fourth: 2 * fourth])
-    image_7 = transformation(aug_ids[6], image[fourth: 2 * fourth])
-    image_8 = transformation(aug_ids[7], image[fourth: 2 * fourth])
+    image_1 = transformation(aug_ids[0], image[0:eight])
+    image_2 = transformation(aug_ids[1], image[0:eight])
 
-    image_9 = transformation(aug_ids[8], image[2 * fourth: 3 * fourth])
-    image_10 = transformation(aug_ids[9], image[2 * fourth: 3 * fourth])
-    image_11 = transformation(aug_ids[10], image[2 * fourth: 3 * fourth])
-    image_12 = transformation(aug_ids[11], image[2 * fourth: 3 * fourth])
+    image_3 = transformation(aug_ids[2], image[eight: 2 * eight])
+    image_4 = transformation(aug_ids[3], image[eight: 2 * eight])
 
-    image_13 = transformation(aug_ids[12], image[3 * fourth:])
-    image_14 = transformation(aug_ids[13], image[3 * fourth:])
-    image_15 = transformation(aug_ids[14], image[3 * fourth:])
-    image_16 = transformation(aug_ids[15], image[3 * fourth:])
+    image_5 = transformation(aug_ids[4], image[2 * eight: 3 * eight])
+    image_6 = transformation(aug_ids[5], image[2 * eight: 3 * eight])
+
+    image_7 = transformation(aug_ids[6], image[3 * eight: 4 * eight])
+    image_8 = transformation(aug_ids[7], image[3 * eight: 4 * eight])
+
+    image_9 = transformation(aug_ids[8], image[4 * eight: 5 * eight])
+    image_10 = transformation(aug_ids[9], image[4 * eight: 5 * eight])
+
+    image_11 = transformation(aug_ids[10], image[5 * eight: 6 * eight])
+    image_12 = transformation(aug_ids[11], image[5 * eight: 6 * eight])
+
+    image_13 = transformation(aug_ids[12], image[6 * eight: 7 * eight])
+    image_14 = transformation(aug_ids[13], image[6 * eight: 7 * eight])
+
+    image_15 = transformation(aug_ids[14], image[7 * eight:])
+    image_16 = transformation(aug_ids[15], image[7 * eight:])
 
     # save_images(image_1, aug_ids[0])
     # save_images(image_2, aug_ids[1])
@@ -272,25 +187,20 @@ def forward_block(X, ids, encoder, optimizer, train, rev_product):
     # save_images(image_15, aug_ids[14])
     # save_images(image_16, aug_ids[15])
 
-    image_1 = torch.cat([image_1, image_5, image_9, image_13], dim=0)
-    image_2 = torch.cat([image_2, image_6, image_10, image_14], dim=0)
-    image_3 = torch.cat([image_3, image_7, image_11, image_15], dim=0)
-    image_4 = torch.cat([image_4, image_8, image_12, image_16], dim=0)
+    #image_1 = image
+    image_1 = torch.cat([image_1, image_3, image_5, image_7, image_9, image_11, image_13, image_15], dim=0)
+    image_2 = torch.cat([image_2, image_4, image_6, image_8, image_10, image_12, image_14, image_16], dim=0)
 
-    # save_images(image_1, 12)
-    # save_images(image_2, 13)
+    # save_images(image_1, 20)
+    # save_images(image_2, 21)
 
-    #print(list(encoder.brain[0].weight))
+    _, _, a = encoder(image_1.to('cuda'))
+    _, _, b = encoder(image_2.to('cuda'))
 
-    _, _, probs10_a = encoder(image_1.to('cuda'))
-    _, _, probs10_b = encoder(image_2.to('cuda'))
-    _, _, probs10_c = encoder(image_3.to('cuda'))
-    _, _, probs10_d = encoder(image_4.to('cuda'))
-
-    all_predictions = torch.cat([probs10_a, probs10_b, probs10_c, probs10_d], dim=0)
+    all_predictions = torch.cat([a, b], dim=0)
 
     current_reverse = 1 - all_predictions
-    denominator = torch.cat([probs10_a.sum(dim=1), probs10_b.sum(dim=1), probs10_c.sum(dim=1), probs10_d.sum(dim=1)], dim=0)
+    denominator = torch.cat([a.sum(dim=1), b.sum(dim=1)], dim=0)
 
     new_loss = new_agreement(all_predictions, denominator, current_reverse)
 
@@ -311,7 +221,7 @@ def forward_block(X, ids, encoder, optimizer, train, rev_product):
         total_loss.backward()
         optimizer.step()
 
-    return probs10_a, probs10_b, total_loss, rev_product
+    return a, b, total_loss, rev_product
 
 
 def save_cluster(original_image, cluster, iteration):
@@ -367,21 +277,6 @@ def most_frequent(List):
 def print_params(model):
     for param in model.parameters():
         print(param.data)
-
-
-def preproccess_cifar(x):
-    x = to_tensor(x)
-
-    x = x.transpose(1, 3)
-    x = x.transpose(2, 3)
-
-    #x = rgb2gray(x)
-    #x = x.unsqueeze(0)
-    #x = x.transpose(0, 1)
-
-    #x /= 255
-
-    return x
 
 
 def unpickle(file):
@@ -443,10 +338,10 @@ def train():
 
     script_directory = os.path.split(os.path.abspath(__file__))[0]
 
-    filepath = 'cifar100_models\\alex_disentangle' + '.model'
+    filepath = 'cifar100_models\\simpler_queue' + '.model'
     clusters_net_path = os.path.join(script_directory, filepath)
 
-    encoder = AlexNet(EMBEDINGS).to('cuda')
+    encoder = DeepBinBrainCifar(3, EMBEDINGS).to('cuda')
 
     print(encoder)
 
@@ -491,17 +386,19 @@ def train():
             iteration += 1
             total_iters += 1
 
-            if iteration >= 40:
-                rev_product = rev_product[4 * BATCH_SIZE_DEFAULT:, :]
+            if iteration >= 90:
+                rev_product = rev_product[2 * BATCH_SIZE_DEFAULT:, :]
 
         print("==================================================================================")
+        # print("example prediction: ", probs10[0])
+        # print("example prediction: ", probs10[1])
         print("batch mean ones: ",
               (np.where(probs10.data.cpu().numpy() > 0.5))[0].shape[0] / (probs10[0].shape[0] * BATCH_SIZE_DEFAULT))
 
         count_common_elements(probs10)
         print()
 
-        print("train avg loss : ", avg_loss / EVAL_FREQ_DEFAULT)
+        print("train avg loss : ", avg_loss / runs)
         avg_loss = 0
         encoder.eval()
 
@@ -540,6 +437,7 @@ def count_common_elements(p):
             counter += 1
 
     print("Mean common elements: ", (sum_commons / EMBEDINGS) / counter)
+
 
 def to_tensor(X):
     with torch.no_grad():
