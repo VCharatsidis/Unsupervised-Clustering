@@ -109,13 +109,12 @@ def decorelated_penalized_attarction_mean(a, b):
 
 
 def decorelated_penalized_attarction(a, b):
-    batch_sum = (a.sum(dim=0) + b.sum(dim=0)) / 2
-    penalty = batch_sum
+    penalty = (a.sum(dim=0) + b.sum(dim=0)) / 2
 
     p1 = (a * b) / penalty
     p1 = p1.sum(dim=1)
 
-    sum1 = a.sum(dim=1) + b.sum(dim=1) + 5
+    sum1 = (a.sum(dim=1) + b.sum(dim=1)) / 2 + 100
 
     p1 = p1 / sum1
 
@@ -135,29 +134,29 @@ def forward_block(X, ids, encoder, optimizer, train):
 
     eight = image.shape[0] // 8
 
-    image_1 = transformation(aug_ids[0], image[0:eight])
-    image_2 = transformation(aug_ids[1], image[0:eight])
+    image_1 = transformation(aug_ids[0], image[0:eight], SIZE, SIZE_Y)
+    image_2 = transformation(aug_ids[1], image[0:eight], SIZE, SIZE_Y)
 
-    image_3 = transformation(aug_ids[2], image[eight: 2 * eight])
-    image_4 = transformation(aug_ids[3], image[eight: 2 * eight])
+    image_3 = transformation(aug_ids[2], image[eight: 2 * eight], SIZE, SIZE_Y)
+    image_4 = transformation(aug_ids[3], image[eight: 2 * eight], SIZE, SIZE_Y)
 
-    image_5 = transformation(aug_ids[4], image[2 * eight: 3 * eight])
-    image_6 = transformation(aug_ids[5], image[2 * eight: 3 * eight])
+    image_5 = transformation(aug_ids[4], image[2 * eight: 3 * eight], SIZE, SIZE_Y)
+    image_6 = transformation(aug_ids[5], image[2 * eight: 3 * eight], SIZE, SIZE_Y)
 
-    image_7 = transformation(aug_ids[6], image[3 * eight: 4 * eight])
-    image_8 = transformation(aug_ids[7], image[3 * eight: 4 * eight])
+    image_7 = transformation(aug_ids[6], image[3 * eight: 4 * eight], SIZE, SIZE_Y)
+    image_8 = transformation(aug_ids[7], image[3 * eight: 4 * eight], SIZE, SIZE_Y)
 
-    image_9 = transformation(aug_ids[8], image[4 * eight: 5 * eight])
-    image_10 = transformation(aug_ids[9], image[4 * eight: 5 * eight])
+    image_9 = transformation(aug_ids[8], image[4 * eight: 5 * eight], SIZE, SIZE_Y)
+    image_10 = transformation(aug_ids[9], image[4 * eight: 5 * eight], SIZE, SIZE_Y)
 
-    image_11 = transformation(aug_ids[10], image[5 * eight: 6 * eight])
-    image_12 = transformation(aug_ids[11], image[5 * eight: 6 * eight])
+    image_11 = transformation(aug_ids[10], image[5 * eight: 6 * eight], SIZE, SIZE_Y)
+    image_12 = transformation(aug_ids[11], image[5 * eight: 6 * eight], SIZE, SIZE_Y)
 
-    image_13 = transformation(aug_ids[12], image[6 * eight: 7 * eight])
-    image_14 = transformation(aug_ids[13], image[6 * eight: 7 * eight])
+    image_13 = transformation(aug_ids[12], image[6 * eight: 7 * eight], SIZE, SIZE_Y)
+    image_14 = transformation(aug_ids[13], image[6 * eight: 7 * eight], SIZE, SIZE_Y)
 
-    image_15 = transformation(aug_ids[14], image[7 * eight:])
-    image_16 = transformation(aug_ids[15], image[7 * eight:])
+    image_15 = transformation(aug_ids[14], image[7 * eight:], SIZE, SIZE_Y)
+    image_16 = transformation(aug_ids[15], image[7 * eight:], SIZE, SIZE_Y)
 
     # save_images(image_1, aug_ids[0])
     # save_images(image_2, aug_ids[1])
@@ -355,7 +354,7 @@ def train():
             total_iters += 1
 
         print("==================================================================================")
-        print("example prediction: ", probs10[0])
+        #print("example prediction: ", probs10[0])
         print("batch mean ones: ",
               (np.where(probs10.data.cpu().numpy() > 0.5))[0].shape[0] / (probs10[0].shape[0] * BATCH_SIZE_DEFAULT))
 

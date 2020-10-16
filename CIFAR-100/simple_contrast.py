@@ -30,7 +30,7 @@ LEARNING_RATE_DEFAULT = 1e-4
 
 MAX_STEPS_DEFAULT = 500000
 
-BATCH_SIZE_DEFAULT = 512
+BATCH_SIZE_DEFAULT = 256
 
 EMBEDINGS = 4096
 SIZE = 32
@@ -41,6 +41,7 @@ EPOCHS = 1000
 
 CLASSES = 100
 DESCRIPTION = " Image size: " + str(SIZE) + " , Classes: " + str(CLASSES)
+QUEUE = 50
 
 EVAL_FREQ_DEFAULT = 250
 MIN_CLUSTERS_TO_SAVE = 10
@@ -106,7 +107,7 @@ def new_agreement(product, denominator, rev_prod):
     attraction = torch.mm(product, product.transpose(0, 1))
     repel = torch.mm(product, transposed)
 
-    denominator = denominator + denominator.unsqueeze(dim=1)
+    denominator = (denominator + denominator.unsqueeze(dim=1)) / 2
 
     attraction = attraction / denominator
     repel = repel / denominator
@@ -116,9 +117,9 @@ def new_agreement(product, denominator, rev_prod):
 
     log_total = - torch.log(total_matrix)
 
-    #diagonal_elements_bonus = ZERO_BIG_DIAG * (2*BATCH_SIZE_DEFAULT - 2) * (1-adj_matrix) * log_total
+    diagonal_elements_bonus = ZERO_BIG_DIAG * (BATCH_SIZE_DEFAULT - 2) * (1-adj_matrix) * log_total
 
-    total = log_total  #+ diagonal_elements_bonus
+    total = log_total + diagonal_elements_bonus
 
     mean_total = total.mean()
 
@@ -146,29 +147,29 @@ def forward_block(X, ids, encoder, optimizer, train, rev_product):
 
     eight = image.shape[0] // 8
 
-    image_1 = transformation(aug_ids[0], image[0:eight])
-    image_2 = transformation(aug_ids[1], image[0:eight])
+    image_1 = transformation(aug_ids[0], image[0:eight], SIZE, SIZE_Y)
+    image_2 = transformation(aug_ids[1], image[0:eight], SIZE, SIZE_Y)
 
-    image_3 = transformation(aug_ids[2], image[eight: 2 * eight])
-    image_4 = transformation(aug_ids[3], image[eight: 2 * eight])
+    image_3 = transformation(aug_ids[2], image[eight: 2 * eight], SIZE, SIZE_Y)
+    image_4 = transformation(aug_ids[3], image[eight: 2 * eight], SIZE, SIZE_Y)
 
-    image_5 = transformation(aug_ids[4], image[2 * eight: 3 * eight])
-    image_6 = transformation(aug_ids[5], image[2 * eight: 3 * eight])
+    image_5 = transformation(aug_ids[4], image[2 * eight: 3 * eight], SIZE, SIZE_Y)
+    image_6 = transformation(aug_ids[5], image[2 * eight: 3 * eight], SIZE, SIZE_Y)
 
-    image_7 = transformation(aug_ids[6], image[3 * eight: 4 * eight])
-    image_8 = transformation(aug_ids[7], image[3 * eight: 4 * eight])
+    image_7 = transformation(aug_ids[6], image[3 * eight: 4 * eight], SIZE, SIZE_Y)
+    image_8 = transformation(aug_ids[7], image[3 * eight: 4 * eight], SIZE, SIZE_Y)
 
-    image_9 = transformation(aug_ids[8], image[4 * eight: 5 * eight])
-    image_10 = transformation(aug_ids[9], image[4 * eight: 5 * eight])
+    image_9 = transformation(aug_ids[8], image[4 * eight: 5 * eight], SIZE, SIZE_Y)
+    image_10 = transformation(aug_ids[9], image[4 * eight: 5 * eight], SIZE, SIZE_Y)
 
-    image_11 = transformation(aug_ids[10], image[5 * eight: 6 * eight])
-    image_12 = transformation(aug_ids[11], image[5 * eight: 6 * eight])
+    image_11 = transformation(aug_ids[10], image[5 * eight: 6 * eight], SIZE, SIZE_Y)
+    image_12 = transformation(aug_ids[11], image[5 * eight: 6 * eight], SIZE, SIZE_Y)
 
-    image_13 = transformation(aug_ids[12], image[6 * eight: 7 * eight])
-    image_14 = transformation(aug_ids[13], image[6 * eight: 7 * eight])
+    image_13 = transformation(aug_ids[12], image[6 * eight: 7 * eight], SIZE, SIZE_Y)
+    image_14 = transformation(aug_ids[13], image[6 * eight: 7 * eight], SIZE, SIZE_Y)
 
-    image_15 = transformation(aug_ids[14], image[7 * eight:])
-    image_16 = transformation(aug_ids[15], image[7 * eight:])
+    image_15 = transformation(aug_ids[14], image[7 * eight:], SIZE, SIZE_Y)
+    image_16 = transformation(aug_ids[15], image[7 * eight:], SIZE, SIZE_Y)
 
     # save_images(image_1, aug_ids[0])
     # save_images(image_2, aug_ids[1])
@@ -386,7 +387,7 @@ def train():
             iteration += 1
             total_iters += 1
 
-            if iteration >= 90:
+            if iteration >= QUEUE:
                 rev_product = rev_product[2 * BATCH_SIZE_DEFAULT:, :]
 
         print("==================================================================================")

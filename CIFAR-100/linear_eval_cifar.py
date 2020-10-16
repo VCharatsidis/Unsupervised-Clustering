@@ -41,7 +41,7 @@ np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
 
 FLAGS = None
 
-encoder_name = "cifar100_models\\mixed_disentangle"
+encoder_name = "cifar100_models\\penalty_disentangle"
 
 encoder = torch.load(encoder_name+".model")
 encoder.eval()
