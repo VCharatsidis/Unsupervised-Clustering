@@ -60,9 +60,9 @@ class DeepBinBrainCifar(nn.Module):
 
         self.brain = nn.Sequential(
 
-            # nn.Linear(6400, 4096),
-            # nn.ReLU(),
-            # nn.BatchNorm1d(4096),
+            nn.Linear(4096, 4096),
+            nn.ReLU(),
+            nn.BatchNorm1d(4096),
 
             nn.Linear(4096, EMBEDING_SIZE)
         )

@@ -83,99 +83,6 @@ def save_images(images, transformation):
     save_cluster(numpy_cluster, transformations_dict[transformation], 0)
 
 
-def fix_sobel(sobeled, quarter, image):
-
-    AA = sobeled.reshape(sobeled.size(0), sobeled.size(1) * sobeled.size(2) * sobeled.size(3))
-    AA -= AA.min(1, keepdim=True)[0]
-    AA /= AA.max(1, keepdim=True)[0]
-    AA = AA.view(quarter, image.shape[1], SIZE, SIZE)
-
-    return AA
-
-
-def transformation(id, image):
-    quarter = image.shape[0]
-
-    if id == 0:
-        return color_jitter(image)
-
-    elif id == 1:
-        return scale(image, (image.shape[2] - 8, image.shape[3] - 8), 4, quarter)
-
-    elif id == 2:
-        return rotate(image, 46)
-
-    elif id == 3:
-        return torch.abs(1 - color_jitter(image))
-
-    elif id == 4:
-        sobeled = sobel_total(color_jitter(image), quarter)
-        AA = fix_sobel(sobeled, quarter, image)
-
-        return AA
-
-    elif id == 5:
-        sobeled = sobel_filter_x(color_jitter(image), quarter)
-        AA = fix_sobel(sobeled, quarter, image)
-
-        return AA
-
-    elif id == 6:
-        sobeled = sobel_filter_y(color_jitter(image), quarter)
-        AA = fix_sobel(sobeled, quarter, image)
-
-        return AA
-
-    elif id == 7:
-        return gaussian_blur(image)
-
-    elif id == 8:
-        blured = randcom_crop_upscale_gauss_blur(image, 22, quarter, 22, 32, 32)
-
-        return blured
-
-    elif id == 9:
-        scaled_up = randcom_crop_upscale(image, 22, quarter, 22, 32, 32)
-        sobeled = sobel_total(scaled_up, quarter)
-        AA = fix_sobel(sobeled, quarter, image)
-
-        return AA
-
-    elif id == 10:
-        scaled_up = randcom_crop_upscale(image, 22, quarter, 22, 32, 32)
-        rev = torch.abs(1 - scaled_up)
-        return rev
-
-    elif id == 11:
-        rot = rotate(image, -46)
-        return rot
-
-    elif id == 12:
-        scaled_up = randcom_crop_upscale(image, 20, quarter, 20, 32, 32)
-        return scaled_up
-
-    elif id == 13:
-        scaled_up = randcom_crop_upscale(image, 22, quarter, 22, 32, 32)
-
-        return scaled_up
-
-    elif id == 14:
-        scaled_up = randcom_crop_upscale(image, 26, quarter, 26, 32, 32)
-        return scaled_up
-
-    elif id == 15:
-        scaled_up = randcom_crop_upscale(image, 22, quarter, 22, 32, 32)
-
-        return scaled_up
-
-    elif id == 16:
-        scaled_up = randcom_crop_upscale(image, 18, quarter, 18, 32, 32)
-        return scaled_up
-
-    print("Error in transformation of the image.")
-    return image
-
-
 def another(a, b, total_mean):
     batch_mean = (a.mean(dim=0) + b.mean(dim=1)) / 2
     total_mean = total_mean.cuda() * 0.99 + 0.01 * batch_mean
@@ -196,13 +103,12 @@ def entropy_minmax_loss(a, b, total_mean):
     batch_mean = ((a.mean(dim=0) + b.mean(dim=0)) / 2)
     total_mean = total_mean.cuda() * 0.95 + 0.05 * batch_mean
 
-    product = a * b
-    product_mean = product.mean(dim=0)
+    penalty = (a.sum(dim=0) + b.sum(dim=0)) / 2
 
-    batch_sam = (a.sum(dim=0) + b.sum(dim=0)) / 2
-    result = product_mean / batch_sam
+    p1 = (a * b) / penalty
+    p1 = p1.sum(dim=1)
 
-    log = - torch.log(result + EPS)
+    log = - torch.log(p1)
 
     scalar = log.mean()
 
@@ -217,29 +123,29 @@ def forward_block(X, ids, encoder, optimizer, train, total_mean):
 
     eight = image.shape[0] // 8
 
-    image_1 = transformation(aug_ids[0], image[0:eight])
-    image_2 = transformation(aug_ids[1], image[0:eight])
+    image_1 = transformation(aug_ids[0], image[0:eight], SIZE, SIZE_Y)
+    image_2 = transformation(aug_ids[1], image[0:eight], SIZE, SIZE_Y)
 
-    image_3 = transformation(aug_ids[2], image[eight: 2 * eight])
-    image_4 = transformation(aug_ids[3], image[eight: 2 * eight])
+    image_3 = transformation(aug_ids[2], image[eight: 2 * eight], SIZE, SIZE_Y)
+    image_4 = transformation(aug_ids[3], image[eight: 2 * eight], SIZE, SIZE_Y)
 
-    image_5 = transformation(aug_ids[4], image[2 * eight: 3 * eight])
-    image_6 = transformation(aug_ids[5], image[2 * eight: 3 * eight])
+    image_5 = transformation(aug_ids[4], image[2 * eight: 3 * eight], SIZE, SIZE_Y)
+    image_6 = transformation(aug_ids[5], image[2 * eight: 3 * eight], SIZE, SIZE_Y)
 
-    image_7 = transformation(aug_ids[6], image[3 * eight: 4 * eight])
-    image_8 = transformation(aug_ids[7], image[3 * eight: 4 * eight])
+    image_7 = transformation(aug_ids[6], image[3 * eight: 4 * eight], SIZE, SIZE_Y)
+    image_8 = transformation(aug_ids[7], image[3 * eight: 4 * eight], SIZE, SIZE_Y)
 
-    image_9 = transformation(aug_ids[8], image[4 * eight: 5 * eight])
-    image_10 = transformation(aug_ids[9], image[4 * eight: 5 * eight])
+    image_9 = transformation(aug_ids[8], image[4 * eight: 5 * eight], SIZE, SIZE_Y)
+    image_10 = transformation(aug_ids[9], image[4 * eight: 5 * eight], SIZE, SIZE_Y)
 
-    image_11 = transformation(aug_ids[10], image[5 * eight: 6 * eight])
-    image_12 = transformation(aug_ids[11], image[5 * eight: 6 * eight])
+    image_11 = transformation(aug_ids[10], image[5 * eight: 6 * eight], SIZE, SIZE_Y)
+    image_12 = transformation(aug_ids[11], image[5 * eight: 6 * eight], SIZE, SIZE_Y)
 
-    image_13 = transformation(aug_ids[12], image[6 * eight: 7 * eight])
-    image_14 = transformation(aug_ids[13], image[6 * eight: 7 * eight])
+    image_13 = transformation(aug_ids[12], image[6 * eight: 7 * eight], SIZE, SIZE_Y)
+    image_14 = transformation(aug_ids[13], image[6 * eight: 7 * eight], SIZE, SIZE_Y)
 
-    image_15 = transformation(aug_ids[14], image[7 * eight:])
-    image_16 = transformation(aug_ids[15], image[7 * eight:])
+    image_15 = transformation(aug_ids[14], image[7 * eight:], SIZE, SIZE_Y)
+    image_16 = transformation(aug_ids[15], image[7 * eight:], SIZE, SIZE_Y)
 
     # save_images(image_1, aug_ids[0])
     # save_images(image_2, aug_ids[1])
@@ -290,10 +196,6 @@ def save_image(original_image, index, name, cluster=0):
 
 
 def measure_acc_augments(X_test, encoder, targets):
-    virtual_clusters = {}
-    for i in range(CLASSES):
-        virtual_clusters[i] = []
-
     size = 500
     runs = len(X_test)//size
     avg_loss = 0
@@ -316,8 +218,6 @@ def measure_acc_augments(X_test, encoder, targets):
             verdict = int(index.data.cpu().numpy())
 
             label = targets[test_ids[i]]
-            # if label == 10:
-            #     label = 0
 
             print_dict[label].append(verdict)
             virtual_clusters[verdict].append(label)

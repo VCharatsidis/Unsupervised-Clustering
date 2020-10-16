@@ -107,8 +107,6 @@ def new_agreement(product, denominator, rev_prod):
     attraction = torch.mm(product, product.transpose(0, 1))
     repel = torch.mm(product, transposed)
 
-    denominator = (denominator + denominator.unsqueeze(dim=1)) / 2
-
     attraction = attraction / denominator
     repel = repel / denominator
 
@@ -130,7 +128,7 @@ def queue_agreement(product, denominator, rev_prod):
     transposed = rev_prod.transpose(0, 1)
 
     nondiag = torch.mm(product, transposed)
-    nondiag = nondiag / denominator.unsqueeze(dim=1)
+    nondiag = nondiag / denominator
 
     log_nondiag = - torch.log(nondiag)
     negative = log_nondiag.mean()
@@ -202,6 +200,7 @@ def forward_block(X, ids, encoder, optimizer, train, rev_product):
 
     current_reverse = 1 - all_predictions
     denominator = torch.cat([a.sum(dim=1), b.sum(dim=1)], dim=0)
+    denominator = denominator.unsqueeze(dim=1)
 
     new_loss = new_agreement(all_predictions, denominator, current_reverse)
 
