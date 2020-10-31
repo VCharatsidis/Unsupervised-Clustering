@@ -75,10 +75,11 @@ transformations_dict = {0: "original",
                        15: "no_jitter_random_corpse(image, 22",
                        16: "randcom_crop_upscale(image, 18",
                        17: "random_erase",
-                       18: "image_1",
-                       19: "image_2",
-                       20: "image_3",
-                       21: "image_4"}
+                       18: "noise",
+                       19: "image_1",
+                       20: "image_2",
+                       21: "image_3",
+                       22: "image_4"}
 
 
 labels_to_imags = {}
@@ -193,7 +194,7 @@ def make_transformations(image, aug_ids, iter):
     image_5_a = transformation(aug_ids[12], image[4 * eight: 5 * eight], SIZE, SIZE_Y)
     image_5_b = transformation(aug_ids[13], image[4 * eight: 5 * eight], SIZE, SIZE_Y)
     image_5_c = transformation(aug_ids[14], image[4 * eight: 5 * eight], SIZE, SIZE_Y)
-    image_5_d = transformation(aug_ids[1], image[4 * eight: 5 * eight], SIZE, SIZE_Y)
+    image_5_d = transformation(aug_ids[2], image[4 * eight: 5 * eight], SIZE, SIZE_Y)
 
     image_6_a = transformation(aug_ids[15], image[5 * eight: 6 * eight], SIZE, SIZE_Y)
     image_6_b = transformation(aug_ids[0], image[5 * eight: 6 * eight], SIZE, SIZE_Y)
@@ -207,33 +208,34 @@ def make_transformations(image, aug_ids, iter):
 
     image_8_a = transformation(aug_ids[5], image[7 * eight:], SIZE, SIZE_Y)
     image_8_b = transformation(aug_ids[11], image[7 * eight:], SIZE, SIZE_Y)
-    image_8_c = transformation(aug_ids[12], image[7 * eight:], SIZE, SIZE_Y)
+    image_8_c = transformation(aug_ids[18], image[7 * eight:], SIZE, SIZE_Y)
     image_8_d = transformation(aug_ids[17], image[7 * eight:], SIZE, SIZE_Y)
 
-    # save_images(image_1_a, aug_ids[0])
-    # save_images(image_1_b, aug_ids[1])
-    # save_images(image_1_c, aug_ids[2])
+    # save_images(image_1_a, aug_ids[0], iter)
+    # save_images(image_1_b, aug_ids[1], iter)
+    # save_images(image_1_c, aug_ids[2], iter)
     #
-    # save_images(image_2_a, aug_ids[3])
-    # save_images(image_2_b, aug_ids[4])
-    # save_images(image_2_c, aug_ids[5])
-    # save_images(image_2_d, aug_ids[6])
+    # save_images(image_2_a, aug_ids[3], iter)
+    # save_images(image_2_b, aug_ids[4], iter)
+    # save_images(image_2_c, aug_ids[5], iter)
+    # save_images(image_2_d, aug_ids[6], iter)
     #
-    # save_images(image_3_b, aug_ids[7])
-    # save_images(image_3_c, aug_ids[8])
-    # save_images(image_3_d, aug_ids[9])
+    # save_images(image_3_b, aug_ids[7], iter)
+    # save_images(image_3_c, aug_ids[8], iter)
+    # save_images(image_3_d, aug_ids[9], iter)
     #
-    # save_images(image_4_a, aug_ids[10])
-    # save_images(image_4_c, aug_ids[11])
+    # save_images(image_4_a, aug_ids[10], iter)
+    # save_images(image_4_c, aug_ids[11], iter)
     #
-    # save_images(image_5_a, aug_ids[12])
-    # save_images(image_5_b, aug_ids[13])
-    # save_images(image_5_c, aug_ids[14])
+    # save_images(image_5_a, aug_ids[12], iter)
+    # save_images(image_5_b, aug_ids[13], iter)
+    # save_images(image_5_c, aug_ids[14], iter)
     #
-    # save_images(image_6_a, aug_ids[15])
+    # save_images(image_6_a, aug_ids[15], iter)
     #
-    # save_images(image_4_d, aug_ids[16])
-    # save_images(image_8_d, aug_ids[17])
+    # save_images(image_4_d, aug_ids[16], iter)
+    # save_images(image_8_d, aug_ids[17], iter)
+    #save_images(image_8_c, 18, iter)
 
     image_1 = torch.cat([image_1_a, image_2_a, image_3_a, image_4_a, image_5_a, image_6_a, image_7_a, image_8_a], dim=0)
     image_2 = torch.cat([image_1_b, image_2_b, image_3_b, image_4_b, image_5_b, image_6_b, image_7_b, image_8_b], dim=0)
@@ -241,16 +243,16 @@ def make_transformations(image, aug_ids, iter):
     image_4 = torch.cat([image_1_d, image_2_d, image_3_d, image_4_d, image_5_d, image_6_d, image_7_d, image_8_d], dim=0)
 
     if random.uniform(0, 1) > 0.999:
-        save_images(image_1, 18, iter)
-        save_images(image_2, 19, iter)
-        save_images(image_3, 20, iter)
-        save_images(image_4, 21, iter)
+        save_images(image_1, 19, iter)
+        save_images(image_2, 20, iter)
+        save_images(image_3, 21, iter)
+        save_images(image_4, 22, iter)
 
     return image_1, image_2, image_3, image_4
 
 
 def forward_block(X, ids, encoder, optimizer, train, total_mean, iter):
-    number_transforms = 18
+    number_transforms = 19
     aug_ids = np.random.choice(number_transforms, size=number_transforms, replace=False)
 
     image = X[ids, :]
