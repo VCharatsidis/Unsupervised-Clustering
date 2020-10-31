@@ -31,7 +31,7 @@ LEARNING_RATE_DEFAULT = 1e-4
 
 MAX_STEPS_DEFAULT = 48750
 
-BATCH_SIZE_DEFAULT = 64
+BATCH_SIZE_DEFAULT = 256
 
 #INPUT_NET = 3072
 INPUT_NET = 5120
@@ -74,10 +74,11 @@ transformations_dict = {0: "original",
                        14: "randcom_crop_upscale(image, 26",
                        15: "no_jitter_random_corpse(image, 22",
                        16: "randcom_crop_upscale(image, 18",
-                       17: "image_1",
-                       18: "image_2",
-                       19: "image_3",
-                       20: "image_4",}
+                       17: "random_erase",
+                       18: "image_1",
+                       19: "image_2",
+                       20: "image_3",
+                       21: "image_4"}
 
 
 labels_to_imags = {}
@@ -85,10 +86,10 @@ for i in range(CLASSES):
     labels_to_imags[i] = i
 
 
-def save_images(images, transformation):
+def save_images(images, transformation, iter):
     print(transformations_dict[transformation], " ", transformation)
     numpy_cluster = images.cpu().detach()
-    save_cluster(numpy_cluster, transformations_dict[transformation], transformation)
+    save_cluster(numpy_cluster, transformations_dict[transformation], transformation, iter)
 
 
 def normalized_product_loss(a, b, total_mean):
@@ -165,7 +166,7 @@ def penalized_product(a, b):
     return scalar, penalty
 
 
-def make_transformations(image, aug_ids):
+def make_transformations(image, aug_ids, iter):
 
     eight = image.shape[0] // 8
 
@@ -207,49 +208,53 @@ def make_transformations(image, aug_ids):
     image_8_a = transformation(aug_ids[5], image[7 * eight:], SIZE, SIZE_Y)
     image_8_b = transformation(aug_ids[11], image[7 * eight:], SIZE, SIZE_Y)
     image_8_c = transformation(aug_ids[12], image[7 * eight:], SIZE, SIZE_Y)
-    image_8_d = transformation(aug_ids[15], image[7 * eight:], SIZE, SIZE_Y)
+    image_8_d = transformation(aug_ids[17], image[7 * eight:], SIZE, SIZE_Y)
 
-    save_images(image_1_a, aug_ids[0])
-    save_images(image_1_b, aug_ids[1])
-    save_images(image_1_c, aug_ids[2])
-
-    save_images(image_2_a, aug_ids[3])
-    save_images(image_2_b, aug_ids[4])
-    save_images(image_2_c, aug_ids[5])
-    save_images(image_2_d, aug_ids[6])
-
-    save_images(image_3_b, aug_ids[7])
-    save_images(image_3_c, aug_ids[8])
-    save_images(image_3_d, aug_ids[9])
-
-    save_images(image_4_a, aug_ids[10])
-    save_images(image_4_c, aug_ids[11])
-
-    save_images(image_5_a, aug_ids[12])
-    save_images(image_5_b, aug_ids[13])
-    save_images(image_5_c, aug_ids[14])
-
-    save_images(image_6_a, aug_ids[15])
-
-    save_images(image_4_d, aug_ids[16])
+    # save_images(image_1_a, aug_ids[0])
+    # save_images(image_1_b, aug_ids[1])
+    # save_images(image_1_c, aug_ids[2])
+    #
+    # save_images(image_2_a, aug_ids[3])
+    # save_images(image_2_b, aug_ids[4])
+    # save_images(image_2_c, aug_ids[5])
+    # save_images(image_2_d, aug_ids[6])
+    #
+    # save_images(image_3_b, aug_ids[7])
+    # save_images(image_3_c, aug_ids[8])
+    # save_images(image_3_d, aug_ids[9])
+    #
+    # save_images(image_4_a, aug_ids[10])
+    # save_images(image_4_c, aug_ids[11])
+    #
+    # save_images(image_5_a, aug_ids[12])
+    # save_images(image_5_b, aug_ids[13])
+    # save_images(image_5_c, aug_ids[14])
+    #
+    # save_images(image_6_a, aug_ids[15])
+    #
+    # save_images(image_4_d, aug_ids[16])
+    # save_images(image_8_d, aug_ids[17])
 
     image_1 = torch.cat([image_1_a, image_2_a, image_3_a, image_4_a, image_5_a, image_6_a, image_7_a, image_8_a], dim=0)
     image_2 = torch.cat([image_1_b, image_2_b, image_3_b, image_4_b, image_5_b, image_6_b, image_7_b, image_8_b], dim=0)
     image_3 = torch.cat([image_1_c, image_2_c, image_3_c, image_4_c, image_5_c, image_6_c, image_7_c, image_8_c], dim=0)
     image_4 = torch.cat([image_1_d, image_2_d, image_3_d, image_4_d, image_5_d, image_6_d, image_7_d, image_8_d], dim=0)
 
-    save_images(image_1, 17)
-    save_images(image_2, 18)
+    if random.uniform(0, 1) > 0.999:
+        save_images(image_1, 18, iter)
+        save_images(image_2, 19, iter)
+        save_images(image_3, 20, iter)
+        save_images(image_4, 21, iter)
 
     return image_1, image_2, image_3, image_4
 
 
-def forward_block(X, ids, encoder, optimizer, train, total_mean):
-    number_transforms = 17
+def forward_block(X, ids, encoder, optimizer, train, total_mean, iter):
+    number_transforms = 18
     aug_ids = np.random.choice(number_transforms, size=number_transforms, replace=False)
 
     image = X[ids, :]
-    image_1, image_2, image_3, image_4 = make_transformations(image, aug_ids)
+    image_1, image_2, image_3, image_4 = make_transformations(image, aug_ids, iter)
 
     _, logit_a, a = encoder(image_1.to('cuda'))
     _, logit_b, b = encoder(image_2.to('cuda'))
@@ -268,11 +273,11 @@ def forward_block(X, ids, encoder, optimizer, train, total_mean):
     return a, b, total_loss, total_mean
 
 
-def save_cluster(original_image, cluster, transf):
+def save_cluster(original_image, cluster, transf, iter):
     sample = original_image.view(-1, original_image.shape[1], original_image.shape[2], original_image.shape[3])
     #sample = original_image.view(-1, 1, original_image.shape[2], original_image.shape[3])
     sample = make_grid(sample, nrow=8).detach().numpy().astype(np.float).transpose(1, 2, 0)
-    matplotlib.image.imsave(f"transf_{transf}_c_{cluster}.png", sample)
+    matplotlib.image.imsave(f"iter_{iter}_transf_{transf}_c_{cluster}.png", sample)
 
 
 def save_image(original_image, index, name, cluster=0):
@@ -474,7 +479,7 @@ def train():
 
         ids = np.random.choice(len(X_train), size=BATCH_SIZE_DEFAULT, replace=False)
         train = True
-        probs10, probs10_b, total_loss, total_mean = forward_block(X_train, ids, encoder, optimizer, train, total_mean)
+        probs10, probs10_b, total_loss, total_mean = forward_block(X_train, ids, encoder, optimizer, train, total_mean, iteration)
         avg_loss += total_loss.item()
 
         if iteration % EVAL_FREQ_DEFAULT == 0:

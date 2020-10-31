@@ -27,6 +27,22 @@ class AddGaussianNoise(object):
 
 horiz_flip = transforms.RandomHorizontalFlip(0.5)
 jitter = transforms.ColorJitter(brightness=0.45, contrast=0.45, saturation=0.45, hue=0.45)
+erase = RandomErasing()
+resize = transforms.Resize(size=(32, 32))
+rd_rotate = transforms.RandomRotation(degrees=[-46, 46])
+
+random_crop_26 = transforms.RandomCrop(size=(26, 26))
+random_crop_22 = transforms.RandomCrop(size=(22, 22))
+random_crop_20 = transforms.RandomCrop(size=(20, 20))
+random_crop_18 = transforms.RandomCrop(size=(18, 18))
+
+b = torch.Tensor([[1, 2, 1],
+                  [0, 0, 0],
+                  [-1, -2, -1]])
+
+a = torch.Tensor([[1, 0, -1],
+                  [2, 0, -2],
+                  [1, 0, -1]])
 
 
 def gaussian_blur(X):
@@ -65,8 +81,8 @@ def no_jitter_rotate(X, degrees):
     X_copy = Variable(torch.FloatTensor(X_copy))
 
     # transformation = transforms.RandomRotation(degrees=[-degrees, degrees], fill=(0,))
-    transformation = transforms.RandomRotation(degrees=[-degrees, degrees])
-    trans = transforms.Compose([horiz_flip, transformation, transforms.ToTensor()])
+    #transformation = transforms.RandomRotation(degrees=[-degrees, degrees])
+    trans = transforms.Compose([horiz_flip, rd_rotate, transforms.ToTensor()])
 
     for i in range(X_copy.shape[0]):
         a = F.to_pil_image(X_copy[i])
@@ -80,8 +96,8 @@ def rotate(X, degrees):
     X_copy = Variable(torch.FloatTensor(X_copy))
 
     # transformation = transforms.RandomRotation(degrees=[-degrees, degrees], fill=(0,))
-    transformation = transforms.RandomRotation(degrees=[-degrees, degrees])
-    trans = transforms.Compose([horiz_flip, jitter, transformation, transforms.ToTensor()])
+    #transformation = transforms.RandomRotation(degrees=[-degrees, degrees])
+    trans = transforms.Compose([horiz_flip, jitter, rd_rotate, transforms.ToTensor()])
 
     for i in range(X_copy.shape[0]):
         a = F.to_pil_image(X_copy[i])
@@ -166,8 +182,8 @@ def scale_up(X, size, size_y, batch_size):
     X_copy = copy.deepcopy(X)
     X_put = torch.zeros([batch_size, X.shape[1], size, size_y])
 
-    transformation = transforms.Resize(size=(size, size_y))
-    trans = transforms.Compose([transformation, transforms.ToTensor()])
+    #transformation = transforms.Resize(size=(size, size_y))
+    trans = transforms.Compose([resize, transforms.ToTensor()])
 
     for i in range(X_copy.shape[0]):
         a = F.to_pil_image(X_copy[i])
@@ -201,8 +217,8 @@ def scale(X, size, pad, batch_size=BATCH_SIZE_DEFAULT):
     #     size = 20
     #     pad = 4
 
-    transformation = transforms.Resize(size=size, interpolation=2)
-    trans = transforms.Compose([horiz_flip, jitter, transformation, transforms.Pad(pad), transforms.ToTensor()])
+    scale = transforms.Resize(size=size, interpolation=2)
+    trans = transforms.Compose([horiz_flip, jitter, scale, transforms.Pad(pad), transforms.ToTensor()])
 
     for i in range(X_copy.shape[0]):
         a = F.to_pil_image(X_copy[i])
@@ -221,14 +237,10 @@ def sobel_total(X, batch_size, one_dim=False):
 
 
 def sobel_filter_y(X, batch_size, one_dim=False):
-    b = torch.Tensor([[1, 2, 1],
-                      [0, 0, 0],
-                      [-1, -2, -1]])
-
-    b = b.view((1, 1, 3, 3)).expand(1, X.shape[1], 3, 3)
+    b_view = b.view((1, 1, 3, 3)).expand(1, X.shape[1], 3, 3)
 
     conv2 = nn.Conv2d(in_channels=X.shape[1], out_channels=1, kernel_size=3, stride=1, padding=1, bias=False)
-    conv2.weight = nn.Parameter(b)
+    conv2.weight = nn.Parameter(b_view)
 
     G_y = conv2(Variable(X)).data.view(batch_size, 1, X.shape[2],  X.shape[3])
 
@@ -236,14 +248,10 @@ def sobel_filter_y(X, batch_size, one_dim=False):
 
 
 def sobel_filter_x(X, batch_size, one_dim=False):
-    a = torch.Tensor([[1, 0, -1],
-                      [2, 0, -2],
-                      [1, 0, -1]])
-
-    a = a.view((1, 1, 3, 3)).expand(1, X.shape[1], 3, 3)
+    a_view = a.view((1, 1, 3, 3)).expand(1, X.shape[1], 3, 3)
 
     conv1 = nn.Conv2d(in_channels=X.shape[1], out_channels=1, kernel_size=3, stride=1, padding=1, bias=False)
-    conv1.weight = nn.Parameter(a)
+    conv1.weight = nn.Parameter(a_view)
 
     G_x = conv1(Variable(X)).data.view(batch_size, 1, X.shape[2], X.shape[3])
 
@@ -298,8 +306,7 @@ def random_erease(X, batch_size=BATCH_SIZE_DEFAULT):
     X_copy = copy.deepcopy(X)
     X_copy = Variable(torch.FloatTensor(X_copy))
 
-    transformation = RandomErasing()
-    trans = transforms.Compose([horiz_flip, jitter, transforms.ToTensor(), transformation])
+    trans = transforms.Compose([horiz_flip, jitter, transforms.ToTensor(), erase])
 
     for i in range(X_copy.shape[0]):
         a = F.to_pil_image(X_copy[i])
@@ -340,10 +347,7 @@ def no_jitter_random_corpse(X, size, batch_size, size_y, up_size_x, up_size_y):
     X_copy = copy.deepcopy(X)
     X_copy = Variable(torch.FloatTensor(X_copy))
 
-    random_crop = transforms.RandomCrop(size=(size, size_y))
-    resize = transforms.Resize(size=(up_size_x, up_size_y))
-
-    trans = transforms.Compose([horiz_flip, random_crop, resize, transforms.ToTensor()])
+    trans = transforms.Compose([horiz_flip, random_crop_22, resize, transforms.ToTensor()])
 
     for i in range(X_copy.shape[0]):
         a = F.to_pil_image(X_copy[i])
@@ -352,14 +356,11 @@ def no_jitter_random_corpse(X, size, batch_size, size_y, up_size_x, up_size_y):
     return X_copy
 
 
-def randcom_crop_upscale(X, size, batch_size, size_y, up_size_x, up_size_y):
+def randcom_crop_upscale_26(X, size, batch_size, size_y, up_size_x, up_size_y):
     X_copy = copy.deepcopy(X)
     X_copy = Variable(torch.FloatTensor(X_copy))
 
-    random_crop = transforms.RandomCrop(size=(size, size_y))
-    resize = transforms.Resize(size=(up_size_x, up_size_y))
-
-    trans = transforms.Compose([horiz_flip, jitter, random_crop, resize, transforms.ToTensor()])
+    trans = transforms.Compose([horiz_flip, jitter, random_crop_26, resize, transforms.ToTensor()])
 
     for i in range(X_copy.shape[0]):
         a = F.to_pil_image(X_copy[i])
@@ -368,21 +369,59 @@ def randcom_crop_upscale(X, size, batch_size, size_y, up_size_x, up_size_y):
     return X_copy
 
 
-def rc_upscale_rotate(X, size, batch_size, size_y, up_size_x, up_size_y, degrees):
+def randcom_crop_upscale_22(X, size, batch_size, size_y, up_size_x, up_size_y):
     X_copy = copy.deepcopy(X)
     X_copy = Variable(torch.FloatTensor(X_copy))
 
-    random_crop = transforms.RandomCrop(size=(size, size_y))
-    resize = transforms.Resize(size=(up_size_x, up_size_y))
-    rotate = transforms.RandomRotation(degrees=[-degrees, degrees])
-
-    trans = transforms.Compose([horiz_flip, jitter, random_crop, resize, rotate, transforms.ToTensor()])
+    trans = transforms.Compose([horiz_flip, jitter, random_crop_22, resize, transforms.ToTensor()])
 
     for i in range(X_copy.shape[0]):
         a = F.to_pil_image(X_copy[i])
         X_copy[i] = trans(a)
 
     return X_copy
+
+
+def randcom_crop_upscale_20(X, size, batch_size, size_y, up_size_x, up_size_y):
+    X_copy = copy.deepcopy(X)
+    X_copy = Variable(torch.FloatTensor(X_copy))
+
+    trans = transforms.Compose([horiz_flip, jitter, random_crop_20, resize, transforms.ToTensor()])
+
+    for i in range(X_copy.shape[0]):
+        a = F.to_pil_image(X_copy[i])
+        X_copy[i] = trans(a)
+
+    return X_copy
+
+
+def randcom_crop_upscale_18(X, size, batch_size, size_y, up_size_x, up_size_y):
+    X_copy = copy.deepcopy(X)
+    X_copy = Variable(torch.FloatTensor(X_copy))
+
+    trans = transforms.Compose([horiz_flip, jitter, random_crop_18, resize, transforms.ToTensor()])
+
+    for i in range(X_copy.shape[0]):
+        a = F.to_pil_image(X_copy[i])
+        X_copy[i] = trans(a)
+
+    return X_copy
+
+
+# def rc_upscale_rotate(X, size, batch_size, size_y, up_size_x, up_size_y, degrees):
+#     X_copy = copy.deepcopy(X)
+#     X_copy = Variable(torch.FloatTensor(X_copy))
+#
+#     random_crop = transforms.RandomCrop(size=(size, size_y))
+#     #resize = transforms.Resize(size=(up_size_x, up_size_y))
+#
+#     trans = transforms.Compose([horiz_flip, jitter, random_crop, resize, rotate, transforms.ToTensor()])
+#
+#     for i in range(X_copy.shape[0]):
+#         a = F.to_pil_image(X_copy[i])
+#         X_copy[i] = trans(a)
+#
+#     return X_copy
 
 
 def randcom_crop_upscale_gauss_blur(X, size, batch_size, size_y, up_size_x, up_size_y):
@@ -393,11 +432,9 @@ def randcom_crop_upscale_gauss_blur(X, size, batch_size, size_y, up_size_x, up_s
     if random.uniform(0, 1) > 0.5:
         radius = 1
 
-    random_crop = transforms.RandomCrop(size=(size, size_y))
-    resize = transforms.Resize(size=(up_size_x, up_size_y))
     gaussian = transforms.Compose([GaussianSmoothing([0, radius])])
 
-    trans = transforms.Compose([horiz_flip, jitter, random_crop, resize, gaussian, transforms.ToTensor()])
+    trans = transforms.Compose([horiz_flip, jitter, random_crop_22, resize, gaussian, transforms.ToTensor()])
 
     for i in range(X_copy.shape[0]):
         a = F.to_pil_image(X_copy[i])
@@ -406,36 +443,36 @@ def randcom_crop_upscale_gauss_blur(X, size, batch_size, size_y, up_size_x, up_s
     return X_copy
 
 
-def just_random_crop(X, size, batch_size, size_y):
-    X_copy = copy.deepcopy(X)
-    X_copy = Variable(torch.FloatTensor(X_copy))
+# def just_random_crop(X, size, batch_size, size_y):
+#     X_copy = copy.deepcopy(X)
+#     X_copy = Variable(torch.FloatTensor(X_copy))
+#
+#     X_res = torch.zeros([batch_size, X.shape[1], size, size_y])
+#
+#     transformation = transforms.RandomCrop(size=(size, size_y))
+#     trans = transforms.Compose([transformation, transforms.ToTensor()])
+#
+#     for i in range(X_copy.shape[0]):
+#         a = F.to_pil_image(X_copy[i])
+#         X_res[i] = trans(a)
+#
+#     return X_res
 
-    X_res = torch.zeros([batch_size, X.shape[1], size, size_y])
 
-    transformation = transforms.RandomCrop(size=(size, size_y))
-    trans = transforms.Compose([transformation, transforms.ToTensor()])
-
-    for i in range(X_copy.shape[0]):
-        a = F.to_pil_image(X_copy[i])
-        X_res[i] = trans(a)
-
-    return X_res
-
-
-def random_crop(X, size, batch_size, size_y):
-    X_copy = copy.deepcopy(X)
-    X_copy = Variable(torch.FloatTensor(X_copy))
-
-    X_res = torch.zeros([batch_size, X.shape[1], size, size_y])
-
-    transformation = transforms.RandomCrop(size=(size, size_y))
-    trans = transforms.Compose([horiz_flip, jitter, transformation, transforms.ToTensor()])
-
-    for i in range(X_copy.shape[0]):
-        a = F.to_pil_image(X_copy[i])
-        X_res[i] = trans(a)
-
-    return X_res
+# def random_crop(X, size, batch_size, size_y):
+#     X_copy = copy.deepcopy(X)
+#     X_copy = Variable(torch.FloatTensor(X_copy))
+#
+#     X_res = torch.zeros([batch_size, X.shape[1], size, size_y])
+#
+#     transformation = transforms.RandomCrop(size=(size, size_y))
+#     trans = transforms.Compose([horiz_flip, jitter, transformation, transforms.ToTensor()])
+#
+#     for i in range(X_copy.shape[0]):
+#         a = F.to_pil_image(X_copy[i])
+#         X_res[i] = trans(a)
+#
+#     return X_res
 
 
 def to_tensor(X):
@@ -599,14 +636,14 @@ def transformation(id, image, size_x, size_y):
         return blured
 
     elif id == 9:
-        scaled_up = randcom_crop_upscale(image, 22, quarter, 22, 32, 32)
+        scaled_up = randcom_crop_upscale_22(image, 22, quarter, 22, 32, 32)
         sobeled = sobel_total(scaled_up, quarter)
         AA = fix_sobel(sobeled, quarter, image, size_x, size_y)
 
         return AA
 
     elif id == 10:
-        scaled_up = randcom_crop_upscale(image, 22, quarter, 22, 32, 32)
+        scaled_up = randcom_crop_upscale_22(image, 22, quarter, 22, 32, 32)
         rev = torch.abs(1 - scaled_up)
         return rev
 
@@ -615,16 +652,16 @@ def transformation(id, image, size_x, size_y):
         return rot
 
     elif id == 12:
-        scaled_up = randcom_crop_upscale(image, 20, quarter, 20, 32, 32)
+        scaled_up = randcom_crop_upscale_20(image, 20, quarter, 20, 32, 32)
         return scaled_up
 
     elif id == 13:
-        scaled_up = randcom_crop_upscale(image, 22, quarter, 22, 32, 32)
+        scaled_up = randcom_crop_upscale_22(image, 22, quarter, 22, 32, 32)
 
         return scaled_up
 
     elif id == 14:
-        scaled_up = randcom_crop_upscale(image, 26, quarter, 26, 32, 32)
+        scaled_up = randcom_crop_upscale_26(image, 26, quarter, 26, 32, 32)
         return scaled_up
 
     elif id == 15:
@@ -633,7 +670,11 @@ def transformation(id, image, size_x, size_y):
         return scaled_up
 
     elif id == 16:
-        scaled_up = randcom_crop_upscale(image, 18, quarter, 18, 32, 32)
+        scaled_up = randcom_crop_upscale_18(image, 18, quarter, 18, 32, 32)
+        return scaled_up
+
+    elif id == 17:
+        scaled_up = random_erease(image)
         return scaled_up
 
     print("Error in transformation of the image.")

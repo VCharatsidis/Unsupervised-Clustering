@@ -21,7 +21,7 @@ class RandomErasing(object):
     -------------------------------------------------------------------------------------
     '''
 
-    def __init__(self, probability=1, sl=0.02, sh=0.3, r1=0.3, mean=[0, 0, 0]):
+    def __init__(self, probability=1, sl=0.1, sh=0.25, r1=0.3, mean=[0, 0, 0]):
         self.probability = probability
         self.mean = mean
         self.sl = sl
@@ -34,6 +34,7 @@ class RandomErasing(object):
             return img
 
         for attempt in range(100):
+
             area = img.size()[1] * img.size()[2]
 
             target_area = random.uniform(self.sl, self.sh) * area
