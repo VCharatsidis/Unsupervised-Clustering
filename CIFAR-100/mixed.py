@@ -29,9 +29,9 @@ LEARNING_RATE_DEFAULT = 1e-4
 
 MAX_STEPS_DEFAULT = 500000
 
-BATCH_SIZE_DEFAULT = 512
+BATCH_SIZE_DEFAULT = 128
 
-EMBEDINGS = 4096
+EMBEDINGS = 256
 SIZE = 32
 SIZE_Y = 32
 NETS = 1
@@ -104,27 +104,29 @@ def new_agreement(product, denominator, rev_prod, class_adj_matrix):
     attraction = torch.mm(product, product.transpose(0, 1))
     repel = torch.mm(product, transposed)
 
-    denominator = denominator + denominator.unsqueeze(dim=1)
+    denominator = denominator.unsqueeze(dim=1)
 
     attraction = attraction / denominator
     repel = repel / denominator
 
-    total_matrix = repel * adj_matrix + attraction * (1 - adj_matrix)
-    #total_matrix[(total_matrix < EPS).data] = EPS
+    total_matrix = repel * class_adj_matrix + attraction * (1 - class_adj_matrix)
+    total_matrix[(total_matrix < EPS).data] = EPS
 
     log_total = - torch.log(total_matrix)
 
-    diagonal_elements_bonus = ZERO_BIG_DIAG * (BATCH_SIZE_DEFAULT - 1) * (1 - adj_matrix) * log_total
+    diagonal_elements_bonus = ZERO_BIG_DIAG * 5 * (1 - class_adj_matrix) * log_total
 
     total = log_total + diagonal_elements_bonus
 
-    zero_out_same_class_elements = total * class_adj_matrix.detach().cuda()
+    total = total.mean()
 
-    sum_non_zero_elements = class_adj_matrix.detach().sum()
+    # zero_out_same_class_elements = total * class_adj_matrix.detach().cuda()
+    #
+    # sum_non_zero_elements = class_adj_matrix.detach().sum()
+    #
+    # total_cleaned = zero_out_same_class_elements.sum() / sum_non_zero_elements.cuda()
 
-    total_cleaned = zero_out_same_class_elements.sum() / sum_non_zero_elements.cuda()
-
-    return total_cleaned
+    return total
 
 
 def queue_agreement(product, denominator, rev_prod):
@@ -208,15 +210,16 @@ def forward_block(X, ids, encoder, optimizer, train, rev_product, moving_mean):
     #round_max = torch.round(max_elems).mean()
     classification_loss, current_mean = class_mean_probs_loss(c_a, c_b, moving_mean)
 
-    max_mean, _ = moving_mean.max(dim=0)
-    current_max, _ = current_mean.max(dim=0)
+    # max_mean, _ = moving_mean.max(dim=0)
+    # current_max, _ = current_mean.max(dim=0)
 
-    if max_mean > 1.5 * moving_mean.mean() or max_mean < 0.5 or current_max > 10 * current_mean.mean():
-        class_adj_m = torch.ones(2*BATCH_SIZE_DEFAULT, 2*BATCH_SIZE_DEFAULT)
-    else:
-        print("mask used")
-        class_adj_m = class_adj_matrix(labels)
+    # if max_mean > 1.5 * moving_mean.mean() or max_mean < 0.5 or current_max > 10 * current_mean.mean():
+    #     class_adj_m = torch.ones(2*BATCH_SIZE_DEFAULT, 2*BATCH_SIZE_DEFAULT)
+    # else:
+    #     print("mask used")
+    #     class_adj_m = class_adj_matrix(labels)
 
+    class_adj_m = class_adj_matrix(labels)
     new_loss = new_agreement(all_predictions, denominator, current_reverse, class_adj_m)
 
     if first or not train:
@@ -262,12 +265,11 @@ def class_adj_matrix(labels):
 
     labels_vertical = labels.unsqueeze(dim=1)
     square[(labels == labels_vertical).data] = 0
-    square.fill_diagonal_(1)
 
     first_part = torch.cat([square, square], dim=1)
     class_adj_matrix = torch.cat([first_part, first_part], dim=0)
 
-    return class_adj_matrix
+    return class_adj_matrix.cuda()
 
 
 def class_mean_probs_loss(a, b, moving_mean):
@@ -277,7 +279,7 @@ def class_mean_probs_loss(a, b, moving_mean):
     batch_sam = (a.mean(dim=0) + b.mean(dim=0)) / 2
     result = current_mean / batch_sam
 
-    interpolation = moving_mean.detach().cuda() * 0.95 + result * 0.05
+    interpolation = moving_mean.detach().cuda() * 0.8 + result * 0.2
 
     log = - torch.log(interpolation + EPS)
     scalar = log.mean()

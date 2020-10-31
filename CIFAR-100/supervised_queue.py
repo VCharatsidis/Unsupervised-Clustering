@@ -8,7 +8,8 @@ import sys
 import argparse
 import os
 
-from SupervisedNetCifar import SupervisedNetCifar
+from binary_net import DeepBinBrainCifar
+#from AlexNet import AlexNet
 
 from stl_utils import *
 import random
@@ -20,16 +21,17 @@ import pickle
 np.set_printoptions(formatter={'float': lambda x: "{0:0.4f}".format(x)})
 np.set_printoptions(threshold=sys.maxsize)
 torch.set_printoptions(threshold=sys.maxsize)
+torch.set_printoptions(sci_mode=False)
 
 EPS = sys.float_info.epsilon
 
-#EPS=sys.float_info.epsilon
 LEARNING_RATE_DEFAULT = 1e-4
 
 MAX_STEPS_DEFAULT = 500000
 
-BATCH_SIZE_DEFAULT = 128
+BATCH_SIZE_DEFAULT = 100
 
+EMBEDINGS = 100
 SIZE = 32
 SIZE_Y = 32
 NETS = 1
@@ -38,17 +40,24 @@ EPOCHS = 1000
 
 CLASSES = 100
 DESCRIPTION = " Image size: " + str(SIZE) + " , Classes: " + str(CLASSES)
+QUEUE = 50
 
 EVAL_FREQ_DEFAULT = 250
 MIN_CLUSTERS_TO_SAVE = 10
 np.set_printoptions(formatter={'float': lambda x: "{0:0.4f}".format(x)})
 FLAGS = None
 
-loss = nn.CrossEntropyLoss()
-# square = torch.ones(BATCH_SIZE_DEFAULT, BATCH_SIZE_DEFAULT)
-# ZERO_DIAG = square.fill_diagonal_(0)
+square = torch.ones(BATCH_SIZE_DEFAULT, BATCH_SIZE_DEFAULT)
+ZERO_DIAG = square.fill_diagonal_(0)
+first_part = torch.cat([ZERO_DIAG, ZERO_DIAG], dim=1)
+adj_matrix = torch.cat([first_part, first_part], dim=0)
+adj_matrix = adj_matrix.cuda()
 
-ELEMENTS_EXCEPT_DIAG = BATCH_SIZE_DEFAULT * (BATCH_SIZE_DEFAULT - 1)
+big_diag = torch.ones(2 * BATCH_SIZE_DEFAULT, 2 * BATCH_SIZE_DEFAULT)
+ZERO_BIG_DIAG = big_diag.fill_diagonal_(0)
+ZERO_BIG_DIAG = ZERO_BIG_DIAG.cuda()
+
+#ELEMENTS_EXCEPT_DIAG = 2 * BATCH_SIZE_DEFAULT * (BATCH_SIZE_DEFAULT - 1)
 
 first = True
 
@@ -60,20 +69,23 @@ for i in range(CLASSES):
 class_numbers = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 0: 0}
 
 
-transformations_dict = {0: "original",
-                       1: "scale",
-                       2: "rotate",
-                       3: "reverse pixel value",
-                       4: "sobel total",
-                       5: "sobel x",
-                       6: "sobel y",
-                       7: "gaussian blur",
-                       8: "random crop",
-                       9: "random crop",
-                       10: "random crop",
-                       11: "random crop",
-                       12: "image 1",
-                       13: "image 2"}
+transformations_dict = {0: "original 0",
+                       1: "scale 1",
+                       2: "rotate 2",
+                       3: "reverse pixel value 3",
+                       4: "sobel total 4",
+                       5: "sobel x 5",
+                       6: "sobel y 6",
+                       7: "gaussian blur 7",
+                       8: "randcom_crop_upscale_gauss_blur 8",
+                       9: "randcom_crop_upscale sobel 9",
+                       10: "random crop reverse pixel 10",
+                       11: "random crop rotate 11",
+                       12: "random crop soble rotate 12",
+                       13: "randcom_crop_upscale 13",
+                       14: "randcom_crop_upscale 14",
+                       15:"randcom_crop_upscale sobel y 15",
+                       16: " randcom crop 18x18 16"}
 
 
 labels_to_imags = {}
@@ -87,51 +99,60 @@ def save_images(images, transformation):
     save_cluster(numpy_cluster, transformations_dict[transformation], 0)
 
 
-def new_agreement(product, denominator, rev_prod):
-    transposed = rev_prod.transpose(0, 1)
+def new_agreement(product, denominator, rev_prod, class_adj_matrix):
+    prod_2 = 1 - rev_prod
+    attraction = torch.mm(product, prod_2.transpose(0, 1))
+    repel = torch.mm(product, rev_prod.transpose(0, 1))
 
-    nondiag = torch.mm(product, transposed)
-    nondiag = nondiag / denominator.unsqueeze(dim=1)
+    attraction = attraction / denominator
+    repel = repel / denominator
 
-    log_nondiag = - torch.log(nondiag)
+    total_matrix = repel * class_adj_matrix + attraction * (1 - class_adj_matrix)
 
-    negative = log_nondiag.mean()
+    total_matrix[(total_matrix < EPS).data] = EPS
+    log_total = - torch.log(total_matrix)
 
-    return negative
+    attraction_bonus = 10 * (1 - class_adj_matrix) * log_total
 
+    total = log_total + attraction_bonus
 
-def queue_agreement(product, denominator, rev_prod):
-    transposed = rev_prod.transpose(0, 1)
-
-    nondiag = torch.mm(product, transposed)
-    nondiag = nondiag / denominator.unsqueeze(dim=1)
-
-    log_nondiag = - torch.log(nondiag)
-    negative = log_nondiag.mean()
-
-    return negative
+    return total.mean()
 
 
-# def forward_block(X, y_train, ids, encoder, optimizer, train, rev_product):
-#     global first
-#
-#     image = X[ids, :]
-#
-#     _, _, a = encoder(image.to('cuda'))
-#
-#     y_train = Variable(torch.LongTensor(y_train[ids])).cuda()
-#
-#     cross_entropy_loss = loss(a, y_train)
-#
-#     if train:
-#         optimizer.zero_grad()
-#         cross_entropy_loss.backward()
-#         optimizer.step()
-#
-#     return a, a, cross_entropy_loss, rev_product
+def class_old_adj_matrix(labels, old_labels):
+    square = torch.ones(BATCH_SIZE_DEFAULT, len(old_labels)).cuda()
+
+    square[(labels.unsqueeze(dim=1) == old_labels).data] = 0
+
+    # print(square)
+    # print(labels.unsqueeze(dim=1))
+    # print(old_labels)
+    # input()
+
+    #class_adj_matrix = torch.cat([square, square], dim=1)
+    class_adj_matrix = torch.cat([square, square], dim=0)
+
+    return class_adj_matrix
 
 
-def forward_block(X, y_train, ids, encoder, optimizer, train, rev_product):
+def class_adj_matrix(labels):
+    square = torch.ones(BATCH_SIZE_DEFAULT, BATCH_SIZE_DEFAULT).cuda()
+
+    labels_vertical = labels.unsqueeze(dim=1)
+    square[(labels == labels_vertical).data] = 0
+
+    first_part = torch.cat([square, square], dim=1)
+    class_adj_matrix = torch.cat([first_part, first_part], dim=0)
+
+    # print(square)
+    # print(labels.unsqueeze(dim=1))
+    # print(labels)
+    # input()
+
+    return class_adj_matrix
+
+
+def forward_block(X, ids, encoder, optimizer, train, rev_product, y, old_ids):
     global first
     number_transforms = 17
     aug_ids = np.random.choice(number_transforms, size=number_transforms, replace=False)
@@ -181,6 +202,7 @@ def forward_block(X, y_train, ids, encoder, optimizer, train, rev_product):
     # save_images(image_15, aug_ids[14])
     # save_images(image_16, aug_ids[15])
 
+    #image_1 = image
     #image_1 = torch.cat([image_1, image_3, image_5, image_7, image_9, image_11, image_13, image_15], dim=0)
     image_2 = torch.cat([image_2, image_4, image_6, image_8, image_10, image_12, image_14, image_16], dim=0)
 
@@ -192,27 +214,46 @@ def forward_block(X, y_train, ids, encoder, optimizer, train, rev_product):
 
     all_predictions = torch.cat([a, b], dim=0)
 
-    y_train = Variable(torch.LongTensor(y_train[ids])).cuda()
-    targets = torch.cat([y_train, y_train], dim=0)
+    current_reverse = 1 - all_predictions
+    denominator = torch.cat([a.sum(dim=1), b.sum(dim=1)], dim=0)
+    denominator = denominator.unsqueeze(dim=1)
 
-    cross_entropy_loss = loss(all_predictions, targets)
+    class_adj_m = class_adj_matrix(y[ids])
+    new_loss = new_agreement(all_predictions, denominator, current_reverse, class_adj_m)
+
+    if first or not train:
+        # print("first: ", first)
+        total_loss = new_loss
+        rev_product = current_reverse.detach()
+        first = False
+
+    else:
+        # print("queue_agreement")
+        old_adj_m = class_old_adj_matrix(y[ids], y[old_ids])
+
+        old_loss = new_agreement(all_predictions, denominator, rev_product, old_adj_m)
+        rev_product = torch.cat([rev_product, current_reverse.detach()])
+        total_loss = new_loss + old_loss
 
     if train:
+        old_ids.extend(ids)
+        old_ids.extend(ids)
+
         optimizer.zero_grad()
-        cross_entropy_loss.backward()
+        total_loss.backward()
         optimizer.step()
 
-    return a, b, cross_entropy_loss, rev_product
+    return a, b, total_loss, rev_product, old_ids
 
 
 def save_cluster(original_image, cluster, iteration):
-    sample = original_image.view(-1, 1, original_image.shape[2], original_image.shape[3])
+    sample = original_image.view(-1, original_image.shape[1], original_image.shape[2], original_image.shape[3])
     sample = make_grid(sample, nrow=8).detach().numpy().astype(np.float).transpose(1, 2, 0)
     matplotlib.image.imsave(f"iter_{iteration}_c_{cluster}.png", sample)
 
 
 def save_image(original_image, index, name, cluster=0):
-    sample = original_image.view(-1, 1, original_image.shape[2], original_image.shape[3])
+    sample = original_image.view(-1, original_image.shape[1], original_image.shape[2], original_image.shape[3])
     sample = make_grid(sample, nrow=8).detach().numpy().astype(np.float).transpose(1, 2, 0)
     matplotlib.image.imsave(f"gen_images/c_{cluster}/{name}_index_{index}.png", sample)
 
@@ -228,7 +269,7 @@ def measure_acc_augments(x_test, encoder, rev_product, targets):
         test_ids = range(j * size, (j + 1) * size)
 
         with torch.no_grad():
-            test_preds_1, test_preds_2, test_total_loss, rev_product = forward_block(x_test, targets, test_ids, encoder, [], False, rev_product)
+            test_preds_1, test_preds_2, test_total_loss, rev_product, old_ids = forward_block(x_test, test_ids, encoder, [], False, rev_product, targets, [])
 
         sum_loss += test_total_loss.item()
 
@@ -269,22 +310,25 @@ def unpickle(file):
 
 def train():
     global first
-    with open('..\\data\\train', 'rb') as fo:
+    with open('data\\train', 'rb') as fo:
         res = pickle.load(fo, encoding='bytes')
 
-    meta = unpickle('..\\data\\meta')
+    meta = unpickle('data\\meta')
 
     fine_label_names = [t.decode('utf8') for t in meta[b'fine_label_names']]
 
-    train = unpickle('..\\data\\train')
+    train = unpickle('data\\train')
 
     filenames = [t.decode('utf8') for t in train[b'filenames']]
+    y_train = train[b'fine_labels']
+    y_train = torch.from_numpy(np.array(y_train))
     train_data = train[b'data']
 
-    test = unpickle('..\\data\\test')
+    test = unpickle('data\\test')
 
     filenames = [t.decode('utf8') for t in test[b'filenames']]
     targets = test[b'fine_labels']
+    targets = torch.from_numpy(np.array(targets))
     test_data = test[b'data']
 
     X_train = list()
@@ -297,9 +341,6 @@ def train():
 
     X_train = np.array(X_train)
     X_train = preproccess_cifar(X_train)
-
-    y_train = train[b'fine_labels']
-    y_train = np.array(y_train)
 
     print("train shape", X_train.shape)
 
@@ -314,17 +355,17 @@ def train():
     X_test = np.array(X_test)
     X_test = preproccess_cifar(X_test)
     print("test shape", X_test.shape)
-    targets = np.array(targets)
+
     print("targets shape", targets.shape)
 
     ###############################################
 
     script_directory = os.path.split(os.path.abspath(__file__))[0]
 
-    filepath = '..\\cifar100_models\\supervised_cross_entropy' + '.model'
+    filepath = 'cifar100_models\\supervised_queue' + '.model'
     clusters_net_path = os.path.join(script_directory, filepath)
 
-    encoder = SupervisedNetCifar(3, 100).to('cuda')
+    encoder = DeepBinBrainCifar(3, EMBEDINGS).to('cuda')
 
     print(encoder)
 
@@ -354,25 +395,35 @@ def train():
 
         runs = len(X_train) // BATCH_SIZE_DEFAULT
 
-        rev_product = torch.ones([BATCH_SIZE_DEFAULT, 1])
+        rev_product = torch.ones([BATCH_SIZE_DEFAULT, EMBEDINGS]).cuda()
+        old_ids = []
         first = True
         iteration = 0
 
         for j in range(runs):
             current_ids = range(j * BATCH_SIZE_DEFAULT, (j + 1) * BATCH_SIZE_DEFAULT)
-            encoder.train()
             iter_ids = ids[current_ids]
 
+            encoder.train()
+
             train = True
-            probs10, probs10_b, total_loss, rev_product = forward_block(X_train, y_train, iter_ids, encoder, optimizer, train, rev_product)
+            probs10, probs10_b, total_loss, rev_product, old_ids = forward_block(X_train, iter_ids, encoder, optimizer, train, rev_product, y_train, old_ids)
             avg_loss += total_loss.item()
             iteration += 1
             total_iters += 1
 
-            # if iteration >= 50:
-            #     rev_product = rev_product[BATCH_SIZE_DEFAULT:, :]
+            if iteration >= QUEUE:
+                old_ids = old_ids[2 * BATCH_SIZE_DEFAULT:]
+                rev_product = rev_product[2 * BATCH_SIZE_DEFAULT:, :]
 
         print("==================================================================================")
+        # print("example prediction: ", probs10[0])
+        # print("example prediction: ", probs10[1])
+        print("batch mean ones: ",
+              (np.where(probs10.data.cpu().numpy() > 0.5))[0].shape[0] / (probs10[0].shape[0] * BATCH_SIZE_DEFAULT))
+
+        count_common_elements(probs10)
+        print()
 
         print("train avg loss : ", avg_loss / runs)
         avg_loss = 0
@@ -395,6 +446,24 @@ def train():
               ",  best loss iter: ", max_loss_iter,
               "-", min_miss_percentage
               , DESCRIPTION)
+
+
+def count_common_elements(p):
+    sum_commons = 0
+    counter = 0
+    for i in range(p.shape[0]):
+        for j in range(p.shape[0]):
+            if i == j:
+                continue
+
+            product = p[i].data.cpu().numpy() * p[j].data.cpu().numpy()
+            commons = np.where(product > 0.5)[0].shape[0]
+            #print(commons)
+
+            sum_commons += commons
+            counter += 1
+
+    print("Mean common elements: ", (sum_commons / EMBEDINGS) / counter)
 
 
 

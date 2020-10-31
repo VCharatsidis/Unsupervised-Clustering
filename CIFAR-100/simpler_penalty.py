@@ -87,17 +87,13 @@ def save_images(images, transformation):
     save_cluster(numpy_cluster, transformations_dict[transformation], 0)
 
 
-def decorelated_penalized_attarction_mean(a, b):
-    product = a * b
-    batch_sum = (a.mean(dim=0) + b.mean(dim=0)) / 2
+def new_penalized_attraction(a, b):
+    penalty = (a.sum(dim=0) + b.sum(dim=0)) / 2
 
-    penalty = batch_sum - product / BATCH_SIZE_DEFAULT
-    penalty = 1 - penalty
-
-    p1 = product * penalty**2
+    p1 = (a * b) / (((a + b)/2) * penalty)
     p1 = p1.sum(dim=1)
 
-    sum1 = a.sum(dim=1) + b.sum(dim=1)
+    sum1 = (a.sum(dim=1) + b.sum(dim=1)) / 2 + 100
 
     p1 = p1 / sum1
 
@@ -184,7 +180,7 @@ def forward_block(X, ids, encoder, optimizer, train):
     _, _, a = encoder(image_1.to('cuda'))
     _, _, b = encoder(image_2.to('cuda'))
 
-    total_loss = decorelated_penalized_attarction(a, b)
+    total_loss = new_penalized_attraction(a, b)
 
     if train:
         optimizer.zero_grad()

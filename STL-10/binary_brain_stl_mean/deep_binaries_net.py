@@ -94,7 +94,7 @@ def new_binary(preds_1, preds_2):
 
 def binary_loss(preds_1, preds_2):
     '''
-    The energy loss simply tries to keep alla elements of the predictions 0
+    The energy loss simply tries to keep all elements of the predictions 0
     '''
     # energy_loss_1 = energy_loss_per_prediction(preds_1)
     # energy_loss_2 = energy_loss_per_prediction(preds_2)

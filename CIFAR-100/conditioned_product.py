@@ -8,7 +8,7 @@ import scipy.io as sio
 import argparse
 import os
 
-from one_hot_net import OneHotNet
+from conditioned_net import ConditionedNet
 
 from stl_utils import *
 import random
@@ -22,7 +22,6 @@ np.set_printoptions(formatter={'float': lambda x: "{0:0.4f}".format(x)})
 np.set_printoptions(threshold=sys.maxsize)
 torch.set_printoptions(threshold=sys.maxsize)
 torch.set_printoptions(sci_mode=False)
-np.set_printoptions(linewidth=np.inf)
 
 from torchvision import models
 EPS = sys.float_info.epsilon
@@ -49,20 +48,12 @@ np.set_printoptions(formatter={'float': lambda x: "{0:0.4f}".format(x)})
 FLAGS = None
 
 expected = BATCH_SIZE_DEFAULT / CLASSES
+zeros = torch.zeros([BATCH_SIZE_DEFAULT, 4096]).cuda()
+zeros_test = torch.zeros([500, 4096]).cuda()
 
 cluster_accuracies = {}
 for i in range(CLASSES):
     cluster_accuracies[i] = 0
-
-
-transformations_agreements = np.zeros([17, 17])
-# transformations_agreements = {}
-# for i in range(17):
-#     scores = []
-#     for i in range(17):
-#         scores.append(0)
-#
-#     transformations_agreements[i] = scores
 
 
 class_numbers = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 0: 0}
@@ -100,50 +91,25 @@ def class_mean_probs_loss(a, b, moving_mean):
     current_mean = product.mean(dim=0)
 
     batch_mean = (a.sum(dim=0) + b.sum(dim=0)) / 2
-    result = current_mean / (batch_mean * (moving_mean.detach()/expected) + batch_mean + EPS)
+    result = current_mean / (batch_mean * (moving_mean/5.12) + batch_mean + EPS)
 
     log = - torch.log(result)
 
     scalar = log.mean()
+    moving_mean = moving_mean * 0.8 + 0.2 * batch_mean.detach()
 
-    return scalar, batch_mean
+    return scalar, moving_mean
 
 
-def normalized_product_loss(a, b, total_mean):
+def just_product(a, b, total_mean):
     prod = a * b
-    sum_preds = (a + b) / 2
-
-    prod_mean = prod.mean(dim=0)
-    sum_mean = sum_preds.mean(dim=0)
-
-    log = - torch.log(prod_mean / sum_mean)
-
-    scalar = log.mean()
-
-    return scalar, sum_mean
-
-
-def product_loss(product, total_mean):
-
-    mean = product.mean(dim=0)
+    mean = prod.mean(dim=0)
 
     log = - torch.log(mean)
 
     scalar = log.mean()
 
     return scalar, mean
-
-
-def another_p(a, b, mean):
-    penalty = (a.sum(dim=0) + b.sum(dim=0)) / 2
-
-    agreement = a * b
-    penalized_agreement = - (a+b)/2 * torch.log(agreement/penalty) * (mean.detach() / expected)
-    penalized_agreement = penalized_agreement.sum(dim=1)
-
-    scalar = penalized_agreement.mean()
-
-    return scalar, penalty
 
 
 def penalized_product_mean(a, b, mean):
@@ -157,7 +123,7 @@ def penalized_product_mean(a, b, mean):
 
     ####
 
-    normalize = (a + b)/2 * (mean.detach() / expected)
+    normalize = (a + b).detach()/2 * (mean.detach() / expected)
     normalize = normalize.sum(dim=1)
 
     result = result * normalize
@@ -183,22 +149,6 @@ def penalized_product(a, b):
     return scalar, penalty
 
 
-def penalized_product_bonus(a, b, mean):
-    batch_sum = (a.sum(dim=0) + b.sum(dim=0)) / 2
-    difference = mean - expected
-    penalty = batch_sum + difference
-
-    agreement = a * b
-    penalized_agreement = agreement / penalty
-    penalized_agreement = penalized_agreement.sum(dim=1)
-
-    result = - torch.log(penalized_agreement)
-
-    scalar = result.mean()
-
-    return scalar, penalty
-
-
 def combination(a, b, moving_mean):
     product = a * b
     penalty = (a.sum(dim=0) + b.sum(dim=0)) / 2 + EPS
@@ -206,6 +156,7 @@ def combination(a, b, moving_mean):
     p1 = p1.sum(dim=1)
     p1_log = - torch.log(p1)
     p1 = p1_log.mean()
+
 
     product_mean = product.mean(dim=0)
     batch_mean = ((a.mean(dim=0) + b.mean(dim=0)) / 2)
@@ -239,36 +190,11 @@ def entropy_minmax_loss(a, b, total_mean):
     return scalar, total_mean
 
 
-def fill_agreements(aug_ids, eight, product):
+def forward_block(X, ids, encoder, optimizer, train, total_mean):
+    number_transforms = 17
+    aug_ids = np.random.choice(number_transforms, size=number_transforms, replace=False)
 
-    coeff = 0.98
-
-    transformations_agreements[aug_ids[0]][aug_ids[1]] = coeff * transformations_agreements[aug_ids[0]][aug_ids[1]] + (1 - coeff) * product[0:eight].sum(dim=1).mean(dim=0)
-    transformations_agreements[aug_ids[1]][aug_ids[0]] = coeff * transformations_agreements[aug_ids[1]][aug_ids[0]] + (1 - coeff) * product[0:eight].sum(dim=1).mean(dim=0)
-
-    transformations_agreements[aug_ids[2]][aug_ids[3]] = coeff * transformations_agreements[aug_ids[2]][aug_ids[3]] + (1 - coeff) * product[eight: 2 * eight].sum(dim=1).mean(dim=0)
-    transformations_agreements[aug_ids[3]][aug_ids[2]] = coeff * transformations_agreements[aug_ids[3]][aug_ids[2]] + (1 - coeff) * product[eight: 2 * eight].sum(dim=1).mean(dim=0)
-
-    transformations_agreements[aug_ids[4]][aug_ids[5]] = coeff * transformations_agreements[aug_ids[4]][aug_ids[5]] + (1 - coeff) * product[2 * eight: 3 * eight].sum(dim=1).mean(dim=0)
-    transformations_agreements[aug_ids[5]][aug_ids[4]] = coeff * transformations_agreements[aug_ids[5]][aug_ids[4]] + (1 - coeff) * product[2 * eight: 3 * eight].sum(dim=1).mean(dim=0)
-
-    transformations_agreements[aug_ids[6]][aug_ids[7]] = coeff * transformations_agreements[aug_ids[6]][aug_ids[7]] + (1 - coeff) * product[3 * eight: 4 * eight].sum(dim=1).mean(dim=0)
-    transformations_agreements[aug_ids[7]][aug_ids[6]] = coeff * transformations_agreements[aug_ids[7]][aug_ids[6]] + (1 - coeff) * product[3 * eight: 4 * eight].sum(dim=1).mean(dim=0)
-
-    transformations_agreements[aug_ids[8]][aug_ids[9]] = coeff * transformations_agreements[aug_ids[8]][aug_ids[9]] + (1 - coeff) * product[4 * eight: 5 * eight].sum(dim=1).mean(dim=0)
-    transformations_agreements[aug_ids[9]][aug_ids[8]] = coeff * transformations_agreements[aug_ids[9]][aug_ids[8]] + (1 - coeff) * product[4 * eight: 5 * eight].sum(dim=1).mean(dim=0)
-
-    transformations_agreements[aug_ids[10]][aug_ids[11]] = coeff * transformations_agreements[aug_ids[10]][aug_ids[11]] + (1 - coeff) * product[5 * eight: 6 * eight].sum(dim=1).mean(dim=0)
-    transformations_agreements[aug_ids[11]][aug_ids[10]] = coeff * transformations_agreements[aug_ids[11]][aug_ids[10]] + (1 - coeff) * product[5 * eight: 6 * eight].sum(dim=1).mean(dim=0)
-
-    transformations_agreements[aug_ids[12]][aug_ids[13]] = coeff * transformations_agreements[aug_ids[12]][aug_ids[13]] + (1 - coeff) * product[6 * eight: 7 * eight].sum(dim=1).mean(dim=0)
-    transformations_agreements[aug_ids[13]][aug_ids[12]] = coeff * transformations_agreements[aug_ids[13]][aug_ids[12]] + (1 - coeff) * product[6 * eight: 7 * eight].sum(dim=1).mean(dim=0)
-
-    transformations_agreements[aug_ids[14]][aug_ids[15]] = coeff * transformations_agreements[aug_ids[14]][aug_ids[15]] + (1 - coeff) * product[7 * eight:].sum(dim=1).mean(dim=0)
-    transformations_agreements[aug_ids[15]][aug_ids[14]] = coeff * transformations_agreements[aug_ids[15]][aug_ids[14]] + (1 - coeff) * product[7 * eight:].sum(dim=1).mean(dim=0)
-
-
-def make_transformations(image, aug_ids):
+    image = X[ids, :]
 
     eight = image.shape[0] // 8
 
@@ -316,24 +242,13 @@ def make_transformations(image, aug_ids):
     image_1 = torch.cat([image_1, image_3, image_5, image_7, image_9, image_11, image_13, image_15], dim=0)
     image_2 = torch.cat([image_2, image_4, image_6, image_8, image_10, image_12, image_14, image_16], dim=0)
 
-    return image_1, image_2
+    # save_images(image_1, 20)
+    # save_images(image_2, 21)
 
+    encodings_a, logit_a, a = encoder(image_1.to('cuda'), zeros)
+    encodings_b, logit_b, b = encoder(image_2.to('cuda'), encodings_a)
 
-def forward_block(X, ids, encoder, optimizer, train, total_mean):
-    number_transforms = 17
-    aug_ids = np.random.choice(number_transforms, size=number_transforms, replace=False)
-
-    image = X[ids, :]
-    image_1, image_2 = make_transformations(image, aug_ids)
-
-    _, logit_a, a = encoder(image_1.to('cuda'))
-    _, logit_b, b = encoder(image_2.to('cuda'))
-
-    product = a * b
-    eight = image.shape[0] // 8
-    fill_agreements(aug_ids, eight, product)
-
-    total_loss, penalty = penalized_product_bonus(product, total_mean)
+    total_loss, penalty = just_product(a, b, total_mean)
 
     if train:
         total_mean = 0.9 * total_mean + penalty * 0.1
@@ -373,7 +288,7 @@ def measure_acc_augments(X_test, encoder, targets):
 
         images = X_test[test_ids, :]
 
-        _, _, p = encoder(images.to('cuda'))
+        _, _, p = encoder(images.to('cuda'), zeros_test)
 
         for i in range(p.shape[0]):
             val, index = torch.max(p[i], 0)
@@ -417,12 +332,12 @@ def measure_acc_augments(X_test, encoder, targets):
     for element in virtual_clusters.keys():
         if len(virtual_clusters[element]) == 0:
             continue
-        #virtual_length = len(virtual_clusters[element])
+        virtual_length = len(virtual_clusters[element])
 
         virtual_misses = miss_classifications(virtual_clusters[element])
         total_miss_virtual += virtual_misses
 
-        #mfe = most_frequent(virtual_clusters[element])
+        mfe = most_frequent(virtual_clusters[element])
 
         # print("cluster: ",
         #       element,
@@ -524,7 +439,7 @@ def train():
     filepath = 'cifar100_models\\virtual_best' + '.model'
     virtual_best_path = os.path.join(script_directory, filepath)
 
-    encoder = OneHotNet(3, CLASSES).to('cuda')
+    encoder = ConditionedNet(3, CLASSES).to('cuda')
     optimizer = torch.optim.Adam(encoder.parameters(), lr=LEARNING_RATE_DEFAULT)
 
     min_miss_percentage = 100
@@ -555,15 +470,13 @@ def train():
 
         if iteration % EVAL_FREQ_DEFAULT == 0:
             print("==================================================================================")
-            print("transformations_agreements: ")
-            print(transformations_agreements)
-            print("transform agreements means: ")
-            print(transformations_agreements.mean(axis=0))
-            print("")
+            # print("example prediction: ", probs10[0])
+            # print("example prediction: ", probs10_b[0])
             print("train avg loss : ", avg_loss / BATCH_SIZE_DEFAULT)
             avg_loss = 0
             encoder.eval()
             print("total mean: ", total_mean)
+
 
             # test_ids = np.random.choice(len(X_test), size=BATCH_SIZE_DEFAULT, replace=False)
             # probs10, probs10_b, total_loss, total_mean = forward_block(X_test, test_ids, encoder, optimizer, False, total_mean)
@@ -579,7 +492,6 @@ def train():
             print("ITERATION: ", iteration,
                   ",  batch size: ", BATCH_SIZE_DEFAULT,
                   ",  lr: ", LEARNING_RATE_DEFAULT,
-                  ",  best loss iter: ", max_loss_iter,
                   "-", min_miss_percentage,
                   ",  actual best iter: ", most_clusters_iter, "-", most_clusters,
                   ",  virtual best iter: ", best_virtual_iter, " - ", min_virtual_miss_percentage,

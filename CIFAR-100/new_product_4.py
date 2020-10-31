@@ -10,7 +10,7 @@ import os
 
 from one_hot_net import OneHotNet
 
-from stl_utils import *
+from image_utils import *
 import random
 
 from torchvision.utils import make_grid
@@ -22,7 +22,6 @@ np.set_printoptions(formatter={'float': lambda x: "{0:0.4f}".format(x)})
 np.set_printoptions(threshold=sys.maxsize)
 torch.set_printoptions(threshold=sys.maxsize)
 torch.set_printoptions(sci_mode=False)
-np.set_printoptions(linewidth=np.inf)
 
 from torchvision import models
 EPS = sys.float_info.epsilon
@@ -30,9 +29,9 @@ EPS = sys.float_info.epsilon
 #EPS=sys.float_info.epsilon
 LEARNING_RATE_DEFAULT = 1e-4
 
-MAX_STEPS_DEFAULT = 500000
+MAX_STEPS_DEFAULT = 48750
 
-BATCH_SIZE_DEFAULT = 256
+BATCH_SIZE_DEFAULT = 64
 
 #INPUT_NET = 3072
 INPUT_NET = 5120
@@ -55,16 +54,6 @@ for i in range(CLASSES):
     cluster_accuracies[i] = 0
 
 
-transformations_agreements = np.zeros([17, 17])
-# transformations_agreements = {}
-# for i in range(17):
-#     scores = []
-#     for i in range(17):
-#         scores.append(0)
-#
-#     transformations_agreements[i] = scores
-
-
 class_numbers = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 0: 0}
 
 
@@ -76,12 +65,19 @@ transformations_dict = {0: "original",
                        5: "sobel x",
                        6: "sobel y",
                        7: "gaussian blur",
-                       8: "random crop",
-                       9: "random crop",
-                       10: "random crop",
-                       11: "random crop",
-                       12: "image 1",
-                       13: "image 2"}
+                       8: "randcom_crop_upscale_gauss_blur",
+                       9: "randcom_crop_upscale_sobel_total",
+                       10: "randcom_crop_upscale_rev_pixels",
+                       11: "no_jitter_rotate(image, -46)",
+                       12: "randcom_crop_upscale(image, 20",
+                       13: "randcom_crop_upscale(image, 22",
+                       14: "randcom_crop_upscale(image, 26",
+                       15: "no_jitter_random_corpse(image, 22",
+                       16: "randcom_crop_upscale(image, 18",
+                       17: "image_1",
+                       18: "image_2",
+                       19: "image_3",
+                       20: "image_4",}
 
 
 labels_to_imags = {}
@@ -90,23 +86,9 @@ for i in range(CLASSES):
 
 
 def save_images(images, transformation):
-    print(transformations_dict[transformation])
+    print(transformations_dict[transformation], " ", transformation)
     numpy_cluster = images.cpu().detach()
-    save_cluster(numpy_cluster, transformations_dict[transformation], 0)
-
-
-def class_mean_probs_loss(a, b, moving_mean):
-    product = a * b
-    current_mean = product.mean(dim=0)
-
-    batch_mean = (a.sum(dim=0) + b.sum(dim=0)) / 2
-    result = current_mean / (batch_mean * (moving_mean.detach()/expected) + batch_mean + EPS)
-
-    log = - torch.log(result)
-
-    scalar = log.mean()
-
-    return scalar, batch_mean
+    save_cluster(numpy_cluster, transformations_dict[transformation], transformation)
 
 
 def normalized_product_loss(a, b, total_mean):
@@ -123,9 +105,9 @@ def normalized_product_loss(a, b, total_mean):
     return scalar, sum_mean
 
 
-def product_loss(product, total_mean):
-
-    mean = product.mean(dim=0)
+def product_loss(a, b, c, d, total_mean):
+    prod = a * b * c * d
+    mean = prod.mean(dim=0)
 
     log = - torch.log(mean)
 
@@ -183,140 +165,83 @@ def penalized_product(a, b):
     return scalar, penalty
 
 
-def penalized_product_bonus(a, b, mean):
-    batch_sum = (a.sum(dim=0) + b.sum(dim=0)) / 2
-    difference = mean - expected
-    penalty = batch_sum + difference
-
-    agreement = a * b
-    penalized_agreement = agreement / penalty
-    penalized_agreement = penalized_agreement.sum(dim=1)
-
-    result = - torch.log(penalized_agreement)
-
-    scalar = result.mean()
-
-    return scalar, penalty
-
-
-def combination(a, b, moving_mean):
-    product = a * b
-    penalty = (a.sum(dim=0) + b.sum(dim=0)) / 2 + EPS
-    p1 = product / penalty
-    p1 = p1.sum(dim=1)
-    p1_log = - torch.log(p1)
-    p1 = p1_log.mean()
-
-    product_mean = product.mean(dim=0)
-    batch_mean = ((a.mean(dim=0) + b.mean(dim=0)) / 2)
-    result = product_mean / (batch_mean + EPS)
-    log = - torch.log(result)
-    scalar = log.mean()
-
-    moving_mean = moving_mean * 0.8 + result.detach() * 0.2
-
-    final = p1 + scalar
-
-    return final, moving_mean
-
-
-def entropy_minmax_loss(a, b, total_mean):
-    penalty = ((a.mean(dim=0) + b.mean(dim=0)) / 2)
-
-    #penalty = (a.sum(dim=0) + b.sum(dim=0)) / 2 + EPS
-    #penalty = penalty * (total_mean.detach() / 0.01) + 1  # + penalty
-
-    p1 = (a * b) / ((penalty/0.01) * (total_mean/0.01) + 1)
-
-    p1 = p1.sum(dim=1)
-
-    p1 = p1.mean()
-
-    scalar = - torch.log(p1)
-
-    total_mean = total_mean * 0.8 + 0.2 * penalty.detach()
-
-    return scalar, total_mean
-
-
-def fill_agreements(aug_ids, eight, product):
-
-    coeff = 0.98
-
-    transformations_agreements[aug_ids[0]][aug_ids[1]] = coeff * transformations_agreements[aug_ids[0]][aug_ids[1]] + (1 - coeff) * product[0:eight].sum(dim=1).mean(dim=0)
-    transformations_agreements[aug_ids[1]][aug_ids[0]] = coeff * transformations_agreements[aug_ids[1]][aug_ids[0]] + (1 - coeff) * product[0:eight].sum(dim=1).mean(dim=0)
-
-    transformations_agreements[aug_ids[2]][aug_ids[3]] = coeff * transformations_agreements[aug_ids[2]][aug_ids[3]] + (1 - coeff) * product[eight: 2 * eight].sum(dim=1).mean(dim=0)
-    transformations_agreements[aug_ids[3]][aug_ids[2]] = coeff * transformations_agreements[aug_ids[3]][aug_ids[2]] + (1 - coeff) * product[eight: 2 * eight].sum(dim=1).mean(dim=0)
-
-    transformations_agreements[aug_ids[4]][aug_ids[5]] = coeff * transformations_agreements[aug_ids[4]][aug_ids[5]] + (1 - coeff) * product[2 * eight: 3 * eight].sum(dim=1).mean(dim=0)
-    transformations_agreements[aug_ids[5]][aug_ids[4]] = coeff * transformations_agreements[aug_ids[5]][aug_ids[4]] + (1 - coeff) * product[2 * eight: 3 * eight].sum(dim=1).mean(dim=0)
-
-    transformations_agreements[aug_ids[6]][aug_ids[7]] = coeff * transformations_agreements[aug_ids[6]][aug_ids[7]] + (1 - coeff) * product[3 * eight: 4 * eight].sum(dim=1).mean(dim=0)
-    transformations_agreements[aug_ids[7]][aug_ids[6]] = coeff * transformations_agreements[aug_ids[7]][aug_ids[6]] + (1 - coeff) * product[3 * eight: 4 * eight].sum(dim=1).mean(dim=0)
-
-    transformations_agreements[aug_ids[8]][aug_ids[9]] = coeff * transformations_agreements[aug_ids[8]][aug_ids[9]] + (1 - coeff) * product[4 * eight: 5 * eight].sum(dim=1).mean(dim=0)
-    transformations_agreements[aug_ids[9]][aug_ids[8]] = coeff * transformations_agreements[aug_ids[9]][aug_ids[8]] + (1 - coeff) * product[4 * eight: 5 * eight].sum(dim=1).mean(dim=0)
-
-    transformations_agreements[aug_ids[10]][aug_ids[11]] = coeff * transformations_agreements[aug_ids[10]][aug_ids[11]] + (1 - coeff) * product[5 * eight: 6 * eight].sum(dim=1).mean(dim=0)
-    transformations_agreements[aug_ids[11]][aug_ids[10]] = coeff * transformations_agreements[aug_ids[11]][aug_ids[10]] + (1 - coeff) * product[5 * eight: 6 * eight].sum(dim=1).mean(dim=0)
-
-    transformations_agreements[aug_ids[12]][aug_ids[13]] = coeff * transformations_agreements[aug_ids[12]][aug_ids[13]] + (1 - coeff) * product[6 * eight: 7 * eight].sum(dim=1).mean(dim=0)
-    transformations_agreements[aug_ids[13]][aug_ids[12]] = coeff * transformations_agreements[aug_ids[13]][aug_ids[12]] + (1 - coeff) * product[6 * eight: 7 * eight].sum(dim=1).mean(dim=0)
-
-    transformations_agreements[aug_ids[14]][aug_ids[15]] = coeff * transformations_agreements[aug_ids[14]][aug_ids[15]] + (1 - coeff) * product[7 * eight:].sum(dim=1).mean(dim=0)
-    transformations_agreements[aug_ids[15]][aug_ids[14]] = coeff * transformations_agreements[aug_ids[15]][aug_ids[14]] + (1 - coeff) * product[7 * eight:].sum(dim=1).mean(dim=0)
-
-
 def make_transformations(image, aug_ids):
 
     eight = image.shape[0] // 8
 
-    image_1 = transformation(aug_ids[0], image[0:eight], SIZE, SIZE_Y)
-    image_2 = transformation(aug_ids[1], image[0:eight], SIZE, SIZE_Y)
+    image_1_a = transformation(aug_ids[0], image[0:eight], SIZE, SIZE_Y)
+    image_1_b = transformation(aug_ids[1], image[0:eight], SIZE, SIZE_Y)
+    image_1_c = transformation(aug_ids[2], image[0:eight], SIZE, SIZE_Y)
+    image_1_d = transformation(aug_ids[16], image[0:eight], SIZE, SIZE_Y)
 
-    image_3 = transformation(aug_ids[2], image[eight: 2 * eight], SIZE, SIZE_Y)
-    image_4 = transformation(aug_ids[3], image[eight: 2 * eight], SIZE, SIZE_Y)
+    image_2_a = transformation(aug_ids[3], image[eight: 2 * eight], SIZE, SIZE_Y)
+    image_2_b = transformation(aug_ids[4], image[eight: 2 * eight], SIZE, SIZE_Y)
+    image_2_c = transformation(aug_ids[5], image[eight: 2 * eight], SIZE, SIZE_Y)
+    image_2_d = transformation(aug_ids[6], image[eight: 2 * eight], SIZE, SIZE_Y)
 
-    image_5 = transformation(aug_ids[4], image[2 * eight: 3 * eight], SIZE, SIZE_Y)
-    image_6 = transformation(aug_ids[5], image[2 * eight: 3 * eight], SIZE, SIZE_Y)
+    image_3_a = transformation(aug_ids[6], image[2 * eight: 3 * eight], SIZE, SIZE_Y)
+    image_3_b = transformation(aug_ids[7], image[2 * eight: 3 * eight], SIZE, SIZE_Y)
+    image_3_c = transformation(aug_ids[8], image[2 * eight: 3 * eight], SIZE, SIZE_Y)
+    image_3_d = transformation(aug_ids[10], image[2 * eight: 3 * eight], SIZE, SIZE_Y)
 
-    image_7 = transformation(aug_ids[6], image[3 * eight: 4 * eight], SIZE, SIZE_Y)
-    image_8 = transformation(aug_ids[7], image[3 * eight: 4 * eight], SIZE, SIZE_Y)
+    image_4_a = transformation(aug_ids[9], image[3 * eight: 4 * eight], SIZE, SIZE_Y)
+    image_4_b = transformation(aug_ids[10], image[3 * eight: 4 * eight], SIZE, SIZE_Y)
+    image_4_c = transformation(aug_ids[11], image[3 * eight: 4 * eight], SIZE, SIZE_Y)
+    image_4_d = transformation(aug_ids[16], image[3 * eight: 4 * eight], SIZE, SIZE_Y)
 
-    image_9 = transformation(aug_ids[8], image[4 * eight: 5 * eight], SIZE, SIZE_Y)
-    image_10 = transformation(aug_ids[9], image[4 * eight: 5 * eight], SIZE, SIZE_Y)
+    image_5_a = transformation(aug_ids[12], image[4 * eight: 5 * eight], SIZE, SIZE_Y)
+    image_5_b = transformation(aug_ids[13], image[4 * eight: 5 * eight], SIZE, SIZE_Y)
+    image_5_c = transformation(aug_ids[14], image[4 * eight: 5 * eight], SIZE, SIZE_Y)
+    image_5_d = transformation(aug_ids[1], image[4 * eight: 5 * eight], SIZE, SIZE_Y)
 
-    image_11 = transformation(aug_ids[10], image[5 * eight: 6 * eight], SIZE, SIZE_Y)
-    image_12 = transformation(aug_ids[11], image[5 * eight: 6 * eight], SIZE, SIZE_Y)
+    image_6_a = transformation(aug_ids[15], image[5 * eight: 6 * eight], SIZE, SIZE_Y)
+    image_6_b = transformation(aug_ids[0], image[5 * eight: 6 * eight], SIZE, SIZE_Y)
+    image_6_c = transformation(aug_ids[3], image[5 * eight: 6 * eight], SIZE, SIZE_Y)
+    image_6_d = transformation(aug_ids[7], image[5 * eight: 6 * eight], SIZE, SIZE_Y)
 
-    image_13 = transformation(aug_ids[12], image[6 * eight: 7 * eight], SIZE, SIZE_Y)
-    image_14 = transformation(aug_ids[13], image[6 * eight: 7 * eight], SIZE, SIZE_Y)
+    image_7_a = transformation(aug_ids[4], image[6 * eight: 7 * eight], SIZE, SIZE_Y)
+    image_7_b = transformation(aug_ids[8], image[6 * eight: 7 * eight], SIZE, SIZE_Y)
+    image_7_c = transformation(aug_ids[9], image[6 * eight: 7 * eight], SIZE, SIZE_Y)
+    image_7_d = transformation(aug_ids[1], image[6 * eight: 7 * eight], SIZE, SIZE_Y)
 
-    image_15 = transformation(aug_ids[14], image[7 * eight:], SIZE, SIZE_Y)
-    image_16 = transformation(aug_ids[15], image[7 * eight:], SIZE, SIZE_Y)
+    image_8_a = transformation(aug_ids[5], image[7 * eight:], SIZE, SIZE_Y)
+    image_8_b = transformation(aug_ids[11], image[7 * eight:], SIZE, SIZE_Y)
+    image_8_c = transformation(aug_ids[12], image[7 * eight:], SIZE, SIZE_Y)
+    image_8_d = transformation(aug_ids[15], image[7 * eight:], SIZE, SIZE_Y)
 
-    # save_images(image_1, aug_ids[0])
-    # save_images(image_2, aug_ids[1])
-    # save_images(image_3, aug_ids[2])
-    # save_images(image_4, aug_ids[3])
-    # save_images(image_5, aug_ids[4])
-    # save_images(image_6, aug_ids[5])
-    # save_images(image_7, aug_ids[6])
-    # save_images(image_8, aug_ids[7])
-    # save_images(image_9, aug_ids[8])
-    # save_images(image_10, aug_ids[9])
-    # save_images(image_11, aug_ids[10])
-    # save_images(image_12, aug_ids[11])
-    # save_images(image_13, aug_ids[12])
-    # save_images(image_14, aug_ids[13])
-    # save_images(image_15, aug_ids[14])
-    # save_images(image_16, aug_ids[15])
+    save_images(image_1_a, aug_ids[0])
+    save_images(image_1_b, aug_ids[1])
+    save_images(image_1_c, aug_ids[2])
 
-    image_1 = torch.cat([image_1, image_3, image_5, image_7, image_9, image_11, image_13, image_15], dim=0)
-    image_2 = torch.cat([image_2, image_4, image_6, image_8, image_10, image_12, image_14, image_16], dim=0)
+    save_images(image_2_a, aug_ids[3])
+    save_images(image_2_b, aug_ids[4])
+    save_images(image_2_c, aug_ids[5])
+    save_images(image_2_d, aug_ids[6])
 
-    return image_1, image_2
+    save_images(image_3_b, aug_ids[7])
+    save_images(image_3_c, aug_ids[8])
+    save_images(image_3_d, aug_ids[9])
+
+    save_images(image_4_a, aug_ids[10])
+    save_images(image_4_c, aug_ids[11])
+
+    save_images(image_5_a, aug_ids[12])
+    save_images(image_5_b, aug_ids[13])
+    save_images(image_5_c, aug_ids[14])
+
+    save_images(image_6_a, aug_ids[15])
+
+    save_images(image_4_d, aug_ids[16])
+
+    image_1 = torch.cat([image_1_a, image_2_a, image_3_a, image_4_a, image_5_a, image_6_a, image_7_a, image_8_a], dim=0)
+    image_2 = torch.cat([image_1_b, image_2_b, image_3_b, image_4_b, image_5_b, image_6_b, image_7_b, image_8_b], dim=0)
+    image_3 = torch.cat([image_1_c, image_2_c, image_3_c, image_4_c, image_5_c, image_6_c, image_7_c, image_8_c], dim=0)
+    image_4 = torch.cat([image_1_d, image_2_d, image_3_d, image_4_d, image_5_d, image_6_d, image_7_d, image_8_d], dim=0)
+
+    save_images(image_1, 17)
+    save_images(image_2, 18)
+
+    return image_1, image_2, image_3, image_4
 
 
 def forward_block(X, ids, encoder, optimizer, train, total_mean):
@@ -324,16 +249,14 @@ def forward_block(X, ids, encoder, optimizer, train, total_mean):
     aug_ids = np.random.choice(number_transforms, size=number_transforms, replace=False)
 
     image = X[ids, :]
-    image_1, image_2 = make_transformations(image, aug_ids)
+    image_1, image_2, image_3, image_4 = make_transformations(image, aug_ids)
 
     _, logit_a, a = encoder(image_1.to('cuda'))
     _, logit_b, b = encoder(image_2.to('cuda'))
+    _, logit_c, c = encoder(image_3.to('cuda'))
+    _, logit_d, d = encoder(image_4.to('cuda'))
 
-    product = a * b
-    eight = image.shape[0] // 8
-    fill_agreements(aug_ids, eight, product)
-
-    total_loss, penalty = penalized_product_bonus(product, total_mean)
+    total_loss, penalty = product_loss(a, b, c, d, total_mean)
 
     if train:
         total_mean = 0.9 * total_mean + penalty * 0.1
@@ -345,10 +268,11 @@ def forward_block(X, ids, encoder, optimizer, train, total_mean):
     return a, b, total_loss, total_mean
 
 
-def save_cluster(original_image, cluster, iteration):
-    sample = original_image.view(-1, 1, original_image.shape[2], original_image.shape[3])
+def save_cluster(original_image, cluster, transf):
+    sample = original_image.view(-1, original_image.shape[1], original_image.shape[2], original_image.shape[3])
+    #sample = original_image.view(-1, 1, original_image.shape[2], original_image.shape[3])
     sample = make_grid(sample, nrow=8).detach().numpy().astype(np.float).transpose(1, 2, 0)
-    matplotlib.image.imsave(f"iter_{iteration}_c_{cluster}.png", sample)
+    matplotlib.image.imsave(f"transf_{transf}_c_{cluster}.png", sample)
 
 
 def save_image(original_image, index, name, cluster=0):
@@ -409,10 +333,10 @@ def measure_acc_augments(X_test, encoder, targets):
           " miss: ", total_miss,
           " data: ", runs * size,
           " miss percent: ", total_miss_percentage)
-    print("Clusters found: " + str(len(clusters)) + " " + str(clusters))
+    print("Clusters found: " + str(len(clusters)))
     print()
 
-    print(virtual_clusters)
+    #print(virtual_clusters)
     total_miss_virtual = 0
     for element in virtual_clusters.keys():
         if len(virtual_clusters[element]) == 0:
@@ -555,15 +479,15 @@ def train():
 
         if iteration % EVAL_FREQ_DEFAULT == 0:
             print("==================================================================================")
-            print("transformations_agreements: ")
-            print(transformations_agreements)
-            print("transform agreements means: ")
-            print(transformations_agreements.mean(axis=0))
-            print("")
+            if iteration % 2000 == 0:
+                print("example prediction: ", probs10[0])
+                print("example prediction: ", probs10_b[0])
+                print("total mean: ", total_mean)
+                print()
+
             print("train avg loss : ", avg_loss / BATCH_SIZE_DEFAULT)
             avg_loss = 0
             encoder.eval()
-            print("total mean: ", total_mean)
 
             # test_ids = np.random.choice(len(X_test), size=BATCH_SIZE_DEFAULT, replace=False)
             # probs10, probs10_b, total_loss, total_mean = forward_block(X_test, test_ids, encoder, optimizer, False, total_mean)

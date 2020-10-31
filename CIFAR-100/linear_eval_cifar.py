@@ -18,11 +18,11 @@ LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 500000
 
 BATCH_SIZE_DEFAULT = 200
-USE_EMBEDDING = True
+USE_EMBEDDING = False
 
 INPUT_NET = 4096
 if USE_EMBEDDING:
-    INPUT_NET = 4096
+    INPUT_NET = 256
 
 PRINT = False and USE_EMBEDDING
 ROUND = True and USE_EMBEDDING and not PRINT
@@ -41,7 +41,7 @@ np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
 
 FLAGS = None
 
-encoder_name = "cifar100_models\\penalty_disentangle"
+encoder_name = "cifar100_models\\virtual_best"
 
 encoder = torch.load(encoder_name+".model")
 encoder.eval()
@@ -138,6 +138,9 @@ def forward_block(X, ids, classifier, optimizer, train, targets):
             sobeled_encodings, _, p_sobeled = encoder(sobeled.to('cuda'))
 
         encodings, _, p = encoder(images.to('cuda'))
+        # encodings_1, p1, encodings_2, p_2 = encoder(images.to('cuda'))
+        # encodings = encodings_2
+        # p = torch.cat([p1, p_2], dim=1)
 
     if PRODUCT:
         p = p * p_sobeled * p_rot

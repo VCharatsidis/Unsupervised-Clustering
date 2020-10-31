@@ -56,15 +56,15 @@ class OneHotNet(nn.Module):
 
         self.brain = nn.Sequential(
 
-            # nn.Linear(6400, 4096),
+            # nn.Linear(4096, 2048),
             # nn.ReLU(),
-            # nn.BatchNorm1d(4096),
+            # nn.BatchNorm1d(2048),
 
             nn.Linear(4096, classes)
         )
 
         self.softmax = nn.Sequential(
-            nn.Softmax()
+            nn.Softmax(dim=1)
         )
 
 
@@ -80,7 +80,7 @@ class OneHotNet(nn.Module):
 
         conv = self.conv(x)
         encoding = torch.flatten(conv, 1)
-        #out, attention = self.attention(conv)
+        # out, attention = self.attention(conv)
         # print("out", out.shape)
         # print("attention", attention.shape)
 

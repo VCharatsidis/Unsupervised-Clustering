@@ -102,10 +102,9 @@ def save_images(images, transformation):
 
 
 def new_agreement(product, denominator, rev_prod):
-    transposed = rev_prod.transpose(0, 1)
 
     attraction = torch.mm(product, product.transpose(0, 1))
-    repel = torch.mm(product, transposed)
+    repel = torch.mm(product, rev_prod.transpose(0, 1))
 
     attraction = attraction / denominator
     repel = repel / denominator
