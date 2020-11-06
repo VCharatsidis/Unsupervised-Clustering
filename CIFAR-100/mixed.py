@@ -10,7 +10,7 @@ import os
 
 from mixed_net import Mixed
 
-from stl_utils import *
+from image_utils import *
 import random
 
 from torchvision.utils import make_grid
@@ -143,7 +143,7 @@ def queue_agreement(product, denominator, rev_prod):
 
 def forward_block(X, ids, encoder, optimizer, train, rev_product, moving_mean):
     global first
-    number_transforms = 17
+    number_transforms = 19
     aug_ids = np.random.choice(number_transforms, size=number_transforms, replace=False)
 
     image = X[ids, :]

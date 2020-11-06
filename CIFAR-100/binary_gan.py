@@ -8,7 +8,8 @@ import sys
 import argparse
 import os
 
-from binary_net import DeepBinBrainCifar
+from bin_gan_net import BinGenerator, Repelor
+#from AlexNet import AlexNet
 
 from image_utils import *
 import random
@@ -29,7 +30,7 @@ LEARNING_RATE_DEFAULT = 1e-4
 
 MAX_STEPS_DEFAULT = 500000
 
-BATCH_SIZE_DEFAULT = 128
+BATCH_SIZE_DEFAULT = 256
 
 EMBEDINGS = 4096
 SIZE = 32
@@ -40,11 +41,32 @@ EPOCHS = 1000
 
 CLASSES = 100
 DESCRIPTION = " Image size: " + str(SIZE) + " , Classes: " + str(CLASSES)
+QUEUE = 50
 
 EVAL_FREQ_DEFAULT = 250
 MIN_CLUSTERS_TO_SAVE = 10
 np.set_printoptions(formatter={'float': lambda x: "{0:0.4f}".format(x)})
 FLAGS = None
+
+square = torch.ones(BATCH_SIZE_DEFAULT, BATCH_SIZE_DEFAULT)
+ZERO_DIAG = square.fill_diagonal_(0)
+first_part = torch.cat([ZERO_DIAG, ZERO_DIAG], dim=1)
+adj_matrix = torch.cat([first_part, first_part], dim=0)
+adj_matrix = adj_matrix.cuda()
+
+big_diag = torch.ones(2 * BATCH_SIZE_DEFAULT, 2 * BATCH_SIZE_DEFAULT)
+ZERO_BIG_DIAG = big_diag.fill_diagonal_(0)
+ZERO_BIG_DIAG = ZERO_BIG_DIAG.cuda()
+
+
+repelor = Repelor(4096).to('cuda')
+optimizer_repelor = torch.optim.Adam(repelor.parameters(), lr=LEARNING_RATE_DEFAULT)
+print(repelor)
+
+
+# batch_range = np.arange(BATCH_SIZE_DEFAULT) #Generate some data
+# derangement = np.roll(batch_range, 1)
+# print(derangement)
 
 first = True
 
@@ -86,24 +108,7 @@ def save_images(images, transformation):
     save_cluster(numpy_cluster, transformations_dict[transformation], 0)
 
 
-def decorelated_penalized_attarction(a, b):
-    penalty = (a.sum(dim=0) + b.sum(dim=0)) / 2
-
-    p1 = (a * b) / penalty
-    p1 = p1.sum(dim=1)
-
-    sum1 = (a.sum(dim=1) + b.sum(dim=1)) / 2 + 100
-
-    p1 = p1 / sum1
-
-    log = - torch.log(p1)
-
-    scalar = log.mean()
-
-    return scalar
-
-
-def forward_block(X, ids, encoder, optimizer, train):
+def forward_block(X, ids, binGenerator, optimizer, train, rev_product):
     global first
     number_transforms = 19
     aug_ids = np.random.choice(number_transforms, size=number_transforms, replace=False)
@@ -153,23 +158,65 @@ def forward_block(X, ids, encoder, optimizer, train):
     # save_images(image_15, aug_ids[14])
     # save_images(image_16, aug_ids[15])
 
+    #image_1 = image
     image_1 = torch.cat([image_1, image_3, image_5, image_7, image_9, image_11, image_13, image_15], dim=0)
     image_2 = torch.cat([image_2, image_4, image_6, image_8, image_10, image_12, image_14, image_16], dim=0)
 
     # save_images(image_1, 20)
     # save_images(image_2, 21)
 
-    _, _, a = encoder(image_1.to('cuda'))
-    _, _, b = encoder(image_2.to('cuda'))
+    encoding_a, _, a = binGenerator(image_1.to('cuda'))
+    encoding_b, _, b = binGenerator(image_2.to('cuda'))
 
-    total_loss = decorelated_penalized_attarction(a, b)
+    predictions_a = repelor(encoding_a)
+    predictions_b = repelor(encoding_b)
+
+    # loss = combined_loss(a, b, predictions_a, predictions_b)
+    #
+    # loss_generator = loss
+    # loss_repelor = - loss
+
+    product = a * b
+    indiv_mean = product.sum(dim=1) / (a.sum(dim=1) + b.sum(dim=1)) / 2 + 30
+    log = - torch.log(indiv_mean)
+    scalar = log.mean()
+
+    ### Repelor ###
+
+    prod_a = a * predictions_a
+    results_a = prod_a.sum(dim=1) / ((a.sum(dim=1) + predictions_a.sum(dim=1))/2 + 30)
+
+    prod_b = b * predictions_b
+    results_b = prod_b.sum(dim=1) / ((b.sum(dim=1) + predictions_b.sum(dim=1))/2 + 30)
+
+    ### Losses ###
+
+    loss_generator = scalar - torch.log(1 - results_a).mean() - torch.log(1 - results_b).mean()
+    loss_repelor = - torch.log(results_a).mean() - torch.log(results_b).mean()
 
     if train:
         optimizer.zero_grad()
-        total_loss.backward()
+        loss_generator.backward(retain_graph=True)
         optimizer.step()
 
-    return a, b, total_loss
+        optimizer_repelor.zero_grad()
+        loss_repelor.backward()
+        optimizer_repelor.step()
+
+    return a, b, loss_generator, rev_product, loss_repelor
+
+
+def combined_loss(a, b, pred_a, pred_b):
+    reduce_a = torch.abs(a - pred_a) * a
+    reduce_b = torch.abs(b - pred_b) * b
+
+    product = reduce_a * reduce_b
+    sum1 = (a.sum(dim=1) + b.sum(dim=1)) / 2 + 100
+    indiv_mean = product.sum(dim=1) / sum1
+    log = - torch.log(indiv_mean)
+    scalar = log.mean()
+
+    return scalar
 
 
 def save_cluster(original_image, cluster, iteration):
@@ -184,16 +231,18 @@ def save_image(original_image, index, name, cluster=0):
     matplotlib.image.imsave(f"gen_images/c_{cluster}/{name}_index_{index}.png", sample)
 
 
-def measure_acc_augments(x_test, encoder):
-    size = 500
+def measure_acc_augments(x_test, encoder, rev_product):
+    size = BATCH_SIZE_DEFAULT
     runs = len(x_test) // size
     sum_loss = 0
+
+    print(rev_product.shape)
 
     for j in range(runs):
         test_ids = range(j * size, (j + 1) * size)
 
         with torch.no_grad():
-            test_preds_1, test_preds_2, test_total_loss = forward_block(x_test, test_ids, encoder, [], False)
+            test_preds_1, test_preds_2, test_total_loss, rev_product, loss_repelor = forward_block(x_test, test_ids, encoder, [], False, rev_product)
 
         sum_loss += test_total_loss.item()
 
@@ -284,18 +333,18 @@ def train():
 
     script_directory = os.path.split(os.path.abspath(__file__))[0]
 
-    filepath = 'cifar100_models\\penalty_disentangle' + '.model'
+    filepath = 'cifar100_models\\bin_gan' + '.model'
     clusters_net_path = os.path.join(script_directory, filepath)
 
-    encoder = DeepBinBrainCifar(3, EMBEDINGS).to('cuda')
+    binGenerator = BinGenerator(3, EMBEDINGS).to('cuda')
 
-    print(encoder)
+    print(binGenerator)
 
-    #print(list(encoder.brain[0].weight))
-    #prune.random_unstructured(encoder.brain[0], name="weight", amount=0.6)
-    #print(list(encoder.brain[0].weight))
+    #print(list(binGenerator.brain[0].weight))
+    #prune.random_unstructured(binGenerator.brain[0], name="weight", amount=0.6)
+    #print(list(binGenerator.brain[0].weight))
 
-    optimizer = torch.optim.Adam(encoder.parameters(), lr=LEARNING_RATE_DEFAULT)
+    optimizer = torch.optim.Adam(binGenerator.parameters(), lr=LEARNING_RATE_DEFAULT)
 
     min_miss_percentage = 100
     max_loss_iter = 0
@@ -309,6 +358,7 @@ def train():
     #     test_dict[i].append(idx)
 
     avg_loss = 0
+    avg_repelor_loss = 0
     total_iters = 0
 
     for epoch in range(EPOCHS):
@@ -317,22 +367,30 @@ def train():
 
         runs = len(X_train) // BATCH_SIZE_DEFAULT
 
+        rev_product = torch.ones([BATCH_SIZE_DEFAULT, EMBEDINGS]).cuda()
         first = True
         iteration = 0
 
         for j in range(runs):
             current_ids = range(j * BATCH_SIZE_DEFAULT, (j + 1) * BATCH_SIZE_DEFAULT)
-            encoder.train()
+            binGenerator.train()
             iter_ids = ids[current_ids]
 
             train = True
-            probs10, probs10_b, total_loss = forward_block(X_train, iter_ids, encoder, optimizer, train)
+            probs10, probs10_b, total_loss, rev_product, loss_repelor = forward_block(X_train, iter_ids, binGenerator, optimizer, train, rev_product)
+
             avg_loss += total_loss.item()
+            avg_repelor_loss += loss_repelor.item()
+
             iteration += 1
             total_iters += 1
 
+            if iteration >= QUEUE:
+                rev_product = rev_product[2 * BATCH_SIZE_DEFAULT:, :]
+
         print("==================================================================================")
-        #print("example prediction: ", probs10[0])
+        # print("example prediction: ", probs10[0])
+        # print("example prediction: ", probs10[1])
         print("batch mean ones: ",
               (np.where(probs10.data.cpu().numpy() > 0.5))[0].shape[0] / (probs10[0].shape[0] * BATCH_SIZE_DEFAULT))
 
@@ -340,17 +398,21 @@ def train():
         print()
 
         print("train avg loss : ", avg_loss / runs)
-        avg_loss = 0
-        encoder.eval()
+        print("repelor loss: ", avg_repelor_loss / runs)
 
-        test_loss = measure_acc_augments(X_test, encoder)
+        avg_loss = 0
+        avg_repelor_loss = 0
+
+        binGenerator.eval()
+
+        test_loss = measure_acc_augments(X_test, binGenerator, rev_product)
 
         if test_loss < test_best_loss:
             test_best_loss = test_loss
             max_loss_iter = total_iters
             min_miss_percentage = test_loss
             print("models saved iter: " + str(total_iters))
-            torch.save(encoder, clusters_net_path)
+            torch.save(binGenerator, clusters_net_path)
 
         print("EPOCH: ", epoch,
               "Total ITERATION: ", total_iters,
@@ -365,7 +427,6 @@ def train():
 def count_common_elements(p):
     sum_commons = 0
     counter = 0
-    p = torch.round(p)
     for i in range(p.shape[0]):
         for j in range(p.shape[0]):
             if i == j:
@@ -379,6 +440,7 @@ def count_common_elements(p):
             counter += 1
 
     print("Mean common elements: ", (sum_commons / EMBEDINGS) / counter)
+
 
 def to_tensor(X):
     with torch.no_grad():

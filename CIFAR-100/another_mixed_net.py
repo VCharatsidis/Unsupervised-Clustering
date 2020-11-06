@@ -7,7 +7,7 @@ import torch
 
 
 
-class Mixed(nn.Module):
+class AnotherMixed(nn.Module):
     """
     This class implements a Multi-layer Perceptron in PyTorch.
     It handles the different layers and parameters of the model.
@@ -27,7 +27,7 @@ class Mixed(nn.Module):
                      This number is required in order to specify the
                      output dimensions of the MLP
         """
-        super(Mixed, self).__init__()
+        super(AnotherMixed, self).__init__()
 
         self.conv = nn.Sequential(
             nn.Conv2d(n_channels, 64, kernel_size=3, stride=1, padding=1),
@@ -66,13 +66,34 @@ class Mixed(nn.Module):
             nn.Linear(4096, EMBEDING_SIZE)
         )
 
+        self.classification_conv = nn.Sequential(
+            nn.Conv2d(n_channels, 64, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
+
+            nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(128),
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
+
+            nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(256),
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
+
+            # nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1),
+            # nn.ReLU(),
+            # nn.BatchNorm2d(512),
+            # nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
+        )
+
         self.classification = nn.Sequential(
 
             # nn.Linear(conv_size, 4096),
             # nn.ReLU(),
             # nn.BatchNorm1d(4096),
 
-            nn.Linear(4096, classes),
+            nn.Linear(6400, classes),
             nn.Softmax(dim=1)
         )
 
@@ -124,7 +145,10 @@ class Mixed(nn.Module):
 
         conv = self.conv(x)
         encoding = torch.flatten(conv, 1)
-        classification = self.classification(encoding.detach())
+
+        class_conv = self.classification_conv(x)
+        class_encoding = torch.flatten(class_conv, 1)
+        classification = self.classification(class_encoding)
 
         pen_conv = self.penalty_conv(x)
         penalty_encoding = torch.flatten(pen_conv, 1)

@@ -31,7 +31,7 @@ LEARNING_RATE_DEFAULT = 1e-4
 
 MAX_STEPS_DEFAULT = 48750
 
-BATCH_SIZE_DEFAULT = 256
+BATCH_SIZE_DEFAULT = 128
 
 #INPUT_NET = 3072
 INPUT_NET = 5120
@@ -42,7 +42,7 @@ NETS = 1
 CLASSES = 100
 DESCRIPTION = " Image size: " + str(SIZE) + " , Classes: " + str(CLASSES)
 
-EVAL_FREQ_DEFAULT = 200
+EVAL_FREQ_DEFAULT = 100
 MIN_CLUSTERS_TO_SAVE = 100
 np.set_printoptions(formatter={'float': lambda x: "{0:0.4f}".format(x)})
 FLAGS = None
@@ -118,10 +118,10 @@ def product_loss(a, b, c, d, total_mean):
     return scalar, mean
 
 
-def another_p(a, b, mean):
-    penalty = (a.sum(dim=0) + b.sum(dim=0)) / 2
+def another_p(a, b, c, d, mean):
+    penalty = (a.sum(dim=0) + b.sum(dim=0) + c.sum(dim=0) + d.sum(dim=0)) / 4
 
-    agreement = a * b
+    agreement = a * b * c * d
     penalized_agreement = - (a+b)/2 * torch.log(agreement/penalty) * (mean.detach() / expected)
     penalized_agreement = penalized_agreement.sum(dim=1)
 
@@ -130,10 +130,10 @@ def another_p(a, b, mean):
     return scalar, penalty
 
 
-def penalized_product_mean(a, b, mean):
-    penalty = (a.sum(dim=0) + b.sum(dim=0)) / 2
+def penalized_product_mean(a, b, c, d, mean):
+    penalty = (a.sum(dim=0) + b.sum(dim=0) + c.sum(dim=0) + d.sum(dim=0)) / 4
 
-    agreement = a * b
+    agreement = a * b * c * d
     penalized_agreement = agreement / penalty
     penalized_agreement = penalized_agreement.sum(dim=1)
 
@@ -141,7 +141,7 @@ def penalized_product_mean(a, b, mean):
 
     ####
 
-    normalize = (a + b)/2 * (mean.detach() / expected)
+    normalize = (a + b + c + d)/4 * (mean.detach() / expected)
     normalize = normalize.sum(dim=1)
 
     result = result * normalize
@@ -153,9 +153,7 @@ def penalized_product_mean(a, b, mean):
     return scalar, penalty
 
 
-def penalized_product(a, b):
-    penalty = (a.sum(dim=0) + b.sum(dim=0)) / 2
-
+def penalized_product(a, b, penalty):
     agreement = a * b
     penalized_agreement = agreement / penalty
     penalized_agreement = penalized_agreement.sum(dim=1)
@@ -242,11 +240,6 @@ def make_transformations(image, aug_ids, iter):
     image_3 = torch.cat([image_1_c, image_2_c, image_3_c, image_4_c, image_5_c, image_6_c, image_7_c, image_8_c], dim=0)
     image_4 = torch.cat([image_1_d, image_2_d, image_3_d, image_4_d, image_5_d, image_6_d, image_7_d, image_8_d], dim=0)
 
-    if random.uniform(0, 1) > 0.999:
-        save_images(image_1, 19, iter)
-        save_images(image_2, 20, iter)
-        save_images(image_3, 21, iter)
-        save_images(image_4, 22, iter)
 
     return image_1, image_2, image_3, image_4
 
@@ -263,10 +256,19 @@ def forward_block(X, ids, encoder, optimizer, train, total_mean, iter):
     _, logit_c, c = encoder(image_3.to('cuda'))
     _, logit_d, d = encoder(image_4.to('cuda'))
 
-    total_loss, penalty = product_loss(a, b, c, d, total_mean)
+    penalty = (a.sum(dim=0) + b.sum(dim=0) + c.sum(dim=0) + d.sum(dim=0)) / 4
+
+    loss1 = penalized_product(a, b, penalty)
+    loss2 = penalized_product(a, c, penalty)
+    loss3 = penalized_product(a, d, penalty)
+    loss4 = penalized_product(b, c, penalty)
+    loss5 = penalized_product(b, d, penalty)
+    loss6 = penalized_product(c, d, penalty)
+
+    total_loss = loss1 + loss2 + loss3 + loss4 + loss5 + loss6
 
     if train:
-        total_mean = 0.9 * total_mean + penalty * 0.1
+        total_mean = 0.8 * total_mean + penalty * 0.2
 
         optimizer.zero_grad()
         total_loss.backward()
