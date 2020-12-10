@@ -5,6 +5,7 @@ import os, sys, tarfile, errno
 import numpy as np
 import matplotlib.pyplot as plt
 
+
 if sys.version_info >= (3, 0, 0):
     import urllib.request as urllib  # ugly but works
 else:

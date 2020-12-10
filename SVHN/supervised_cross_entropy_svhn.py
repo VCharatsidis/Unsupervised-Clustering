@@ -4,11 +4,11 @@ from __future__ import print_function
 import torch.nn.utils.prune as prune
 
 import sys
-
+import scipy.io as sio
 import argparse
 import os
 
-from SupervisedNetCifar import SupervisedNetCifar
+from SupervisedSVHNNET import SupervisedSVHNNET
 
 from image_utils import *
 import random
@@ -24,11 +24,11 @@ torch.set_printoptions(threshold=sys.maxsize)
 EPS = sys.float_info.epsilon
 
 #EPS=sys.float_info.epsilon
-LEARNING_RATE_DEFAULT = 1e-4
+LEARNING_RATE_DEFAULT = 4e-4
 
 MAX_STEPS_DEFAULT = 500000
 
-BATCH_SIZE_DEFAULT = 128
+BATCH_SIZE_DEFAULT = 256
 
 SIZE = 32
 SIZE_Y = 32
@@ -36,7 +36,7 @@ NETS = 1
 
 EPOCHS = 400
 
-CLASSES = 100
+CLASSES = 10
 DESCRIPTION = " Image size: " + str(SIZE) + " , Classes: " + str(CLASSES)
 
 EVAL_FREQ_DEFAULT = 250
@@ -74,11 +74,6 @@ transformations_dict = {0: "original",
                        11: "random crop",
                        12: "image 1",
                        13: "image 2"}
-
-
-labels_to_imags = {}
-for i in range(CLASSES):
-    labels_to_imags[i] = i
 
 
 def save_images(images, transformation):
@@ -132,37 +127,36 @@ def save_images(images, transformation):
 
 
 def forward_block(X, y_train, ids, encoder, optimizer, train, rev_product):
-    global first
-    number_transforms = 19
-    aug_ids = np.random.choice(number_transforms, size=number_transforms, replace=False)
-
     image = X[ids, :]
 
-    eight = image.shape[0] // 8
-
-    #image_1 = transformation(aug_ids[0], image[0:eight], SIZE, SIZE_Y)
-    #image_2 = transformation(aug_ids[1], image[0:eight], SIZE, SIZE_Y)
-
-    #image_3 = transformation(aug_ids[2], image[eight: 2 * eight], SIZE, SIZE_Y)
-    #image_4 = transformation(aug_ids[3], image[eight: 2 * eight], SIZE, SIZE_Y)
-
-    #image_5 = transformation(aug_ids[4], image[2 * eight: 3 * eight], SIZE, SIZE_Y)
-    #image_6 = transformation(aug_ids[5], image[2 * eight: 3 * eight], SIZE, SIZE_Y)
-
-    #image_7 = transformation(aug_ids[6], image[3 * eight: 4 * eight], SIZE, SIZE_Y)
-    #image_8 = transformation(aug_ids[7], image[3 * eight: 4 * eight], SIZE, SIZE_Y)
-
-    #image_9 = transformation(aug_ids[8], image[4 * eight: 5 * eight], SIZE, SIZE_Y)
-    #image_10 = transformation(aug_ids[9], image[4 * eight: 5 * eight], SIZE, SIZE_Y)
-
-    #image_11 = transformation(aug_ids[10], image[5 * eight: 6 * eight], SIZE, SIZE_Y)
-    #image_12 = transformation(aug_ids[11], image[5 * eight: 6 * eight], SIZE, SIZE_Y)
-
-    #image_13 = transformation(aug_ids[12], image[6 * eight: 7 * eight], SIZE, SIZE_Y)
-    #image_14 = transformation(aug_ids[13], image[6 * eight: 7 * eight], SIZE, SIZE_Y)
-
-    #image_15 = transformation(aug_ids[14], image[7 * eight:], SIZE, SIZE_Y)
-    #image_16 = transformation(aug_ids[15], image[7 * eight:], SIZE, SIZE_Y)
+    # number_transforms = 19
+    # aug_ids = np.random.choice(number_transforms, size=number_transforms, replace=False)
+    #
+    # eight = image.shape[0] // 8
+    #
+    # #image_1 = transformation(aug_ids[0], image[0:eight], SIZE, SIZE_Y)
+    # image_2 = transformation(aug_ids[1], image[0:eight], SIZE, SIZE_Y)
+    #
+    # #image_3 = transformation(aug_ids[2], image[eight: 2 * eight], SIZE, SIZE_Y)
+    # image_4 = transformation(aug_ids[3], image[eight: 2 * eight], SIZE, SIZE_Y)
+    #
+    # #image_5 = transformation(aug_ids[4], image[2 * eight: 3 * eight], SIZE, SIZE_Y)
+    # image_6 = transformation(aug_ids[5], image[2 * eight: 3 * eight], SIZE, SIZE_Y)
+    #
+    # #image_7 = transformation(aug_ids[6], image[3 * eight: 4 * eight], SIZE, SIZE_Y)
+    # image_8 = transformation(aug_ids[7], image[3 * eight: 4 * eight], SIZE, SIZE_Y)
+    #
+    # #image_9 = transformation(aug_ids[8], image[4 * eight: 5 * eight], SIZE, SIZE_Y)
+    # image_10 = transformation(aug_ids[9], image[4 * eight: 5 * eight], SIZE, SIZE_Y)
+    #
+    # #image_11 = transformation(aug_ids[10], image[5 * eight: 6 * eight], SIZE, SIZE_Y)
+    # image_12 = transformation(aug_ids[11], image[5 * eight: 6 * eight], SIZE, SIZE_Y)
+    #
+    # #image_13 = transformation(aug_ids[12], image[6 * eight: 7 * eight], SIZE, SIZE_Y)
+    # image_14 = transformation(aug_ids[13], image[6 * eight: 7 * eight], SIZE, SIZE_Y)
+    #
+    # #image_15 = transformation(aug_ids[14], image[7 * eight:], SIZE, SIZE_Y)
+    # image_16 = transformation(aug_ids[15], image[7 * eight:], SIZE, SIZE_Y)
 
     # save_images(image_1, aug_ids[0])
     # save_images(image_2, aug_ids[1])
@@ -194,10 +188,10 @@ def forward_block(X, y_train, ids, encoder, optimizer, train, rev_product):
     all_predictions = a
 
     y_train = Variable(torch.LongTensor(y_train[ids])).cuda()
-    #targets = torch.cat([y_train, y_train], dim=0)
-    targets = y_train
+    #current_targets = torch.cat([y_train, y_train], dim=0)
+    current_targets = y_train
 
-    cross_entropy_loss = loss(all_predictions, targets)
+    cross_entropy_loss = loss(all_predictions, current_targets)
 
     if train:
         optimizer.zero_grad()
@@ -271,62 +265,41 @@ def unpickle(file):
 
 def train():
     global first
-    with open('..\\data\\train', 'rb') as fo:
-        res = pickle.load(fo, encoding='bytes')
+    # unsupervised_data = sio.loadmat('data\\extra_32x32.mat')
+    train_data = sio.loadmat('data\\train_32x32.mat')
+    test_data = sio.loadmat('data\\test_32x32.mat')
 
-    meta = unpickle('..\\data\\meta')
+    train_targets = train_data['y'].squeeze(1)
+    print("y test", train_targets.shape)
 
-    fine_label_names = [t.decode('utf8') for t in meta[b'fine_label_names']]
+    y_train = np.array([x % 10 for x in train_targets])
+    #y_train = torch.from_numpy(train_targets)
 
-    train = unpickle('..\\data\\train')
+    # for target in train_targets:
+    #     class_numbers[target] += 1
 
-    filenames = [t.decode('utf8') for t in train[b'filenames']]
-    train_data = train[b'data']
+    X_train = preproccess_svhn(train_data['X'])
+    print("x train shape", X_train.shape)
 
-    test = unpickle('..\\data\\test')
+    # access to the dict
 
-    filenames = [t.decode('utf8') for t in test[b'filenames']]
-    targets = test[b'fine_labels']
-    test_data = test[b'data']
+    X_test = preproccess_svhn(test_data['X'])
+    print("x test shape", X_test.shape)
 
-    X_train = list()
-    for d in train_data:
-        image = np.zeros((32, 32, 3), dtype=np.uint8)
-        image[..., 0] = np.reshape(d[:1024], (32, 32))  # Red channel
-        image[..., 1] = np.reshape(d[1024:2048], (32, 32))  # Green channel
-        image[..., 2] = np.reshape(d[2048:], (32, 32))  # Blue channel
-        X_train.append(image)
+    targets = test_data['y'].squeeze(1)
+    print("y test", targets.shape)
 
-    X_train = np.array(X_train)
-    X_train = preproccess_cifar(X_train)
-
-    y_train = train[b'fine_labels']
-    y_train = np.array(y_train)
-
-    print("train shape", X_train.shape)
-
-    X_test = list()
-    for d in test_data:
-        image = np.zeros((32, 32, 3), dtype=np.uint8)
-        image[..., 0] = np.reshape(d[:1024], (32, 32))  # Red channel
-        image[..., 1] = np.reshape(d[1024:2048], (32, 32))  # Green channel
-        image[..., 2] = np.reshape(d[2048:], (32, 32))  # Blue channel
-        X_test.append(image)
-
-    X_test = np.array(X_test)
-    X_test = preproccess_cifar(X_test)
-    print("test shape", X_test.shape)
-    targets = np.array(targets)
-    print("targets shape", targets.shape)
+    targets = np.array([x % 10 for x in targets])
+    #targets = torch.from_numpy(targets)
 
     ###############################################
 
     script_directory = os.path.split(os.path.abspath(__file__))[0]
 
-    filepath = '..\\cifar100_models\\supervised_cross_entropy_originalonly'
+    filepath = 'supervised_cross_entropy_svhn_original'
     clusters_net_path = os.path.join(script_directory, filepath)
 
-    encoder = SupervisedNetCifar(3, 100).to('cuda')
+    encoder = SupervisedSVHNNET(3, 10).to('cuda')
 
     print(encoder)
 

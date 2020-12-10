@@ -4,7 +4,7 @@ from __future__ import print_function
 
 
 import sys
-import scipy.io as sio
+import cifar10_utils
 import argparse
 import os
 
@@ -27,11 +27,11 @@ from torchvision import models
 EPS = sys.float_info.epsilon
 
 #EPS=sys.float_info.epsilon
-LEARNING_RATE_DEFAULT = 3e-4
+LEARNING_RATE_DEFAULT = 4e-4
 
 MAX_STEPS_DEFAULT = 48750
 
-BATCH_SIZE_DEFAULT = 128
+BATCH_SIZE_DEFAULT = 256
 
 #INPUT_NET = 3072
 #INPUT_NET = 5120
@@ -39,9 +39,9 @@ SIZE = 32
 SIZE_Y = 32
 NETS = 1
 
-CLASSES = 20
+CLASSES = 10
 DESCRIPTION = " Image size: " + str(SIZE) + " , Classes: " + str(CLASSES)
-EPOCHS = 200
+EPOCHS = 300
 
 EVAL_FREQ_DEFAULT = 100
 MIN_CLUSTERS_TO_SAVE = 100
@@ -254,18 +254,18 @@ def forward_block(X, ids, encoder, optimizer, train, total_mean, iter):
     _, logit_c, c = encoder(image_3.to('cuda'))
     _, logit_d, d = encoder(image_4.to('cuda'))
 
-    penalty = (a.sum(dim=0) + b.sum(dim=0) + c.sum(dim=0) + d.sum(dim=0)) / 4
+    # penalty = (a.sum(dim=0) + b.sum(dim=0) + c.sum(dim=0) + d.sum(dim=0)) / 4
+    #
+    # loss1 = penalized_product(a, b, penalty)
+    # loss2 = penalized_product(a, c, penalty)
+    # loss3 = penalized_product(a, d, penalty)
+    # loss4 = penalized_product(b, c, penalty)
+    # loss5 = penalized_product(b, d, penalty)
+    # loss6 = penalized_product(c, d, penalty)
+    #
+    # total_loss = loss1 + loss2 + loss3 + loss4 + loss5 + loss6
 
-    loss1 = penalized_product(a, b, penalty)
-    loss2 = penalized_product(a, c, penalty)
-    loss3 = penalized_product(a, d, penalty)
-    loss4 = penalized_product(b, c, penalty)
-    loss5 = penalized_product(b, d, penalty)
-    loss6 = penalized_product(c, d, penalty)
-
-    total_loss = loss1 + loss2 + loss3 + loss4 + loss5 + loss6
-
-    #total_loss = product_agreement_loss(a, b, c, d)
+    total_loss = product_agreement_loss(a, b, c, d)
 
     if train:
         #total_mean = 0.8 * total_mean + penalty * 0.2
@@ -424,58 +424,21 @@ def unpickle(file):
 
 
 def train():
-    with open('data\\train', 'rb') as fo:
-        res = pickle.load(fo, encoding='bytes')
+    X_train_raw, y_train_raw, X_test_raw, y_test_raw = cifar10_utils.load_cifar10(cifar10_utils.CIFAR10_FOLDER)
+    X_train, y_train, X_test, targets = cifar10_utils.preprocess_cifar10_data(X_train_raw, y_train_raw, X_test_raw,
+                                                                              y_test_raw)
 
-    meta = unpickle('data\\meta')
+    X_train = torch.from_numpy(X_train)
+    X_test = torch.from_numpy(X_test)
 
-    fine_label_names = [t.decode('utf8') for t in meta[b'fine_label_names']]
-
-    train = unpickle('data\\train')
-
-    filenames = [t.decode('utf8') for t in train[b'filenames']]
-    train_fine_labels = train[b'fine_labels']
-    train_data = train[b'data']
-
-    test = unpickle('data\\test')
-
-    filenames = [t.decode('utf8') for t in test[b'filenames']]
-    #targets = test[b'fine_labels']
-    targets = test[b'coarse_labels']
-    test_data = test[b'data']
-
-    X_train = list()
-    for d in train_data:
-        image = np.zeros((32, 32, 3), dtype=np.uint8)
-        image[..., 0] = np.reshape(d[:1024], (32, 32))  # Red channel
-        image[..., 1] = np.reshape(d[1024:2048], (32, 32))  # Green channel
-        image[..., 2] = np.reshape(d[2048:], (32, 32))  # Blue channel
-        X_train.append(image)
-
-    X_train = np.array(X_train)
-    X_train = preproccess_cifar(X_train)
-
-    print("train shape", X_train.shape)
-
-    X_test = list()
-    for d in test_data:
-        image = np.zeros((32, 32, 3), dtype=np.uint8)
-        image[..., 0] = np.reshape(d[:1024], (32, 32))  # Red channel
-        image[..., 1] = np.reshape(d[1024:2048], (32, 32))  # Green channel
-        image[..., 2] = np.reshape(d[2048:], (32, 32))  # Blue channel
-        X_test.append(image)
-
-    X_test = np.array(X_test)
-    X_test = preproccess_cifar(X_test)
-    print("test shape", X_test.shape)
-    targets = np.array(targets)
-    print("targets shape", targets.shape)
+    X_train /= 255
+    X_test /= 255
 
     ###############################################
 
     script_directory = os.path.split(os.path.abspath(__file__))[0]
 
-    filepath = 'cifar100_models\\PA_4_128_lr3_coarse'
+    filepath = 'PA_4_256_lr2'
     virtual_best_path = os.path.join(script_directory, filepath)
 
     # epoch 20.

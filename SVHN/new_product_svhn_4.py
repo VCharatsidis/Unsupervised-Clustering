@@ -27,19 +27,17 @@ from torchvision import models
 EPS = sys.float_info.epsilon
 
 #EPS=sys.float_info.epsilon
-LEARNING_RATE_DEFAULT = 3e-4
+LEARNING_RATE_DEFAULT = 4e-4
 
-MAX_STEPS_DEFAULT = 48750
-
-BATCH_SIZE_DEFAULT = 128
+BATCH_SIZE_DEFAULT = 256
 
 #INPUT_NET = 3072
-#INPUT_NET = 5120
+INPUT_NET = 5120
 SIZE = 32
 SIZE_Y = 32
 NETS = 1
 
-CLASSES = 20
+CLASSES = 10
 DESCRIPTION = " Image size: " + str(SIZE) + " , Classes: " + str(CLASSES)
 EPOCHS = 200
 
@@ -232,7 +230,7 @@ def make_transformations(image, aug_ids, iter):
     #
     # save_images(image_4_d, aug_ids[16], iter)
     # save_images(image_8_d, aug_ids[17], iter)
-    #save_images(image_8_c, 18, iter)
+    # save_images(image_8_c, 18, iter)
 
     image_1 = torch.cat([image_1_a, image_2_a, image_3_a, image_4_a, image_5_a, image_6_a, image_7_a, image_8_a], dim=0)
     image_2 = torch.cat([image_1_b, image_2_b, image_3_b, image_4_b, image_5_b, image_6_b, image_7_b, image_8_b], dim=0)
@@ -392,7 +390,7 @@ def measure_acc_augments(X_test, encoder, targets):
         #       virtual_misses / virtual_length)
 
     miss_virtual_percentage = total_miss_virtual / (runs * size)
-    print("acc virtual percentage: ", 1-miss_virtual_percentage)
+    print("acc virtual percentage: ", 1 - miss_virtual_percentage)
 
     return total_miss_percentage, len(clusters), miss_virtual_percentage
 
@@ -424,58 +422,47 @@ def unpickle(file):
 
 
 def train():
-    with open('data\\train', 'rb') as fo:
-        res = pickle.load(fo, encoding='bytes')
+    unsupervised_data = sio.loadmat('data\\extra_32x32.mat')
+    train_data = sio.loadmat('data\\train_32x32.mat')
+    test_data = sio.loadmat('data\\test_32x32.mat')
 
-    meta = unpickle('data\\meta')
+    original_train = train_data['X']
+    train_targets = train_data['y'].squeeze(1)
+    print("y test", train_targets.shape)
 
-    fine_label_names = [t.decode('utf8') for t in meta[b'fine_label_names']]
+    train_targets = np.array([x % 10 for x in train_targets])
 
-    train = unpickle('data\\train')
+    # for target in train_targets:
+    #     class_numbers[target] += 1
 
-    filenames = [t.decode('utf8') for t in train[b'filenames']]
-    train_fine_labels = train[b'fine_labels']
-    train_data = train[b'data']
+    X_train = preproccess_svhn(unsupervised_data['X'])
+    print("x train shape", X_train.shape)
 
-    test = unpickle('data\\test')
+    # access to the dict
 
-    filenames = [t.decode('utf8') for t in test[b'filenames']]
-    #targets = test[b'fine_labels']
-    targets = test[b'coarse_labels']
-    test_data = test[b'data']
+    X_test = preproccess_svhn(test_data['X'])
+    print("x test shape", X_test.shape)
 
-    X_train = list()
-    for d in train_data:
-        image = np.zeros((32, 32, 3), dtype=np.uint8)
-        image[..., 0] = np.reshape(d[:1024], (32, 32))  # Red channel
-        image[..., 1] = np.reshape(d[1024:2048], (32, 32))  # Green channel
-        image[..., 2] = np.reshape(d[2048:], (32, 32))  # Blue channel
-        X_train.append(image)
+    targets = test_data['y'].squeeze(1)
+    print("y test", targets.shape)
 
-    X_train = np.array(X_train)
-    X_train = preproccess_cifar(X_train)
+    targets = np.array([x % 10 for x in targets])
 
-    print("train shape", X_train.shape)
-
-    X_test = list()
-    for d in test_data:
-        image = np.zeros((32, 32, 3), dtype=np.uint8)
-        image[..., 0] = np.reshape(d[:1024], (32, 32))  # Red channel
-        image[..., 1] = np.reshape(d[1024:2048], (32, 32))  # Green channel
-        image[..., 2] = np.reshape(d[2048:], (32, 32))  # Blue channel
-        X_test.append(image)
-
-    X_test = np.array(X_test)
-    X_test = preproccess_cifar(X_test)
-    print("test shape", X_test.shape)
-    targets = np.array(targets)
-    print("targets shape", targets.shape)
+    # for target in targets:
+    #     class_numbers[target] += 1
+    #
+    # sum = len(targets) + len(train_targets)
+    # print("sum ", sum)
+    # print(class_numbers)
+    #
+    # for c in class_numbers:
+    #     print(c, " : ", ((class_numbers[c] / sum) * 100))
 
     ###############################################
 
     script_directory = os.path.split(os.path.abspath(__file__))[0]
 
-    filepath = 'cifar100_models\\PA_4_128_lr3_coarse'
+    filepath = 'svhn_models\\ppa_svhn'
     virtual_best_path = os.path.join(script_directory, filepath)
 
     # epoch 20.
@@ -525,12 +512,6 @@ def train():
 
         print("==================================================================================")
 
-        if iteration % 2000 == 0:
-            print("example prediction: ", probs10[0])
-            print("example prediction: ", probs10_b[0])
-            print("total mean: ", total_mean)
-            print()
-
         print("train avg loss : ", avg_loss / runs)
         avg_loss = 0
         encoder.eval()
@@ -551,20 +532,8 @@ def train():
               ",  lr: ", LEARNING_RATE_DEFAULT,
               ",  best loss iter: ", max_loss_iter,
               "-", min_miss_percentage,
-              ",  actual best iter: ", most_clusters_iter, "-", most_clusters,
               ",  virtual best iter: ", best_virtual_iter, " - ", min_virtual_miss_percentage,
               ",", DESCRIPTION)
-
-        # if clusters >= most_clusters:
-        #     min_miss_percentage = 1 - cluster_accuracies[clusters]
-        #     most_clusters = clusters
-        #
-        #     if min_miss_percentage > miss_percentage:
-        #         cluster_accuracies[clusters] = 1 - miss_percentage
-        #         max_loss_iter = total_iters
-        #         most_clusters_iter = total_iters
-        #
-        #         print("models actual_best_path iter: " + str(total_iters))
 
 
 def to_tensor(X):
@@ -622,8 +591,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--learning_rate', type=float, default=LEARNING_RATE_DEFAULT,
                         help='Learning rate')
-    parser.add_argument('--max_steps', type=int, default=MAX_STEPS_DEFAULT,
-                        help='Number of steps to run trainer.')
+
     parser.add_argument('--batch_size', type=int, default=BATCH_SIZE_DEFAULT,
                         help='Batch size to run trainer.')
     parser.add_argument('--eval_freq', type=int, default=EVAL_FREQ_DEFAULT,

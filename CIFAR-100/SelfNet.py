@@ -1,17 +1,19 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+
 import torch.nn as nn
+import torch
 
 
-class LinearNetCifar(nn.Module):
+class SelfNet(nn.Module):
     """
     This class implements a Multi-layer Perceptron in PyTorch.
     It handles the different layers and parameters of the model.
     Once initialized an MLP object can perform forward.
     """
 
-    def __init__(self, n_inputs, classes):
+    def __init__(self, n_channels, EMBEDING_SIZE):
         """
         Initializes MLP object.
         Args:
@@ -24,12 +26,29 @@ class LinearNetCifar(nn.Module):
                      This number is required in order to specify the
                      output dimensions of the MLP
         """
-        super(LinearNetCifar, self).__init__()
+        super(SelfNet, self).__init__()
 
-        self.linear = nn.Sequential(
-            nn.Linear(n_inputs, classes),
-            nn.Softmax(dim=1)
+        self.conv = nn.Sequential(
+            nn.Conv2d(n_channels, 64, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
+
+            nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(128),
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
+
+            nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
+            nn.Sigmoid(),
+            #nn.BatchNorm2d(256),
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
         )
+
+        self.brain = nn.Sequential(
+            nn.Linear(6400, EMBEDING_SIZE),
+            nn.Sigmoid()
+        )
+
 
     def forward(self, x):
         """
@@ -40,6 +59,10 @@ class LinearNetCifar(nn.Module):
         Returns:
           out: outputs of the network
         """
-        preds = self.linear(x)
 
-        return preds
+        conv = self.conv(x)
+        encoding = torch.flatten(conv, 1)
+
+        #binaries = self.brain(encoding)
+
+        return encoding, encoding, encoding

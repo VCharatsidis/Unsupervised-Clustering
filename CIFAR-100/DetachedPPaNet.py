@@ -7,7 +7,7 @@ import torch
 
 
 
-class DetachedNet(nn.Module):
+class DetachedPPaNet(nn.Module):
     """
     This class implements a Multi-layer Perceptron in PyTorch.
     It handles the different layers and parameters of the model.
@@ -27,7 +27,7 @@ class DetachedNet(nn.Module):
                      This number is required in order to specify the
                      output dimensions of the MLP
         """
-        super(DetachedNet, self).__init__()
+        super(DetachedPPaNet, self).__init__()
 
         self.conv_1 = nn.Sequential(
             nn.Conv2d(n_channels, 64, kernel_size=3, stride=1, padding=1),
@@ -46,17 +46,7 @@ class DetachedNet(nn.Module):
             nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
             nn.BatchNorm2d(256),
-            nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
-
-            # nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1),
-            # nn.ReLU(),
-            # nn.BatchNorm2d(512),
-            # nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
-            #
-            # nn.Conv2d(512, 1024, kernel_size=3, stride=1, padding=1),
-            # nn.ReLU(),
-            # nn.BatchNorm2d(1024),
-            # nn.MaxPool2d(kernel_size=2, stride=2, padding=1)
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=1)
         )
 
         self.conv_4 = nn.Sequential(
@@ -66,27 +56,27 @@ class DetachedNet(nn.Module):
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1)
         )
 
-        # self.conv_5 = nn.Sequential(
-        #     nn.Conv2d(512, 1024, kernel_size=3, stride=1, padding=1),
-        #     nn.ReLU(),
-        #     nn.BatchNorm2d(1024),
-        #     nn.MaxPool2d(kernel_size=2, stride=2, padding=1)
-        # )
+        self.conv_5 = nn.Sequential(
+            nn.Conv2d(512, 1024, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(1024),
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=1)
+        )
 
         self.brain_1 = nn.Sequential(
             nn.Linear(6400, EMBEDING_SIZE),
-            nn.Sigmoid()
+            nn.Softmax()
         )
 
         self.brain_2 = nn.Sequential(
             nn.Linear(4608, EMBEDING_SIZE),
-            nn.Sigmoid()
+            nn.Softmax()
         )
 
-        # self.brain_3 = nn.Sequential(
-        #     nn.Linear(4096, EMBEDING_SIZE),
-        #     nn.Sigmoid()
-        # )
+        self.brain_3 = nn.Sequential(
+            nn.Linear(4096, EMBEDING_SIZE),
+            nn.Softmax()
+        )
 
 
     def forward(self, x):
@@ -110,10 +100,10 @@ class DetachedNet(nn.Module):
         encoding_2 = torch.flatten(conv_4, 1)
         embedding_2 = self.brain_2(encoding_2)
 
-        # conv_5 = self.conv_5(conv_4.detach())  # detached
-        # encoding_3 = torch.flatten(conv_5, 1)
-        # embedding_3 = self.brain_3(encoding_3)
+        conv_5 = self.conv_5(conv_4.detach())  # detached
+        encoding_3 = torch.flatten(conv_5, 1)
+        embedding_3 = self.brain_3(encoding_3)
 
-        return encoding_1, embedding_1, encoding_2, embedding_2 #, encoding_3, embedding_3
+        return encoding_1, embedding_1, encoding_2, embedding_2, encoding_3, embedding_3
 
 

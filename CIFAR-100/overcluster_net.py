@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch
 
 
-class OneHotNet(nn.Module):
+class OverClusterNet(nn.Module):
     """
     This class implements a Multi-layer Perceptron in PyTorch.
     It handles the different layers and parameters of the model.
@@ -26,7 +26,7 @@ class OneHotNet(nn.Module):
                      This number is required in order to specify the
                      output dimensions of the MLP
         """
-        super(OneHotNet, self).__init__()
+        super(OverClusterNet, self).__init__()
 
         self.conv = nn.Sequential(
             nn.Conv2d(n_channels, 64, kernel_size=3, stride=1, padding=1),
@@ -60,6 +60,24 @@ class OneHotNet(nn.Module):
             nn.Softmax(dim=1)
         )
 
+        self.over1 = nn.Sequential(
+
+            nn.Linear(6400, 1000),
+            nn.Softmax(dim=1)
+        )
+
+        self.over2 = nn.Sequential(
+
+            nn.Linear(6400, 1000),
+            nn.Softmax(dim=1)
+        )
+
+        self.over3 = nn.Sequential(
+
+            nn.Linear(6400, 1000),
+            nn.Softmax(dim=1)
+        )
+
     def forward(self, x):
         """
         Performs forward pass of the input. Here an input tensor x is transformed through
@@ -74,5 +92,8 @@ class OneHotNet(nn.Module):
         encoding = torch.flatten(conv, 1)
 
         probs = self.brain(encoding)
+        over_1 = self.over1(encoding)
+        over_2 = self.over2(encoding)
+        over_3 = self.over3(encoding)
 
-        return encoding, probs, probs
+        return encoding, probs, probs, over_1, over_2, over_3

@@ -513,6 +513,20 @@ def balanced_subsample(y, size=None):
     return subsample
 
 
+def preproccess_svhn(x):
+
+    with torch.no_grad():
+        x = Variable(torch.FloatTensor(x))
+
+    x = x.transpose(0, 3)
+    x = x.transpose(1, 2)
+    x = x.transpose(2, 3)
+
+    x /= 255
+
+    return x
+
+
 def preproccess_cifar(x):
 
     with torch.no_grad():
@@ -554,6 +568,20 @@ def color_jitter(X):
     return X_copy
 
 
+def just_scale(X, size, pad):
+    X_copy = copy.deepcopy(X)
+    X_copy = Variable(torch.FloatTensor(X_copy))
+
+    j_scale = transforms.Resize(size=size, interpolation=2)
+    trans = transforms.Compose([j_scale, transforms.Pad(pad), transforms.ToTensor()])
+
+    for i in range(X_copy.shape[0]):
+        a = F.to_pil_image(X_copy[i])
+        X_copy[i] = trans(a)
+
+    return X_copy
+
+
 def show_gray_numpy(image_1):
     z = image_1.squeeze(1)
     pixels = z[0]
@@ -590,6 +618,7 @@ def show_mnist(first_image, w, h):
 def count_common_elements(p, embedings_size):
     sum_commons = 0
     counter = 0
+    p = torch.round(p)
     for i in range(p.shape[0]):
         for j in range(p.shape[0]):
             if i == j:

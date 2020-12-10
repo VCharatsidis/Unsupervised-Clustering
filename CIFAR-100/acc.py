@@ -5,7 +5,7 @@ from stl_utils import *
 
 from torchvision.utils import make_grid
 import matplotlib
-from linear_net_cifar import LinearNetCifar
+from linear_net import LinearNet
 import sys
 import pickle
 
@@ -13,8 +13,9 @@ np.set_printoptions(threshold=sys.maxsize)
 np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
 
 FLAGS = None
+FINE_LABELS = True
 
-encoder_name = "cifar100_models\\mixed_disentangle"
+encoder_name = "cifar100_models\\PPA_4_256_3conv_1linear_lr4_1"
 
 encoder = torch.load(encoder_name+".model")
 encoder.eval()
@@ -39,6 +40,7 @@ def miss_classifications(cluster):
 def most_frequent(List):
     return max(set(List), key=List.count)
 
+
 def measure_acc_augments(X_test, encoder, targets):
     virtual_clusters = {}
     for i in range(CLASSES):
@@ -59,7 +61,7 @@ def measure_acc_augments(X_test, encoder, targets):
 
         images = X_test[test_ids, :]
 
-        _, p, _ = encoder(images.to('cuda'))
+        _, _, p = encoder(images.to('cuda'))
 
         for i in range(p.shape[0]):
             val, index = torch.max(p[i], 0)
@@ -76,19 +78,21 @@ def measure_acc_augments(X_test, encoder, targets):
     clusters = set()
     for element in print_dict.keys():
         length = len(print_dict[element])
+        if length == 0:
+            continue
         misses = miss_classifications(print_dict[element])
         total_miss += misses
 
         mfe = most_frequent(print_dict[element])
         clusters.add(mfe)
-        print("cluster: ",
-              labels_to_imags[element],
-              ", most frequent: ",
-              mfe,
-              ", miss-classifications: ",
-              misses,
-              ", miss percentage: ",
-              misses / length)
+        # print("cluster: ",
+        #       labels_to_imags[element],
+        #       ", most frequent: ",
+        #       mfe,
+        #       ", miss-classifications: ",
+        #       misses,
+        #       ", miss percentage: ",
+        #       misses / length)
 
     total_miss_percentage = total_miss / (runs * size)
 
@@ -102,31 +106,29 @@ def measure_acc_augments(X_test, encoder, targets):
 
 
 
-
-
     print(virtual_clusters)
     total_miss_virtual = 0
     for element in virtual_clusters.keys():
         if len(virtual_clusters[element]) == 0:
             continue
-        virtual_length = len(virtual_clusters[element])
+        #virtual_length = len(virtual_clusters[element])
 
         virtual_misses = miss_classifications(virtual_clusters[element])
         total_miss_virtual += virtual_misses
 
-        mfe = most_frequent(virtual_clusters[element])
+        #mfe = most_frequent(virtual_clusters[element])
 
-        print("cluster: ",
-              element,
-              ", most frequent: ",
-              labels_to_imags[mfe],
-              ", miss-classifications: ",
-              virtual_misses,
-              ", miss percentage: ",
-              virtual_misses / virtual_length)
+        # print("cluster: ",
+        #       element,
+        #       ", most frequent: ",
+        #       labels_to_imags[mfe],
+        #       ", miss-classifications: ",
+        #       virtual_misses,
+        #       ", miss percentage: ",
+        #       virtual_misses / virtual_length)
 
     miss_virtual_percentage = total_miss_virtual / (runs * size)
-    print("miss virtual percentage: ", miss_virtual_percentage)
+    print("acc virtual percentage: ", 1 - miss_virtual_percentage)
 
     return total_miss_percentage, len(clusters), miss_virtual_percentage
 
@@ -150,12 +152,16 @@ def train():
 
     filenames = [t.decode('utf8') for t in train[b'filenames']]
     train_fine_labels = train[b'fine_labels']
+    if not FINE_LABELS:
+        train_fine_labels = train[b'coarse_labels']
     train_data = train[b'data']
 
     test = unpickle('data\\test')
 
     filenames = [t.decode('utf8') for t in test[b'filenames']]
     targets = test[b'fine_labels']
+    if not FINE_LABELS:
+        targets = test[b'coarse_labels']
     test_data = test[b'data']
 
     X_train = list()

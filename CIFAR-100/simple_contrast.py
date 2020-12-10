@@ -31,6 +31,7 @@ LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 500000
 
 BATCH_SIZE_DEFAULT = 256
+TR = 4
 
 EMBEDINGS = 4096
 SIZE = 32
@@ -50,14 +51,13 @@ FLAGS = None
 
 square = torch.ones(BATCH_SIZE_DEFAULT, BATCH_SIZE_DEFAULT)
 ZERO_DIAG = square.fill_diagonal_(0)
-first_part = torch.cat([ZERO_DIAG, ZERO_DIAG], dim=1)
-adj_matrix = torch.cat([first_part, first_part], dim=0)
+first_part = torch.cat([ZERO_DIAG, ZERO_DIAG, ZERO_DIAG, ZERO_DIAG], dim=1)
+adj_matrix = torch.cat([first_part, first_part, first_part, first_part], dim=0)
 adj_matrix = adj_matrix.cuda()
 
-big_diag = torch.ones(2 * BATCH_SIZE_DEFAULT, 2 * BATCH_SIZE_DEFAULT)
+big_diag = torch.ones(TR * BATCH_SIZE_DEFAULT, TR * BATCH_SIZE_DEFAULT)
 ZERO_BIG_DIAG = big_diag.fill_diagonal_(0)
 ZERO_BIG_DIAG = ZERO_BIG_DIAG.cuda()
-
 
 #ELEMENTS_EXCEPT_DIAG = 2 * BATCH_SIZE_DEFAULT * (BATCH_SIZE_DEFAULT - 1)
 

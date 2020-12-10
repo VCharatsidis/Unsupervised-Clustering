@@ -6,14 +6,14 @@ import torch.nn as nn
 import torch
 
 
-class OneHotNet(nn.Module):
+class BCNET(nn.Module):
     """
     This class implements a Multi-layer Perceptron in PyTorch.
     It handles the different layers and parameters of the model.
     Once initialized an MLP object can perform forward.
     """
 
-    def __init__(self, n_channels, classes):
+    def __init__(self, n_channels, EMBEDING_SIZE):
         """
         Initializes MLP object.
         Args:
@@ -26,7 +26,7 @@ class OneHotNet(nn.Module):
                      This number is required in order to specify the
                      output dimensions of the MLP
         """
-        super(OneHotNet, self).__init__()
+        super(BCNET, self).__init__()
 
         self.conv = nn.Sequential(
             nn.Conv2d(n_channels, 64, kernel_size=3, stride=1, padding=1),
@@ -43,22 +43,26 @@ class OneHotNet(nn.Module):
             nn.BatchNorm2d(256),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
 
-            # nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1),
-            # nn.ReLU(),
-            # nn.BatchNorm2d(512),
-            # nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
+            nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(512),
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
 
-            # nn.Conv2d(512, 1024, kernel_size=3, stride=1, padding=1)
-            # nn.ReLU(),
-            # nn.BatchNorm2d(1024),
-            # nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
+            nn.Conv2d(512, 1024, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(1024),
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
         )
 
         self.brain = nn.Sequential(
+            nn.Linear(4096, 4096),
+            nn.ReLU(),
+            nn.BatchNorm1d(4096),
 
-            nn.Linear(6400, classes),
-            nn.Softmax(dim=1)
+            nn.Linear(4096, EMBEDING_SIZE),
+            nn.Sigmoid()
         )
+
 
     def forward(self, x):
         """
@@ -73,6 +77,6 @@ class OneHotNet(nn.Module):
         conv = self.conv(x)
         encoding = torch.flatten(conv, 1)
 
-        probs = self.brain(encoding)
+        binaries = self.brain(encoding)
 
-        return encoding, probs, probs
+        return encoding, binaries, binaries

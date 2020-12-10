@@ -8,7 +8,7 @@ import sys
 import argparse
 import os
 
-from detached_net import DetachedNet
+from DetachedPPaNet import DetachedPPaNet
 
 from image_utils import *
 import random
@@ -29,10 +29,8 @@ LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 500000
 
 BATCH_SIZE_DEFAULT = 128
-QUEUE = 300
-TR = 2
 
-EMBEDINGS = 100
+EMBEDINGS = 4096
 SIZE = 32
 SIZE_Y = 32
 NETS = 1
@@ -48,13 +46,16 @@ np.set_printoptions(formatter={'float': lambda x: "{0:0.4f}".format(x)})
 FLAGS = None
 
 square = torch.ones(BATCH_SIZE_DEFAULT, BATCH_SIZE_DEFAULT)
-
-first_part = torch.cat([square.fill_diagonal_(0), square.fill_diagonal_(0)], dim=1)
-second_part = torch.cat([square.fill_diagonal_(0), square.fill_diagonal_(0)], dim=1)
-adj_matrix = torch.cat([first_part, second_part], dim=0).cuda()
+ZERO_DIAG = square.fill_diagonal_(0)
+first_part = torch.cat([ZERO_DIAG, ZERO_DIAG, ZERO_DIAG], dim=1)
+adj_matrix = torch.cat([first_part, first_part, first_part], dim=0).cuda()
 
 
 first = True
+
+cluster_accuracies = {}
+for i in range(CLASSES):
+    cluster_accuracies[i] = 0
 
 
 class_numbers = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 0: 0}
@@ -94,40 +95,30 @@ def new_agreement(product, denominator, rev_prod):
     attraction = (torch.mm(product, product.transpose(0, 1)) + EPS) * (1 - adj_matrix)
     repel = (torch.mm(product, rev_prod.transpose(0, 1)) + EPS) * adj_matrix
 
+    attraction = attraction / denominator
     repel = repel / denominator
 
     total_matrix = - torch.log(repel + attraction)
 
-    return total_matrix.mean()
+    attraction_bonus = 0.5 * (BATCH_SIZE_DEFAULT - 1) * (1 - adj_matrix) * total_matrix
 
-# def new_agreement(product, denominator, rev_prod):
-#     attraction = (torch.mm(product, product.transpose(0, 1)) + EPS) * (1 - adj_matrix)
-#     repel = (torch.mm(product, rev_prod.transpose(0, 1)) + EPS) * adj_matrix
-#
-#     attraction = attraction / denominator
-#     repel = repel / denominator
-#
-#     total_matrix = - torch.log(repel + attraction)
-#
-#     attraction_bonus = 0.5 * (BATCH_SIZE_DEFAULT - 1) * (1 - adj_matrix) * total_matrix
-#
-#     total_matrix = total_matrix + attraction_bonus.fill_diagonal_(0)
-#
-#     mean_total = total_matrix.mean()
-#
-#     return mean_total
+    total_matrix = total_matrix + attraction_bonus.fill_diagonal_(0)
 
+    mean_total = total_matrix.mean()
 
-def queue_agreement(product, denominator, rev_prod):
-    transposed = rev_prod.transpose(0, 1)
+    return mean_total
 
-    nondiag = torch.mm(product, transposed) + EPS
-    nondiag = nondiag / denominator
-
-    log_nondiag = - torch.log(nondiag)
-    negative = log_nondiag.mean()
-
-    return negative
+#
+# def queue_agreement(product, denominator, rev_prod):
+#     transposed = rev_prod.transpose(0, 1)
+#
+#     nondiag = torch.mm(product, transposed) + EPS
+#     nondiag = nondiag / denominator
+#
+#     log_nondiag = - torch.log(nondiag)
+#     negative = log_nondiag.mean()
+#
+#     return negative
 
 
 def make_transformations(image, aug_ids, iter):
@@ -239,40 +230,34 @@ def forward_block(X, ids, encoder, optimizer, train, rev_product):
     # save_images(image_1, 12)
     # save_images(image_2, 13)
 
-    encoding_1, p1, encoding_2, p2 = encoder(image.to('cuda'))
-    #encoding_1, p1_b, encoding_2, p2_b = encoder(image_2.to('cuda'))
+    _, a, _, b, _, c = encoder(image.to('cuda'))
 
-    all_predictions = torch.cat([p1, p2], dim=0)
+    penalty = (a.sum(dim=0) + b.sum(dim=0) + c.sum(dim=0)) / 3
 
-    #all_predictions_b = torch.cat([p1_b, p2_b], dim=0)
+    loss1 = penalized_product(a, b, penalty)
+    loss2 = penalized_product(a, c, penalty)
+    loss3 = penalized_product(b, c, penalty)
 
-    denominator = all_predictions.sum(dim=1)
-    denominator = denominator.unsqueeze(dim=1) + 1
-
-    #denominator_b = all_predictions_b.sum(dim=1)
-    #denominator_b = denominator_b.unsqueeze(dim=1) + 1
-
-    current_reverse = 1 - all_predictions
-    #loss_b = new_agreement(all_predictions_b, denominator_b)
-
-    new_loss = new_agreement(all_predictions, denominator, current_reverse)
-
-    if first or not train:
-        total_loss = new_loss
-        rev_product = current_reverse.detach()
-        first = False
-
-    else:
-        old_loss = queue_agreement(all_predictions, denominator, rev_product)
-        rev_product = torch.cat([rev_product, current_reverse.detach()])
-        total_loss = new_loss + old_loss
+    total_loss = loss1 + loss2 + loss3
 
     if train:
         optimizer.zero_grad()
         total_loss.backward()
         optimizer.step()
 
-    return p1, p1, total_loss, rev_product
+    return a, b, total_loss, rev_product
+
+
+def penalized_product(a, b, penalty):
+    agreement = a * b
+    penalized_agreement = agreement / penalty
+    penalized_agreement = penalized_agreement.sum(dim=1)
+
+    result = - torch.log(penalized_agreement)
+
+    scalar = result.mean()
+
+    return scalar
 
 
 def save_cluster(original_image, cluster, iteration):
@@ -389,10 +374,10 @@ def train():
 
     script_directory = os.path.split(os.path.abspath(__file__))[0]
 
-    filepath = 'cifar100_models\\detached_solo'
+    filepath = 'cifar100_models\\ppa_detached_3'
     clusters_net_path = os.path.join(script_directory, filepath)
 
-    encoder = DetachedNet(3, EMBEDINGS).to('cuda')
+    encoder = DetachedPPaNet(3, EMBEDINGS).to('cuda')
 
     print(encoder)
 
@@ -437,8 +422,8 @@ def train():
             iteration += 1
             total_iters += 1
 
-            if iteration >= QUEUE:
-                rev_product = rev_product[TR * BATCH_SIZE_DEFAULT:, :]
+            if iteration >= 50:
+                rev_product = rev_product[4 * BATCH_SIZE_DEFAULT:, :]
 
         print("==================================================================================")
         print("batch mean ones: ",
@@ -489,11 +474,12 @@ def count_common_elements(p):
 
     print("Mean common elements: ", (sum_commons / EMBEDINGS) / counter)
 
-def to_tensor(X):
-    with torch.no_grad():
-        X = Variable(torch.FloatTensor(X))
 
-    return X
+# def to_tensor(X):
+#     with torch.no_grad():
+#         X = Variable(torch.FloatTensor(X))
+#
+#     return X
 
 
 def main():

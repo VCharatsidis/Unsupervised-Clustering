@@ -8,7 +8,7 @@ import scipy.io as sio
 import argparse
 import os
 
-from one_hot_net import OneHotNet
+from overcluster_net import OverClusterNet
 
 from image_utils import *
 import random
@@ -242,18 +242,7 @@ def make_transformations(image, aug_ids, iter):
     return image_1, image_2, image_3, image_4
 
 
-def forward_block(X, ids, encoder, optimizer, train, total_mean, iter):
-    number_transforms = 19
-    aug_ids = np.random.choice(number_transforms, size=number_transforms, replace=False)
-
-    image = X[ids, :]
-    image_1, image_2, image_3, image_4 = make_transformations(image, aug_ids, iter)
-
-    _, logit_a, a = encoder(image_1.to('cuda'))
-    _, logit_b, b = encoder(image_2.to('cuda'))
-    _, logit_c, c = encoder(image_3.to('cuda'))
-    _, logit_d, d = encoder(image_4.to('cuda'))
-
+def ppa_4(a, b, c, d):
     penalty = (a.sum(dim=0) + b.sum(dim=0) + c.sum(dim=0) + d.sum(dim=0)) / 4
 
     loss1 = penalized_product(a, b, penalty)
@@ -264,6 +253,28 @@ def forward_block(X, ids, encoder, optimizer, train, total_mean, iter):
     loss6 = penalized_product(c, d, penalty)
 
     total_loss = loss1 + loss2 + loss3 + loss4 + loss5 + loss6
+
+    return total_loss
+
+
+def forward_block(X, ids, encoder, optimizer, train, total_mean, iter):
+    number_transforms = 19
+    aug_ids = np.random.choice(number_transforms, size=number_transforms, replace=False)
+
+    image = X[ids, :]
+    image_1, image_2, image_3, image_4 = make_transformations(image, aug_ids, iter)
+
+    _, logit_a, a, ao_1, ao_2, ao3 = encoder(image_1.to('cuda'))
+    _, logit_b, b, bo_1, bo_2, bo3 = encoder(image_2.to('cuda'))
+    _, logit_c, c, co_1, co_2, co3 = encoder(image_3.to('cuda'))
+    _, logit_d, d, do_1, do_2, do3 = encoder(image_4.to('cuda'))
+
+    loss1 = ppa_4(a, b, c, d)
+    loss2 = ppa_4(ao_1, bo_1, co_1, do_1)
+    loss3 = ppa_4(ao_2, bo_2, co_2, do_2)
+    loss4 = ppa_4(ao3, bo3, co3, do3)
+
+    total_loss = loss1 + loss2 + loss3 + loss4
 
     #total_loss = product_agreement_loss(a, b, c, d)
 
@@ -481,7 +492,7 @@ def train():
     # epoch 20.
     # encoder = torch.load(filepath)
 
-    encoder = OneHotNet(3, CLASSES).to('cuda')
+    encoder = OverClusterNet(3, CLASSES).to('cuda')
     optimizer = torch.optim.Adam(encoder.parameters(), lr=LEARNING_RATE_DEFAULT)
 
     min_miss_percentage = 100

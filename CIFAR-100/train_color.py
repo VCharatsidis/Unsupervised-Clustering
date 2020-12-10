@@ -11,7 +11,7 @@ import os
 from binary_net import DeepBinBrainCifar
 #from AlexNet import AlexNet
 
-from stl_utils import *
+from image_utils import *
 import random
 
 from torchvision.utils import make_grid

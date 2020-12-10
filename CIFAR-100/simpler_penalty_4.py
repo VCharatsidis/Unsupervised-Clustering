@@ -37,9 +37,10 @@ SIZE = 32
 SIZE_Y = 32
 NETS = 1
 
-EPOCHS = 1000
+EPOCHS = 100
 
 CLASSES = 100
+SC = 1
 DESCRIPTION = " Image size: " + str(SIZE) + " , Classes: " + str(CLASSES)
 
 EVAL_FREQ_DEFAULT = 250
@@ -89,9 +90,9 @@ def save_images(images, transformation):
 
 def decorelated_penalized_attarction(a, b, penalty):
     p1 = (a * b) / penalty
-    p1 = p1.sum(dim=1)
+    p1 = p1.sum(dim=1) + EPS
 
-    sum1 = (a.sum(dim=1) + b.sum(dim=1)) / 2 + 100
+    sum1 = (a.sum(dim=1) + b.sum(dim=1)) / 2 + SC
 
     p1 = p1 / sum1
 
@@ -159,7 +160,7 @@ def forward_block(X, ids, encoder, optimizer, train):
     aug_ids = np.random.choice(number_transforms, size=number_transforms, replace=False)
 
     image = X[ids, :]
-    image_1, image_2, image_3, image_4 = make_transformations(image, aug_ids, iter)
+    image_1, image_2, image_3, image_4 = make_transformations(image, aug_ids, 0)
 
     _, logit_a, a = encoder(image_1.to('cuda'))
     _, logit_b, b = encoder(image_2.to('cuda'))
@@ -297,15 +298,18 @@ def train():
 
     script_directory = os.path.split(os.path.abspath(__file__))[0]
 
-    filepath = 'cifar100_models\\penalty_disentangle' + '.model'
-    clusters_net_path = os.path.join(script_directory, filepath)
+    writepath = 'cifar100_models\\simple_penalty_4_plus'+str(SC)
+    clusters_net_path = os.path.join(script_directory, writepath)
+
+    # readpath = 'cifar100_models\\simple_penalty_4_300' + '.model'
+    # encoder = torch.load(readpath)
 
     encoder = DeepBinBrainCifar(3, EMBEDINGS).to('cuda')
 
     print(encoder)
 
     #print(list(encoder.brain[0].weight))
-    #prune.random_unstructured(encoder.brain[0], name="weight", amount=0.6)
+    #prune.random_unstructured(encoder.brain[0], name="weight", amount=0.99)
     #print(list(encoder.brain[0].weight))
 
     optimizer = torch.optim.Adam(encoder.parameters(), lr=LEARNING_RATE_DEFAULT)
@@ -363,7 +367,7 @@ def train():
             max_loss_iter = total_iters
             min_miss_percentage = test_loss
             print("models saved iter: " + str(total_iters))
-            torch.save(encoder, clusters_net_path)
+            torch.save(encoder, clusters_net_path+"_"+str(epoch // 100)+".model")
 
         print("EPOCH: ", epoch,
               "Total ITERATION: ", total_iters,

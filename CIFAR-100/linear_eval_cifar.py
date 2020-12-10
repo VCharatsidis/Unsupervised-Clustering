@@ -18,11 +18,12 @@ LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 500000
 
 BATCH_SIZE_DEFAULT = 200
-USE_EMBEDDING = True
+USE_EMBEDDING = False
 
-INPUT_NET = 4096
+CLASSES = 100
+INPUT_NET = 6400
 if USE_EMBEDDING:
-    INPUT_NET = 4096
+    INPUT_NET = 100
 
 PRINT = False and USE_EMBEDDING
 ROUND = True and USE_EMBEDDING and not PRINT
@@ -41,13 +42,11 @@ np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
 
 FLAGS = None
 
-encoder_name = "cifar100_models\\penalty_disentangle"
+encoder_name = "cifar100_models\\self_learn_0"
 
 encoder = torch.load(encoder_name+".model")
 encoder.eval()
 #print(list(encoder.brain[0].weight))
-
-
 
 
 ELEMENTS_EXCEPT_DIAG = BATCH_SIZE_DEFAULT * (BATCH_SIZE_DEFAULT - 1)
@@ -149,7 +148,7 @@ def forward_block(X, ids, classifier, optimizer, train, targets):
         cross_entropy_loss.backward()
         optimizer.step()
 
-    return preds, cross_entropy_loss
+    return preds, cross_entropy_loss, p
 
 
 def count_common_elements(p):
@@ -196,7 +195,7 @@ def measure_acc_augments(X_test, classifier, targets):
         test_ids = range(j * BATCH_SIZE_DEFAULT, (j + 1) * BATCH_SIZE_DEFAULT)
         test_ids = np.array(test_ids)
         optimizer = []
-        preds, mim = forward_block(X_test, test_ids, classifier, optimizer, False, targets)
+        preds, mim, p = forward_block(X_test, test_ids, classifier, optimizer, False, targets)
 
         sum_correct += accuracy(preds, targets[test_ids])
         avg_loss += mim.item()
@@ -246,13 +245,29 @@ def train():
     train = unpickle('data\\train')
 
     filenames = [t.decode('utf8') for t in train[b'filenames']]
-    y_train = train[b'fine_labels']
+
     train_data = train[b'data']
+
+    if CLASSES == 20:
+        y_train = train[b'coarse_labels']
+    elif CLASSES == 100:
+        y_train = train[b'fine_labels']
+    else:
+        print("Error")
+        input()
 
     test = unpickle('data\\test')
 
     filenames = [t.decode('utf8') for t in test[b'filenames']]
-    targets = test[b'fine_labels']
+
+    if CLASSES == 20:
+        targets = test[b'coarse_labels']
+    elif CLASSES == 100:
+        targets = test[b'fine_labels']
+    else:
+        print("Error")
+        input()
+
     test_data = test[b'data']
 
     X_train = list()
@@ -290,7 +305,7 @@ def train():
     filepath = 'encoders\\encoder_' + str(0) + '.model'
     path_to_model = os.path.join(script_directory, filepath)
 
-    linearClassifier = LinearNetCifar(INPUT_NET).cuda()
+    linearClassifier = LinearNetCifar(INPUT_NET, CLASSES).cuda()
     optimizer = torch.optim.Adam(linearClassifier.parameters(), lr=LEARNING_RATE_DEFAULT)
 
     print("X train shape: ", X_train.shape, " train y shape: ", y_train.shape, " X test shape: ", X_test.shape, " X test y:", targets.shape)
@@ -302,7 +317,7 @@ def train():
         linearClassifier.train()
         ids = np.random.choice(len(X_train), size=BATCH_SIZE_DEFAULT, replace=False)
         train = True
-        preds, mim = forward_block(X_train, ids, linearClassifier, optimizer, train, y_train)
+        preds, mim, p = forward_block(X_train, ids, linearClassifier, optimizer, train, y_train)
 
         if iteration > 4000:
             EVAL_FREQ_DEFAULT = 50
@@ -311,6 +326,15 @@ def train():
             linearClassifier.eval()
             print()
             print("==============================================================")
+
+            if USE_EMBEDDING:
+                print("Binaries")
+            else:
+                print("conv 5")
+
+            print("batch mean ones: ",
+                  (np.where(p.data.cpu().numpy() > 0.5))[0].shape[0] / (p[0].shape[0] * BATCH_SIZE_DEFAULT))
+
             print("ITERATION: ", iteration,
                   ", batch size: ", BATCH_SIZE_DEFAULT,
                   ", lr: ", LEARNING_RATE_DEFAULT,

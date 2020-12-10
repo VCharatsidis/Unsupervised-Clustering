@@ -4,7 +4,7 @@ from __future__ import print_function
 import torch.nn as nn
 
 
-class LinearNetCifar(nn.Module):
+class LinearNetCifar10(nn.Module):
     """
     This class implements a Multi-layer Perceptron in PyTorch.
     It handles the different layers and parameters of the model.
@@ -24,7 +24,7 @@ class LinearNetCifar(nn.Module):
                      This number is required in order to specify the
                      output dimensions of the MLP
         """
-        super(LinearNetCifar, self).__init__()
+        super(LinearNetCifar10, self).__init__()
 
         self.linear = nn.Sequential(
             nn.Linear(n_inputs, classes),

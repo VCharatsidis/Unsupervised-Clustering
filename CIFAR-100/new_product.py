@@ -239,6 +239,17 @@ def entropy_minmax_loss(a, b, total_mean):
     return scalar, total_mean
 
 
+def product_agreement_loss(a, b):
+    product = a * b
+    mean = product.mean(dim=0)
+
+    log = - torch.log(mean)
+
+    scalar = log.mean()
+
+    return scalar
+
+
 def fill_agreements(aug_ids, eight, product):
 
     coeff = 0.98
@@ -320,7 +331,7 @@ def make_transformations(image, aug_ids):
 
 
 def forward_block(X, ids, encoder, optimizer, train, total_mean):
-    number_transforms = 17
+    number_transforms = 19
     aug_ids = np.random.choice(number_transforms, size=number_transforms, replace=False)
 
     image = X[ids, :]
@@ -333,10 +344,10 @@ def forward_block(X, ids, encoder, optimizer, train, total_mean):
     #     # eight = image.shape[0] // 8
     #fill_agreements(aug_ids, eight, product)
 
-    total_loss, penalty = penalized_product(a, b)
+    total_loss = product_agreement_loss(a, b)
 
     if train:
-        total_mean = 0.8 * total_mean + penalty * 0.2
+        #total_mean = 0.8 * total_mean + penalty * 0.2
 
         optimizer.zero_grad()
         total_loss.backward()

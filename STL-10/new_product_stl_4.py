@@ -9,6 +9,7 @@ import argparse
 import os
 
 from one_hot_net import OneHotNet
+from stl10_input import read_all_images, read_labels
 
 from image_utils import *
 import random
@@ -27,21 +28,21 @@ from torchvision import models
 EPS = sys.float_info.epsilon
 
 #EPS=sys.float_info.epsilon
-LEARNING_RATE_DEFAULT = 3e-4
+LEARNING_RATE_DEFAULT = 4e-4
 
 MAX_STEPS_DEFAULT = 48750
 
-BATCH_SIZE_DEFAULT = 128
+BATCH_SIZE_DEFAULT = 256
 
 #INPUT_NET = 3072
-#INPUT_NET = 5120
+INPUT_NET = 5120
 SIZE = 32
 SIZE_Y = 32
 NETS = 1
 
-CLASSES = 20
+CLASSES = 10
 DESCRIPTION = " Image size: " + str(SIZE) + " , Classes: " + str(CLASSES)
-EPOCHS = 200
+EPOCHS = 400
 
 EVAL_FREQ_DEFAULT = 100
 MIN_CLUSTERS_TO_SAVE = 100
@@ -232,7 +233,7 @@ def make_transformations(image, aug_ids, iter):
     #
     # save_images(image_4_d, aug_ids[16], iter)
     # save_images(image_8_d, aug_ids[17], iter)
-    #save_images(image_8_c, 18, iter)
+    # save_images(image_8_c, aug_ids[18], iter)
 
     image_1 = torch.cat([image_1_a, image_2_a, image_3_a, image_4_a, image_5_a, image_6_a, image_7_a, image_8_a], dim=0)
     image_2 = torch.cat([image_1_b, image_2_b, image_3_b, image_4_b, image_5_b, image_6_b, image_7_b, image_8_b], dim=0)
@@ -254,18 +255,18 @@ def forward_block(X, ids, encoder, optimizer, train, total_mean, iter):
     _, logit_c, c = encoder(image_3.to('cuda'))
     _, logit_d, d = encoder(image_4.to('cuda'))
 
-    penalty = (a.sum(dim=0) + b.sum(dim=0) + c.sum(dim=0) + d.sum(dim=0)) / 4
+    # penalty = (a.sum(dim=0) + b.sum(dim=0) + c.sum(dim=0) + d.sum(dim=0)) / 4
+    #
+    # loss1 = penalized_product(a, b, penalty)
+    # loss2 = penalized_product(a, c, penalty)
+    # loss3 = penalized_product(a, d, penalty)
+    # loss4 = penalized_product(b, c, penalty)
+    # loss5 = penalized_product(b, d, penalty)
+    # loss6 = penalized_product(c, d, penalty)
+    #
+    # total_loss = loss1 + loss2 + loss3 + loss4 + loss5 + loss6
 
-    loss1 = penalized_product(a, b, penalty)
-    loss2 = penalized_product(a, c, penalty)
-    loss3 = penalized_product(a, d, penalty)
-    loss4 = penalized_product(b, c, penalty)
-    loss5 = penalized_product(b, d, penalty)
-    loss6 = penalized_product(c, d, penalty)
-
-    total_loss = loss1 + loss2 + loss3 + loss4 + loss5 + loss6
-
-    #total_loss = product_agreement_loss(a, b, c, d)
+    total_loss = product_agreement_loss(a, b, c, d)
 
     if train:
         #total_mean = 0.8 * total_mean + penalty * 0.2
@@ -319,9 +320,11 @@ def measure_acc_augments(X_test, encoder, targets):
     avg_loss = 0
 
     print_dict = {}
+    for i in range(10):
+        print_dict[i] = []
+
     virtual_clusters = {}
     for i in range(CLASSES):
-        print_dict[i] = []
         virtual_clusters[i] = []
 
     for j in range(runs):
@@ -424,64 +427,75 @@ def unpickle(file):
 
 
 def train():
-    with open('data\\train', 'rb') as fo:
-        res = pickle.load(fo, encoding='bytes')
+    fileName = "data_2\\stl10_binary\\train_X.bin"
+    #fileName = "data_2\\stl10_binary\\unlabeled_X.bin"
+    X_train = read_all_images(fileName)
 
-    meta = unpickle('data\\meta')
+    half = X_train.shape[0] // 4
+    pad = (96 - SIZE) // 2
 
-    fine_label_names = [t.decode('utf8') for t in meta[b'fine_label_names']]
+    X_train1 = to_tensor(X_train[:half])
+    print(X_train1.shape)
 
-    train = unpickle('data\\train')
+    X_train1 = X_train1.transpose(2, 3)
+    X_train1 /= 255
+    X_train1 = just_scale(X_train1, SIZE, pad)
+    X_train1 = X_train1[:, :, pad:96 - pad, pad:96 - pad]
+    X_train1 = X_train1
 
-    filenames = [t.decode('utf8') for t in train[b'filenames']]
-    train_fine_labels = train[b'fine_labels']
-    train_data = train[b'data']
+    print(X_train1.shape)
 
-    test = unpickle('data\\test')
+    X_train2 = to_tensor(X_train[half: 2*half])
+    X_train2 = X_train2.transpose(2, 3)
+    X_train2 /= 255
+    X_train2 = just_scale(X_train2, SIZE, pad)
+    X_train2 = X_train2[:, :, pad:96 - pad, pad:96 - pad]
 
-    filenames = [t.decode('utf8') for t in test[b'filenames']]
-    #targets = test[b'fine_labels']
-    targets = test[b'coarse_labels']
-    test_data = test[b'data']
 
-    X_train = list()
-    for d in train_data:
-        image = np.zeros((32, 32, 3), dtype=np.uint8)
-        image[..., 0] = np.reshape(d[:1024], (32, 32))  # Red channel
-        image[..., 1] = np.reshape(d[1024:2048], (32, 32))  # Green channel
-        image[..., 2] = np.reshape(d[2048:], (32, 32))  # Blue channel
-        X_train.append(image)
+    X_train3 = to_tensor(X_train[2*half: 3 * half])
 
-    X_train = np.array(X_train)
-    X_train = preproccess_cifar(X_train)
+    X_train3 = X_train3.transpose(2, 3)
+    X_train3 /= 255
+    X_train3 = just_scale(X_train3, SIZE, pad)
+    X_train3 = X_train3[:, :, pad:96 - pad, pad:96 - pad]
 
-    print("train shape", X_train.shape)
 
-    X_test = list()
-    for d in test_data:
-        image = np.zeros((32, 32, 3), dtype=np.uint8)
-        image[..., 0] = np.reshape(d[:1024], (32, 32))  # Red channel
-        image[..., 1] = np.reshape(d[1024:2048], (32, 32))  # Green channel
-        image[..., 2] = np.reshape(d[2048:], (32, 32))  # Blue channel
-        X_test.append(image)
+    X_train = to_tensor(X_train[3 * half:])
 
-    X_test = np.array(X_test)
-    X_test = preproccess_cifar(X_test)
-    print("test shape", X_test.shape)
-    targets = np.array(targets)
-    print("targets shape", targets.shape)
+    X_train = X_train.transpose(2, 3)
+    X_train /= 255
+    X_train = just_scale(X_train, SIZE, pad)
+    X_train = X_train[:, :, pad:96 - pad, pad:96 - pad]
 
+
+    X_train = torch.cat([X_train1, X_train2, X_train3, X_train], dim=0)
+
+    print("X_train ", X_train.shape)
+
+    testFile = "data_2\\stl10_binary\\test_X.bin"
+    X_test = read_all_images(testFile)
+    X_test = to_tensor(X_test)
+    X_test = X_test.transpose(2, 3)
+    X_test /= 255
+    X_test = just_scale(X_test, SIZE, pad)
+    X_test = X_test[:, :, pad:96 - pad, pad:96 - pad]
+
+
+    test_y_File = "data_2\\stl10_binary\\test_y.bin"
+    targets = read_labels(test_y_File)
+    targets = np.array([x % 10 for x in targets])
     ###############################################
 
     script_directory = os.path.split(os.path.abspath(__file__))[0]
 
-    filepath = 'cifar100_models\\PA_4_128_lr3_coarse'
+    filepath = 'PA_4_256_stl_trainX'
     virtual_best_path = os.path.join(script_directory, filepath)
 
-    # epoch 20.
-    # encoder = torch.load(filepath)
+    read_path = 'PA_4_256_stl_1.model'
+    read_path = os.path.join(script_directory, read_path)
+    encoder = torch.load(read_path)
 
-    encoder = OneHotNet(3, CLASSES).to('cuda')
+    #encoder = OneHotNet(3, CLASSES).to('cuda')
     optimizer = torch.optim.Adam(encoder.parameters(), lr=LEARNING_RATE_DEFAULT)
 
     min_miss_percentage = 100
@@ -554,17 +568,6 @@ def train():
               ",  actual best iter: ", most_clusters_iter, "-", most_clusters,
               ",  virtual best iter: ", best_virtual_iter, " - ", min_virtual_miss_percentage,
               ",", DESCRIPTION)
-
-        # if clusters >= most_clusters:
-        #     min_miss_percentage = 1 - cluster_accuracies[clusters]
-        #     most_clusters = clusters
-        #
-        #     if min_miss_percentage > miss_percentage:
-        #         cluster_accuracies[clusters] = 1 - miss_percentage
-        #         max_loss_iter = total_iters
-        #         most_clusters_iter = total_iters
-        #
-        #         print("models actual_best_path iter: " + str(total_iters))
 
 
 def to_tensor(X):
