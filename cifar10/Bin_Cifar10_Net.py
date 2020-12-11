@@ -59,7 +59,7 @@ class BinCifar10Net(nn.Module):
             nn.ReLU(),
             nn.BatchNorm1d(1024),
 
-            nn.Linear(1024, 64),
+            nn.Linear(1024, 32),
             nn.Sigmoid()
         )
 

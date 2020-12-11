@@ -43,7 +43,7 @@ EPOCHS = 300
 
 CLASSES = 10
 DESCRIPTION = " Image size: " + str(SIZE) + " , Classes: " + str(CLASSES)
-QUEUE = 140
+QUEUE = 380
 
 EVAL_FREQ_DEFAULT = 250
 MIN_CLUSTERS_TO_SAVE = 10
@@ -113,9 +113,9 @@ def new_agreement(product, denominator, rev_prod):
 
     total_matrix = - torch.log(repel + attraction)
 
-    attraction_bonus = 0.5 * (BATCH_SIZE_DEFAULT - 1) * (1-adj_matrix) * total_matrix
-
-    total_matrix = total_matrix + attraction_bonus.fill_diagonal_(0)
+    # attraction_bonus = 0.5 * (BATCH_SIZE_DEFAULT - 1) * (1-adj_matrix) * total_matrix
+    #
+    # total_matrix = total_matrix + attraction_bonus.fill_diagonal_(0)
 
     mean_total = total_matrix.mean()
 
@@ -330,12 +330,12 @@ def train():
 
     script_directory = os.path.split(os.path.abspath(__file__))[0]
 
-    filepath = 'binary_contrast_4_4096'
+    filepath = 'binary_contrast_4_32'
     clusters_net_path = os.path.join(script_directory, filepath)
 
-    encoder = torch.load(filepath + "_1.model")
+    #encoder = torch.load(filepath + "_1.model")
 
-    #encoder = BinCifar10Net(3, EMBEDINGS).to('cuda')
+    encoder = BinCifar10Net(3, EMBEDINGS).to('cuda')
 
     #torch.save(encoder, os.path.join(script_directory, "cifar100_models\\a_bcnet_random_net.model"))
     print(encoder)
