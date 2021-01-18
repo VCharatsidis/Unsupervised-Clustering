@@ -1,8 +1,9 @@
 
-from stl_utils import *
+from image_utils import *
 import cifar10_utils
 import matplotlib
 from torchvision.utils import make_grid
+from sklearn.datasets import fetch_openml
 import sys
 
 np.set_printoptions(formatter={'float': lambda x: "{0:0.4f}".format(x)})
@@ -12,18 +13,39 @@ torch.set_printoptions(threshold=sys.maxsize)
 torch.set_printoptions(sci_mode=False)
 
 EMBEDDINGS = 64
-#name = "..\\CIFAR-100\\cifar100_models\\binary_contrast_4_plus0_64_2.model"
+#name = "..\\CIFAR-100\\cifar100_models\\simple_penalty_4_400.model"
 #name = "binary_contrast_4_"+str(EMBEDDINGS)+"_b2_1.model"
-name = "bp_32_plus_32_1.model"
+name = "binary_contrast_4_4096_2.model"
 encoder = torch.load(name)
 print("encoder: ", name)
 encoder.eval()
 
-X_train_raw, y_train_raw, X_test_raw, y_test_raw = cifar10_utils.load_cifar10(cifar10_utils.CIFAR10_FOLDER)
-_, _, X_test, targets = cifar10_utils.preprocess_cifar10_data(X_train_raw, y_train_raw, X_test_raw, y_test_raw)
+mnist = fetch_openml('mnist_784', version=1, cache=True)
+targets = mnist.target[60000:]
+targets = targets.astype(np.int64)
+#targets = torch.from_numpy(targets)
 
-X_test = torch.from_numpy(X_test)
+X_train = mnist.data[:60000]
+X_test = mnist.data[60000:]
+
+y_train = mnist.target[:60000]
+y_train = y_train.astype(np.int64)
+#y_train = torch.from_numpy(y_train)
+
+
+X_train = np.reshape(X_train, (X_train.shape[0], 1, 28, 28))
+X_train = np.stack((X_train,)*3, axis=1)
+X_train = np.squeeze(X_train, axis=2)
+X_train= Variable(torch.FloatTensor(X_train))
+X_train /= 255
+X_train = just_scale_up(X_train, 32)
+
+X_test = np.reshape(X_test, (X_test.shape[0], 1, 28, 28))
+X_test = np.stack((X_test,) * 3, axis=1)
+X_test = np.squeeze(X_test, axis=2)
+X_test = Variable(torch.FloatTensor(X_test))
 X_test /= 255
+X_test = just_scale_up(X_test, 32)
 
 PA = 1000
 
@@ -69,8 +91,9 @@ def get_hamming(idx, binaries):
     sorted, indices = torch.sort(hammings)
 
     if False:
-        save_image(X_test[idx].unsqueeze(dim=0), str(idx) + "q")
-        save_image(X_test[indices[1:17]], idx)
+        print("image")
+        save_image(X_test[idx].unsqueeze(dim=0), str(targets[idx]) + "_mnist_q")
+        save_image(X_test[indices[1:17]], str(targets[idx]) + "_mnist")
 
     s = [(indices[i].item(), sorted[i].item()) for i in range(PA)]  # make it a list and keep only the first top PA
     s = s[1:]  # Delete the first element which is the query image itself.

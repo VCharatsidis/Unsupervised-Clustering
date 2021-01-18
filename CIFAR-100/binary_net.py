@@ -55,11 +55,11 @@ class DeepBinBrainCifar(nn.Module):
         )
 
         self.brain = nn.Sequential(
-            # nn.Linear(4096, EMBEDING_SIZE),
-            # nn.ReLU(),
-            # nn.BatchNorm1d(EMBEDING_SIZE),
+            nn.Linear(4096, 1024),
+            nn.ReLU(),
+            nn.BatchNorm1d(1024),
 
-            nn.Linear(4096, EMBEDING_SIZE)
+            nn.Linear(1024, EMBEDING_SIZE)
         )
 
         self.sigmoid = nn.Sequential(

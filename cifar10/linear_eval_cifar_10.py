@@ -19,10 +19,10 @@ LEARNING_RATE_DEFAULT = 1e-4
 MAX_STEPS_DEFAULT = 500000
 
 BATCH_SIZE_DEFAULT = 200
-USE_EMBEDDING = True
+USE_EMBEDDING = False
 
 CLASSES = 10
-INPUT_NET = 4096
+INPUT_NET = 2048
 if USE_EMBEDDING:
     INPUT_NET = 4096
 
@@ -44,8 +44,9 @@ np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
 FLAGS = None
 
 #encoder_name = "..\\CIFAR-100\\cifar100_models\\self_learn_0"
-encoder_name = "binary_contrast_4_4096_2"
+#encoder_name = "binary_contrast_4_16_b05_1"
 
+encoder_name = "binary_contrast_4_512_b0.5_0"
 encoder = torch.load(encoder_name+".model")
 encoder.eval()
 #print(list(encoder.brain[0].weight))

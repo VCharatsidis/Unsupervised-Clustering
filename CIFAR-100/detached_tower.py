@@ -24,15 +24,16 @@ torch.set_printoptions(threshold=sys.maxsize)
 EPS = sys.float_info.epsilon
 
 #EPS=sys.float_info.epsilon
-LEARNING_RATE_DEFAULT = 1e-4
+LEARNING_RATE_DEFAULT = 2.2e-4
 
 MAX_STEPS_DEFAULT = 500000
 
 BATCH_SIZE_DEFAULT = 128
-QUEUE = 300
-TR = 2
+QUEUE = 390
+TR = 1
 
-EMBEDINGS = 100
+Bonus = 2
+EMBEDINGS = 64
 SIZE = 32
 SIZE_Y = 32
 NETS = 1
@@ -90,16 +91,6 @@ def save_images(images, transformation):
     save_cluster(numpy_cluster, transformations_dict[transformation], 0)
 
 
-def new_agreement(product, denominator, rev_prod):
-    attraction = (torch.mm(product, product.transpose(0, 1)) + EPS) * (1 - adj_matrix)
-    repel = (torch.mm(product, rev_prod.transpose(0, 1)) + EPS) * adj_matrix
-
-    repel = repel / denominator
-
-    total_matrix = - torch.log(repel + attraction)
-
-    return total_matrix.mean()
-
 # def new_agreement(product, denominator, rev_prod):
 #     attraction = (torch.mm(product, product.transpose(0, 1)) + EPS) * (1 - adj_matrix)
 #     repel = (torch.mm(product, rev_prod.transpose(0, 1)) + EPS) * adj_matrix
@@ -109,13 +100,24 @@ def new_agreement(product, denominator, rev_prod):
 #
 #     total_matrix = - torch.log(repel + attraction)
 #
-#     attraction_bonus = 0.5 * (BATCH_SIZE_DEFAULT - 1) * (1 - adj_matrix) * total_matrix
-#
-#     total_matrix = total_matrix + attraction_bonus.fill_diagonal_(0)
-#
-#     mean_total = total_matrix.mean()
-#
-#     return mean_total
+#     return total_matrix.mean()
+
+def new_agreement(product, denominator, rev_prod):
+    attraction = (torch.mm(product, product.transpose(0, 1)) + EPS) * (1 - adj_matrix)
+    repel = (torch.mm(product, rev_prod.transpose(0, 1)) + EPS) * adj_matrix
+
+    attraction = attraction / denominator
+    repel = repel / denominator
+
+    total_matrix = - torch.log(repel + attraction)
+
+    attraction_bonus = Bonus * (BATCH_SIZE_DEFAULT - 1) * (1 - adj_matrix) * total_matrix
+
+    total_matrix = total_matrix + attraction_bonus.fill_diagonal_(0)
+
+    mean_total = total_matrix.mean()
+
+    return mean_total
 
 
 def queue_agreement(product, denominator, rev_prod):
@@ -239,7 +241,7 @@ def forward_block(X, ids, encoder, optimizer, train, rev_product):
     # save_images(image_1, 12)
     # save_images(image_2, 13)
 
-    encoding_1, p1, encoding_2, p2 = encoder(image.to('cuda'))
+    encoding_1, p1, p2 = encoder(image.to('cuda'))
     #encoding_1, p1_b, encoding_2, p2_b = encoder(image_2.to('cuda'))
 
     all_predictions = torch.cat([p1, p2], dim=0)
@@ -253,18 +255,19 @@ def forward_block(X, ids, encoder, optimizer, train, rev_product):
     #denominator_b = denominator_b.unsqueeze(dim=1) + 1
 
     current_reverse = 1 - all_predictions
+    to_store = 1 - p1
     #loss_b = new_agreement(all_predictions_b, denominator_b)
 
     new_loss = new_agreement(all_predictions, denominator, current_reverse)
 
     if first or not train:
         total_loss = new_loss
-        rev_product = current_reverse.detach()
+        rev_product = to_store.detach()
         first = False
 
     else:
         old_loss = queue_agreement(all_predictions, denominator, rev_product)
-        rev_product = torch.cat([rev_product, current_reverse.detach()])
+        rev_product = torch.cat([rev_product, to_store.detach()])
         total_loss = new_loss + old_loss
 
     if train:
@@ -389,16 +392,16 @@ def train():
 
     script_directory = os.path.split(os.path.abspath(__file__))[0]
 
-    filepath = 'cifar100_models\\detached_solo'
+    filepath = f'cifar100_models\\self_contrast_{EMBEDINGS}_b{Bonus}'
     clusters_net_path = os.path.join(script_directory, filepath)
 
     encoder = DetachedNet(3, EMBEDINGS).to('cuda')
 
     print(encoder)
 
-    #print(list(encoder.brain[0].weight))
-    #prune.random_unstructured(encoder.brain[0], name="weight", amount=0.6)
-    #print(list(encoder.brain[0].weight))
+    #
+    # prune.random_unstructured(encoder.brain_1[0], name="weight", amount=0.2)
+    # prune.random_unstructured(encoder.brain_2[0], name="weight", amount=0.2)
 
     optimizer = torch.optim.Adam(encoder.parameters(), lr=LEARNING_RATE_DEFAULT)
 

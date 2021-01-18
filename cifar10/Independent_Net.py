@@ -6,14 +6,14 @@ import torch.nn as nn
 import torch
 
 
-class SupervisedNetCifar(nn.Module):
+class IndependentNet(nn.Module):
     """
     This class implements a Multi-layer Perceptron in PyTorch.
     It handles the different layers and parameters of the model.
     Once initialized an MLP object can perform forward.
     """
 
-    def __init__(self, n_channels, EMBEDING_SIZE):
+    def __init__(self, n_channels, classes):
         """
         Initializes MLP object.
         Args:
@@ -26,7 +26,7 @@ class SupervisedNetCifar(nn.Module):
                      This number is required in order to specify the
                      output dimensions of the MLP
         """
-        super(SupervisedNetCifar, self).__init__()
+        super(IndependentNet, self).__init__()
 
         self.conv = nn.Sequential(
             nn.Conv2d(n_channels, 64, kernel_size=3, stride=1, padding=1),
@@ -42,31 +42,19 @@ class SupervisedNetCifar(nn.Module):
             nn.ReLU(),
             nn.BatchNorm2d(256),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
-            #
+
             nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
             nn.BatchNorm2d(512),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
 
-            nn.Conv2d(512, 1024, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(512, 512, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
-            nn.BatchNorm2d(1024),
-            nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
+            nn.BatchNorm2d(512),
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=1)
         )
 
-        self.brain = nn.Sequential(
-
-            nn.Linear(4096, 1024),
-            nn.ReLU(),
-            nn.BatchNorm1d(1024),
-
-            nn.Linear(1024, 100)
-        )
-
-        self.softmax = nn.Sequential(
-            nn.Softmax(dim=1)
-        )
-
+        self.brain = [nn.Sequential(nn.Linear(4, 1), nn.Sigmoid()).cuda() for i in range(512)]
 
     def forward(self, x):
         """
@@ -80,9 +68,9 @@ class SupervisedNetCifar(nn.Module):
 
         conv = self.conv(x)
         encoding = torch.flatten(conv, 1)
+        probs = self.brain[0](torch.flatten(conv[:, 0, :, :], 1))
+        for i in range(1, 512):
+            probs = torch.cat([probs, self.brain[i](torch.flatten(conv[:, i, :, :], 1))], dim=1)
 
-        logits = self.brain(encoding)
 
-        preds = self.softmax(logits)
-
-        return encoding, logits, preds
+        return encoding, probs, probs

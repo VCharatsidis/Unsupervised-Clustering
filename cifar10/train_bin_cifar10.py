@@ -9,14 +9,16 @@ import argparse
 import os
 
 import cifar10_utils
-from Bin_Cifar10_Net import BinCifar10Net
-#from AlexNet import AlexNet
+#from Independent_Net import IndependentNet
+#from Bin_Cifar10_Net import BinCifar10Net
+from AlexNet import AlexNet
 
-from image_utils import *
+from alex_transforms import *
 import random
 
 from torchvision.utils import make_grid
 import matplotlib
+from excluded_ids import exclude
 import pickle
 
 np.set_printoptions(formatter={'float': lambda x: "{0:0.4f}".format(x)})
@@ -27,23 +29,25 @@ torch.set_printoptions(sci_mode=False)
 EPS = sys.float_info.epsilon
 
 #EPS=sys.float_info.epsilon
-LEARNING_RATE_DEFAULT = 2.2e-4
+LEARNING_RATE_DEFAULT = 2e-4
 
 MAX_STEPS_DEFAULT = 500000
 
-BATCH_SIZE_DEFAULT = 128
+BATCH_SIZE_DEFAULT = 32
 TR = 1
 
 EMBEDINGS = 4096
-SIZE = 32
-SIZE_Y = 32
+SIZE = 224
+SIZE_Y = 224
 NETS = 1
 
-EPOCHS = 300
+EPOCHS = 145
 
 CLASSES = 10
-DESCRIPTION = " Image size: " + str(SIZE) + " , Classes: " + str(CLASSES)
-QUEUE = 380
+
+QUEUE = 280
+Bonus = 0.5
+DESCRIPTION = " Bonus: " + str(Bonus) + " , Classes: " + str(CLASSES)
 
 EVAL_FREQ_DEFAULT = 250
 MIN_CLUSTERS_TO_SAVE = 10
@@ -113,9 +117,9 @@ def new_agreement(product, denominator, rev_prod):
 
     total_matrix = - torch.log(repel + attraction)
 
-    # attraction_bonus = 0.5 * (BATCH_SIZE_DEFAULT - 1) * (1-adj_matrix) * total_matrix
-    #
-    # total_matrix = total_matrix + attraction_bonus.fill_diagonal_(0)
+    attraction_bonus = Bonus * (BATCH_SIZE_DEFAULT - 1) * (1-adj_matrix) * total_matrix
+
+    total_matrix = total_matrix + attraction_bonus.fill_diagonal_(0)
 
     mean_total = total_matrix.mean()
 
@@ -318,27 +322,33 @@ def unpickle(file):
 def train():
     global first
     X_train_raw, y_train_raw, X_test_raw, y_test_raw = cifar10_utils.load_cifar10(cifar10_utils.CIFAR10_FOLDER)
-    X_train, y_train, X_test, targets = cifar10_utils.preprocess_cifar10_data(X_train_raw, y_train_raw, X_test_raw, y_test_raw)
+    X_train, _, X_test, targets = cifar10_utils.preprocess_cifar10_data(X_train_raw, y_train_raw, X_test_raw, y_test_raw)
+
+    X_test = torch.from_numpy(X_test)
+    X_test /= 255
 
     X_train = torch.from_numpy(X_train)
-    X_test = torch.from_numpy(X_test)
-
     X_train /= 255
-    X_test /= 255
+
+    #X_train, y_train, _, _ = exclude()
+
+    # X_train = X_train[:10000, :]
+    # y_train = y_train[:10000]
 
     ###############################################
 
     script_directory = os.path.split(os.path.abspath(__file__))[0]
 
-    filepath = 'binary_contrast_4_32'
+    filepath = f'alex_{EMBEDINGS}_b{Bonus}_lr{LEARNING_RATE_DEFAULT}_batch{BATCH_SIZE_DEFAULT}'
     clusters_net_path = os.path.join(script_directory, filepath)
 
-    #encoder = torch.load(filepath + "_1.model")
+    encoder = torch.load("alex_4096_b0.5_lr0.0002_batch32_0.model")
 
-    encoder = BinCifar10Net(3, EMBEDINGS).to('cuda')
+    #encoder = AlexNet(EMBEDINGS).to('cuda')
 
     #torch.save(encoder, os.path.join(script_directory, "cifar100_models\\a_bcnet_random_net.model"))
     print(encoder)
+    print("bonus: ", Bonus)
 
     #print(list(encoder.brain[0].weight))
     #prune.random_unstructured(encoder.brain[0], name="weight", amount=0.6)

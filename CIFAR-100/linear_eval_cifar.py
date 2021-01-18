@@ -5,7 +5,7 @@ from __future__ import print_function
 import argparse
 import os
 
-from stl_utils import *
+from alex_transforms import *
 
 from torchvision.utils import make_grid
 import matplotlib
@@ -21,7 +21,7 @@ BATCH_SIZE_DEFAULT = 200
 USE_EMBEDDING = False
 
 CLASSES = 100
-INPUT_NET = 6400
+INPUT_NET = 9216
 if USE_EMBEDDING:
     INPUT_NET = 100
 
@@ -42,7 +42,9 @@ np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
 
 FLAGS = None
 
-encoder_name = "cifar100_models\\self_learn_0"
+encoder_name = "cifar100_models\\binary_contrast_4_plus05_4096_alex_0"
+#encoder_name = "..\\cifar10\\binary_contrast_4_4096_2"
+#encoder_name = "..\\SVHN\\svhn_binary_contrast_4_plus04_4096_1"
 
 encoder = torch.load(encoder_name+".model")
 encoder.eval()
@@ -80,6 +82,7 @@ DESCRIPTION = ["LOSS: product loss multiplied by mean ", " Image size: " + str(S
 
 def forward_block(X, ids, classifier, optimizer, train, targets):
     images = X[ids, :]
+    images = resized(images)
 
     if PRODUCT:
         rotated = rotate(images, 46)

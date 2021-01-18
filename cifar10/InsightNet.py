@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch
 
 
-class SupervisedNetCifar(nn.Module):
+class InsightNet(nn.Module):
     """
     This class implements a Multi-layer Perceptron in PyTorch.
     It handles the different layers and parameters of the model.
@@ -26,7 +26,7 @@ class SupervisedNetCifar(nn.Module):
                      This number is required in order to specify the
                      output dimensions of the MLP
         """
-        super(SupervisedNetCifar, self).__init__()
+        super(InsightNet, self).__init__()
 
         self.conv = nn.Sequential(
             nn.Conv2d(n_channels, 64, kernel_size=3, stride=1, padding=1),
@@ -42,7 +42,7 @@ class SupervisedNetCifar(nn.Module):
             nn.ReLU(),
             nn.BatchNorm2d(256),
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
-            #
+
             nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
             nn.BatchNorm2d(512),
@@ -55,16 +55,17 @@ class SupervisedNetCifar(nn.Module):
         )
 
         self.brain = nn.Sequential(
-
             nn.Linear(4096, 1024),
             nn.ReLU(),
             nn.BatchNorm1d(1024),
 
-            nn.Linear(1024, 100)
+            nn.Linear(1024, EMBEDING_SIZE),
+            nn.Sigmoid()
         )
 
-        self.softmax = nn.Sequential(
-            nn.Softmax(dim=1)
+        self.insight = nn.Sequential(
+            nn.Linear(4096, 19),
+            nn.Softmax(dim=1),
         )
 
 
@@ -81,8 +82,8 @@ class SupervisedNetCifar(nn.Module):
         conv = self.conv(x)
         encoding = torch.flatten(conv, 1)
 
-        logits = self.brain(encoding)
+        binaries = self.brain(encoding)
 
-        preds = self.softmax(logits)
+        insight = self.insight(encoding)
 
-        return encoding, logits, preds
+        return encoding, insight, binaries

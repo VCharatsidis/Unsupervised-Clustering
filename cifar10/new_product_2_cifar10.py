@@ -27,21 +27,19 @@ from torchvision import models
 EPS = sys.float_info.epsilon
 
 #EPS=sys.float_info.epsilon
-LEARNING_RATE_DEFAULT = 4e-4
+LEARNING_RATE_DEFAULT = 1e-4
 
 MAX_STEPS_DEFAULT = 48750
 
-BATCH_SIZE_DEFAULT = 256
+BATCH_SIZE_DEFAULT = 16
 
-#INPUT_NET = 3072
-#INPUT_NET = 5120
 SIZE = 32
 SIZE_Y = 32
 NETS = 1
 
 CLASSES = 10
 DESCRIPTION = " Image size: " + str(SIZE) + " , Classes: " + str(CLASSES)
-EPOCHS = 200
+EPOCHS = 300
 
 EVAL_FREQ_DEFAULT = 100
 MIN_CLUSTERS_TO_SAVE = 100
@@ -165,48 +163,32 @@ def penalized_product(a, b, penalty):
 
 
 def make_transformations(image, aug_ids, iter):
-
     eight = image.shape[0] // 8
 
     image_1_a = transformation(aug_ids[0], image[0:eight], SIZE, SIZE_Y)
     image_1_b = transformation(aug_ids[1], image[0:eight], SIZE, SIZE_Y)
-    image_1_c = transformation(aug_ids[2], image[0:eight], SIZE, SIZE_Y)
-    image_1_d = transformation(aug_ids[16], image[0:eight], SIZE, SIZE_Y)
 
     image_2_a = transformation(aug_ids[3], image[eight: 2 * eight], SIZE, SIZE_Y)
     image_2_b = transformation(aug_ids[4], image[eight: 2 * eight], SIZE, SIZE_Y)
-    image_2_c = transformation(aug_ids[5], image[eight: 2 * eight], SIZE, SIZE_Y)
-    image_2_d = transformation(aug_ids[6], image[eight: 2 * eight], SIZE, SIZE_Y)
 
     image_3_a = transformation(aug_ids[6], image[2 * eight: 3 * eight], SIZE, SIZE_Y)
     image_3_b = transformation(aug_ids[7], image[2 * eight: 3 * eight], SIZE, SIZE_Y)
-    image_3_c = transformation(aug_ids[8], image[2 * eight: 3 * eight], SIZE, SIZE_Y)
-    image_3_d = transformation(aug_ids[10], image[2 * eight: 3 * eight], SIZE, SIZE_Y)
 
     image_4_a = transformation(aug_ids[9], image[3 * eight: 4 * eight], SIZE, SIZE_Y)
     image_4_b = transformation(aug_ids[10], image[3 * eight: 4 * eight], SIZE, SIZE_Y)
-    image_4_c = transformation(aug_ids[11], image[3 * eight: 4 * eight], SIZE, SIZE_Y)
-    image_4_d = transformation(aug_ids[16], image[3 * eight: 4 * eight], SIZE, SIZE_Y)
 
     image_5_a = transformation(aug_ids[12], image[4 * eight: 5 * eight], SIZE, SIZE_Y)
     image_5_b = transformation(aug_ids[13], image[4 * eight: 5 * eight], SIZE, SIZE_Y)
-    image_5_c = transformation(aug_ids[14], image[4 * eight: 5 * eight], SIZE, SIZE_Y)
-    image_5_d = transformation(aug_ids[2], image[4 * eight: 5 * eight], SIZE, SIZE_Y)
 
     image_6_a = transformation(aug_ids[15], image[5 * eight: 6 * eight], SIZE, SIZE_Y)
     image_6_b = transformation(aug_ids[0], image[5 * eight: 6 * eight], SIZE, SIZE_Y)
-    image_6_c = transformation(aug_ids[3], image[5 * eight: 6 * eight], SIZE, SIZE_Y)
-    image_6_d = transformation(aug_ids[7], image[5 * eight: 6 * eight], SIZE, SIZE_Y)
 
     image_7_a = transformation(aug_ids[4], image[6 * eight: 7 * eight], SIZE, SIZE_Y)
     image_7_b = transformation(aug_ids[8], image[6 * eight: 7 * eight], SIZE, SIZE_Y)
-    image_7_c = transformation(aug_ids[9], image[6 * eight: 7 * eight], SIZE, SIZE_Y)
-    image_7_d = transformation(aug_ids[1], image[6 * eight: 7 * eight], SIZE, SIZE_Y)
 
     image_8_a = transformation(aug_ids[5], image[7 * eight:], SIZE, SIZE_Y)
     image_8_b = transformation(aug_ids[11], image[7 * eight:], SIZE, SIZE_Y)
-    image_8_c = transformation(aug_ids[18], image[7 * eight:], SIZE, SIZE_Y)
-    image_8_d = transformation(aug_ids[17], image[7 * eight:], SIZE, SIZE_Y)
+
 
     # save_images(image_1_a, aug_ids[0], iter)
     # save_images(image_1_b, aug_ids[1], iter)
@@ -232,21 +214,13 @@ def make_transformations(image, aug_ids, iter):
     #
     # save_images(image_4_d, aug_ids[16], iter)
     # save_images(image_8_d, aug_ids[17], iter)
+    # save_images(image_8_c, 18, iter)
 
     image_1 = torch.cat([image_1_a, image_2_a, image_3_a, image_4_a, image_5_a, image_6_a, image_7_a, image_8_a], dim=0)
     image_2 = torch.cat([image_1_b, image_2_b, image_3_b, image_4_b, image_5_b, image_6_b, image_7_b, image_8_b], dim=0)
-    image_3 = torch.cat([image_1_c, image_2_c, image_3_c, image_4_c, image_5_c, image_6_c, image_7_c, image_8_c], dim=0)
-    image_4 = torch.cat([image_1_d, image_2_d, image_3_d, image_4_d, image_5_d, image_6_d, image_7_d, image_8_d], dim=0)
 
-    # save_images(image_1, 1, iter)
-    # save_images(image_2, 2, iter)
-    # save_images(image_3, 3, iter)
-    # save_images(image_4, 4, iter)
-    #
-    # save_images(image, 18, iter)
-    # input()
 
-    return image_1, image_2, image_3, image_4
+    return image_1, image_2
 
 
 def forward_block(X, ids, encoder, optimizer, train, total_mean, iter):
@@ -254,32 +228,18 @@ def forward_block(X, ids, encoder, optimizer, train, total_mean, iter):
     aug_ids = np.random.choice(number_transforms, size=number_transforms, replace=False)
 
     image = X[ids, :]
-    image_1, image_2, image_3, image_4 = make_transformations(image, aug_ids, iter)
+    image_1, image_2 = make_transformations(image, aug_ids, iter)
 
     _, logit_a, a = encoder(image_1.to('cuda'))
     _, logit_b, b = encoder(image_2.to('cuda'))
-    _, logit_c, c = encoder(image_3.to('cuda'))
-    _, logit_d, d = encoder(image_4.to('cuda'))
 
-    # penalty = (a.sum(dim=0) + b.sum(dim=0) + c.sum(dim=0) + d.sum(dim=0)) / 4
-    #
-    # loss1 = penalized_product(a, b, penalty)
-    # loss2 = penalized_product(a, c, penalty)
-    # loss3 = penalized_product(a, d, penalty)
-    # loss4 = penalized_product(b, c, penalty)
-    # loss5 = penalized_product(b, d, penalty)
-    # loss6 = penalized_product(c, d, penalty)
+    penalty = (a.sum(dim=0) + b.sum(dim=0)) / 2
 
-    # loss1 = penalized_product_mean(a, b, penalty, total_mean)
-    # loss2 = penalized_product_mean(a, c, penalty, total_mean)
-    # loss3 = penalized_product_mean(a, d, penalty, total_mean)
-    # loss4 = penalized_product_mean(b, c, penalty, total_mean)
-    # loss5 = penalized_product_mean(b, d, penalty, total_mean)
-    # loss6 = penalized_product_mean(c, d, penalty, total_mean)
+    loss1 = penalized_product(a, b, penalty)
 
-    #total_loss = loss1 + loss2 + loss3 + loss4 + loss5 + loss6
+    total_loss = loss1
 
-    total_loss = product_agreement_loss(a, b, c, d)
+    #total_loss = product_agreement_loss(a, b, c, d)
 
     if train:
         #total_mean = 0.8 * total_mean + penalty * 0.2
@@ -333,12 +293,9 @@ def measure_acc_augments(X_test, encoder, targets):
     avg_loss = 0
 
     print_dict = {}
-    for i in range(10):
-        print_dict[i] = []
-
     virtual_clusters = {}
     for i in range(CLASSES):
-
+        print_dict[i] = []
         virtual_clusters[i] = []
 
     for j in range(runs):
@@ -455,11 +412,11 @@ def train():
 
     script_directory = os.path.split(os.path.abspath(__file__))[0]
 
-    filepath = f'PPAS_4_{BATCH_SIZE_DEFAULT}_lr{LEARNING_RATE_DEFAULT}'
+    filepath = f'PPA_2_{BATCH_SIZE_DEFAULT}_lr{LEARNING_RATE_DEFAULT}'
     virtual_best_path = os.path.join(script_directory, filepath)
 
-    # epoch 105.
-    #encoder = torch.load("PPA_2_64_lr0.0004_0.model")
+    # epoch 158.
+    #encoder = torch.load("PPA_4_128_lr2_1.model")
 
     encoder = OneHotNet(3, CLASSES).to('cuda')
     optimizer = torch.optim.Adam(encoder.parameters(), lr=LEARNING_RATE_DEFAULT)

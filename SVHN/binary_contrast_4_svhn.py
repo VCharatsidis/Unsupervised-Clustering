@@ -26,23 +26,23 @@ torch.set_printoptions(sci_mode=False)
 EPS = sys.float_info.epsilon
 
 #EPS=sys.float_info.epsilon
-LEARNING_RATE_DEFAULT = 5e-4
+LEARNING_RATE_DEFAULT = 2.5e-4
 
 MAX_STEPS_DEFAULT = 500000
 
 BATCH_SIZE_DEFAULT = 128
-TR = 4
+TR = 1
 
 EMBEDINGS = 4096
 SIZE = 32
 SIZE_Y = 32
 NETS = 1
 
-EPOCHS = 400
+EPOCHS = 300
 
-CLASSES = 100
+CLASSES = 10
 DESCRIPTION = " Image size: " + str(SIZE) + " , Classes: " + str(CLASSES)
-QUEUE = 60
+QUEUE = 120
 
 EVAL_FREQ_DEFAULT = 250
 MIN_CLUSTERS_TO_SAVE = 10
@@ -186,6 +186,12 @@ def make_transformations(image, aug_ids, iter):
     image_3 = torch.cat([image_1_c, image_2_c, image_3_c, image_4_c, image_5_c, image_6_c, image_7_c, image_8_c], dim=0)
     image_4 = torch.cat([image_1_d, image_2_d, image_3_d, image_4_d, image_5_d, image_6_d, image_7_d, image_8_d], dim=0)
 
+    # save_image(image_1, 1)
+    # save_image(image_2, 2)
+    # save_image(image_3, 3)
+    # save_image(image_4, 4)
+    # input()
+
     return image_1, image_2, image_3, image_4
 
 
@@ -204,6 +210,7 @@ def forward_block(X, ids, encoder, optimizer, train, rev_product):
 
     all_predictions = torch.cat([a, b, c, d], dim=0)
 
+    to_store = 1 - a
     current_reverse = 1 - all_predictions
     denominator = torch.cat([a.sum(dim=1), b.sum(dim=1), c.sum(dim=1), d.sum(dim=1)], dim=0)
     denominator = denominator.unsqueeze(dim=1) + 1
@@ -212,12 +219,12 @@ def forward_block(X, ids, encoder, optimizer, train, rev_product):
 
     if first or not train:
         total_loss = new_loss
-        rev_product = current_reverse.detach()
+        rev_product = to_store.detach()
         first = False
 
     else:
         old_loss = queue_agreement(all_predictions, denominator, rev_product)
-        rev_product = torch.cat([rev_product, current_reverse.detach()])
+        rev_product = torch.cat([rev_product, to_store.detach()])
         total_loss = new_loss + old_loss
 
     if train:
@@ -234,10 +241,10 @@ def save_cluster(original_image, cluster, iteration):
     matplotlib.image.imsave(f"iter_{iteration}_c_{cluster}.png", sample)
 
 
-def save_image(original_image, index, name, cluster=0):
+def save_image(original_image, index):
     sample = original_image.view(-1, original_image.shape[1], original_image.shape[2], original_image.shape[3])
     sample = make_grid(sample, nrow=8).detach().numpy().astype(np.float).transpose(1, 2, 0)
-    matplotlib.image.imsave(f"gen_images/c_{cluster}/{name}_index_{index}.png", sample)
+    matplotlib.image.imsave(f"index_{index}.png", sample)
 
 
 def measure_acc_augments(x_test, encoder, rev_product):
@@ -322,10 +329,13 @@ def train():
 
     script_directory = os.path.split(os.path.abspath(__file__))[0]
 
-    filepath = 'cifar100_models\\binary_contrast_4_plus04_4096'
+    filepath = 'svhn_binary_contrast_4_plus04_4096'
     clusters_net_path = os.path.join(script_directory, filepath)
 
-    encoder = BCNET(3, EMBEDINGS).to('cuda')
+    encoder_name = "svhn_binary_contrast_4_plus04_4096_0_SOTA.model"
+    encoder = torch.load(encoder_name)
+
+    #encoder = BCNET(3, EMBEDINGS).to('cuda')
 
     #torch.save(encoder, os.path.join(script_directory, "cifar100_models\\a_bcnet_random_net.model"))
     print(encoder)
@@ -354,7 +364,7 @@ def train():
         print("Epoch: ", epoch)
         ids = np.random.choice(len(X_train), size=len(X_train), replace=False)
 
-        runs = len(X_train) // BATCH_SIZE_DEFAULT
+        runs = 50000 // BATCH_SIZE_DEFAULT
 
         rev_product = torch.ones([BATCH_SIZE_DEFAULT, EMBEDINGS]).cuda()
         first = True
@@ -380,7 +390,7 @@ def train():
         print("batch mean ones: ",
               (np.where(probs10.data.cpu().numpy() > 0.5))[0].shape[0] / (probs10[0].shape[0] * BATCH_SIZE_DEFAULT))
 
-        count_common_elements(probs10)
+        #count_common_elements(probs10)
         print()
 
         print("train avg loss : ", avg_loss / runs)

@@ -66,20 +66,15 @@ class DetachedNet(nn.Module):
             nn.MaxPool2d(kernel_size=2, stride=2, padding=1)
         )
 
-        # self.conv_5 = nn.Sequential(
-        #     nn.Conv2d(512, 1024, kernel_size=3, stride=1, padding=1),
-        #     nn.ReLU(),
-        #     nn.BatchNorm2d(1024),
-        #     nn.MaxPool2d(kernel_size=2, stride=2, padding=1)
-        # )
-
-        self.brain_1 = nn.Sequential(
-            nn.Linear(6400, EMBEDING_SIZE),
-            nn.Sigmoid()
+        self.conv_5 = nn.Sequential(
+            nn.Conv2d(512, 1024, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(1024),
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=1)
         )
 
-        self.brain_2 = nn.Sequential(
-            nn.Linear(4608, EMBEDING_SIZE),
+        self.brain_1 = nn.Sequential(
+            nn.Linear(4096, EMBEDING_SIZE),
             nn.Sigmoid()
         )
 
@@ -99,21 +94,31 @@ class DetachedNet(nn.Module):
           out: outputs of the network
         """
 
-        conv_1 = self.conv_1(x)
+        x1 = x[:, :, :, :22]
+        conv_1 = self.conv_1(x1)
         conv_2 = self.conv_2(conv_1)
         conv_3 = self.conv_3(conv_2)
+        conv_4 = self.conv_4(conv_3)
+        conv_5 = self.conv_5(conv_4)
 
-        encoding_1 = torch.flatten(conv_3, 1)
-        embedding_1 = self.brain_1(encoding_1)
+        encoding = torch.flatten(conv_5, 1)
+        bin_1 = self.brain_1(encoding)
 
-        conv_4 = self.conv_4(conv_3.detach())  # detached
-        encoding_2 = torch.flatten(conv_4, 1)
-        embedding_2 = self.brain_2(encoding_2)
+
+        x2 = x[:, :, :, 10:]
+        conv_1a = self.conv_1(x2)
+        conv_2a = self.conv_2(conv_1a)
+        conv_3a = self.conv_3(conv_2a)
+        conv_4a = self.conv_4(conv_3a)
+        conv_5a = self.conv_5(conv_4a)
+
+        encodinga = torch.flatten(conv_5a, 1)
+        bin_2 = self.brain_1(encodinga)
 
         # conv_5 = self.conv_5(conv_4.detach())  # detached
         # encoding_3 = torch.flatten(conv_5, 1)
         # embedding_3 = self.brain_3(encoding_3)
 
-        return encoding_1, embedding_1, encoding_2, embedding_2 #, encoding_3, embedding_3
+        return encoding, bin_1, bin_2
 
 

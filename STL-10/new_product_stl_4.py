@@ -28,11 +28,11 @@ from torchvision import models
 EPS = sys.float_info.epsilon
 
 #EPS=sys.float_info.epsilon
-LEARNING_RATE_DEFAULT = 4e-4
+LEARNING_RATE_DEFAULT = 2e-4
 
 MAX_STEPS_DEFAULT = 48750
 
-BATCH_SIZE_DEFAULT = 256
+BATCH_SIZE_DEFAULT = 16
 
 #INPUT_NET = 3072
 INPUT_NET = 5120
@@ -255,18 +255,18 @@ def forward_block(X, ids, encoder, optimizer, train, total_mean, iter):
     _, logit_c, c = encoder(image_3.to('cuda'))
     _, logit_d, d = encoder(image_4.to('cuda'))
 
-    # penalty = (a.sum(dim=0) + b.sum(dim=0) + c.sum(dim=0) + d.sum(dim=0)) / 4
-    #
-    # loss1 = penalized_product(a, b, penalty)
-    # loss2 = penalized_product(a, c, penalty)
-    # loss3 = penalized_product(a, d, penalty)
-    # loss4 = penalized_product(b, c, penalty)
-    # loss5 = penalized_product(b, d, penalty)
-    # loss6 = penalized_product(c, d, penalty)
-    #
-    # total_loss = loss1 + loss2 + loss3 + loss4 + loss5 + loss6
+    penalty = (a.sum(dim=0) + b.sum(dim=0) + c.sum(dim=0) + d.sum(dim=0)) / 4
 
-    total_loss = product_agreement_loss(a, b, c, d)
+    loss1 = penalized_product(a, b, penalty)
+    loss2 = penalized_product(a, c, penalty)
+    loss3 = penalized_product(a, d, penalty)
+    loss4 = penalized_product(b, c, penalty)
+    loss5 = penalized_product(b, d, penalty)
+    loss6 = penalized_product(c, d, penalty)
+
+    total_loss = loss1 + loss2 + loss3 + loss4 + loss5 + loss6
+
+    #total_loss = product_agreement_loss(a, b, c, d)
 
     if train:
         #total_mean = 0.8 * total_mean + penalty * 0.2
@@ -488,14 +488,14 @@ def train():
 
     script_directory = os.path.split(os.path.abspath(__file__))[0]
 
-    filepath = 'PA_4_256_stl_trainX'
+    filepath = f'PPA_4_{BATCH_SIZE_DEFAULT}_trainX'
     virtual_best_path = os.path.join(script_directory, filepath)
 
-    read_path = 'PA_4_256_stl_1.model'
-    read_path = os.path.join(script_directory, read_path)
-    encoder = torch.load(read_path)
+    # read_path = 'PPA_4_16_0.model'
+    # read_path = os.path.join(script_directory, read_path)
+    # encoder = torch.load(read_path)
 
-    #encoder = OneHotNet(3, CLASSES).to('cuda')
+    encoder = OneHotNet(3, CLASSES).to('cuda')
     optimizer = torch.optim.Adam(encoder.parameters(), lr=LEARNING_RATE_DEFAULT)
 
     min_miss_percentage = 100

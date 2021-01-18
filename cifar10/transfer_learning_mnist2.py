@@ -10,6 +10,7 @@ import scipy.io as sio
 from torchvision.utils import make_grid
 import matplotlib
 from linear_layer_svhn import LinearNetSVHN
+from sklearn.datasets import fetch_openml
 import sys
 import pickle
 # Default constants
@@ -43,8 +44,7 @@ np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
 FLAGS = None
 
 #encoder_name = "supervised_cross_entropy_svhn_original_1"
-#encoder_name = "svhn_bp_4096_plus_5_0"
-encoder_name = "..\\cifar10\\binary_contrast_4_4096_2"
+encoder_name = "binary_contrast_4_4096_2"
 
 encoder = torch.load(encoder_name+".model")
 encoder.eval()
@@ -170,10 +170,10 @@ def count_common_elements(p):
     print("Mean common elements: ", (sum_commons / INPUT_NET) / counter)
 
 
-def save_image(original_image, iteration, name):
-    sample = original_image.view(-1, 1, original_image.shape[2], original_image.shape[2])
+def save_image(original_image, index):
+    sample = original_image.view(-1, original_image.shape[1], original_image.shape[2], original_image.shape[3])
     sample = make_grid(sample, nrow=8).detach().numpy().astype(np.float).transpose(1, 2, 0)
-    matplotlib.image.imsave(f"gen_images/{name}_iter_{iteration}.png", sample)
+    matplotlib.image.imsave(f"index_{index}.png", sample)
 
 
 def accuracy(predictions, targets):
@@ -235,32 +235,33 @@ def unpickle(file):
 
 def train():
     global EVAL_FREQ_DEFAULT
-    # unsupervised_data = sio.loadmat('data\\extra_32x32.mat')
-    train_data = sio.loadmat('data\\train_32x32.mat')
-    test_data = sio.loadmat('data\\test_32x32.mat')
-
-    train_targets = train_data['y'].squeeze(1)
-    print("y test", train_targets.shape)
-
-    y_train = np.array([x % 10 for x in train_targets])
-    #y_train = torch.from_numpy(train_targets)
-
-    # for target in train_targets:
-    #     class_numbers[target] += 1
-
-    X_train = preproccess_svhn(train_data['X'])
-    print("x train shape", X_train.shape)
-
-    # access to the dict
-
-    X_test = preproccess_svhn(test_data['X'])
-    print("x test shape", X_test.shape)
-
-    targets = test_data['y'].squeeze(1)
-    print("y test", targets.shape)
-
-    targets = np.array([x % 10 for x in targets])
+    mnist = fetch_openml('mnist_784', version=1, cache=True)
+    targets = mnist.target[60000:]
+    targets = targets.astype(np.int64)
     #targets = torch.from_numpy(targets)
+
+    X_train = mnist.data[:60000]
+    X_test = mnist.data[60000:]
+
+    y_train = mnist.target[:60000]
+    y_train = y_train.astype(np.int64)
+    #y_train = torch.from_numpy(y_train)
+
+
+    X_train = np.reshape(X_train, (X_train.shape[0], 1, 28, 28))
+    X_train = np.stack((X_train,)*3, axis=1)
+    X_train = np.squeeze(X_train, axis=2)
+    X_train= Variable(torch.FloatTensor(X_train))
+    X_train /= 255
+    X_train = just_scale_up(X_train, 32)
+
+    X_test = np.reshape(X_test, (X_test.shape[0], 1, 28, 28))
+    X_test = np.stack((X_test,) * 3, axis=1)
+    X_test = np.squeeze(X_test, axis=2)
+    X_test = Variable(torch.FloatTensor(X_test))
+    X_test /= 255
+    X_test = just_scale_up(X_test, 32)
+
 
     # script_directory = os.path.split(os.path.abspath(__file__))[0]
     # filepath = 'encoders\\encoder_' + str(0) + '.model'
@@ -332,6 +333,12 @@ def train():
                 file.write(accuracy_info)
                 file.close()
                 break
+
+
+def save_image(original_image, index):
+    sample = original_image.view(-1, original_image.shape[1], original_image.shape[2], original_image.shape[3])
+    sample = make_grid(sample, nrow=8).detach().numpy().astype(np.float).transpose(1, 2, 0)
+    matplotlib.image.imsave(f"index_{index}.png", sample)
 
 
 def main():

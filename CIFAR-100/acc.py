@@ -13,9 +13,9 @@ np.set_printoptions(threshold=sys.maxsize)
 np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
 
 FLAGS = None
-FINE_LABELS = True
+FINE_LABELS = False
 
-encoder_name = "cifar100_models\\PPA_4_256_3conv_1linear_lr4_1"
+encoder_name = "cifar100_models\\PPA_4_128_4conv_1linear_1"
 
 encoder = torch.load(encoder_name+".model")
 encoder.eval()

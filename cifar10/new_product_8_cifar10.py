@@ -31,7 +31,7 @@ LEARNING_RATE_DEFAULT = 4e-4
 
 MAX_STEPS_DEFAULT = 48750
 
-BATCH_SIZE_DEFAULT = 256
+BATCH_SIZE_DEFAULT = 32
 
 #INPUT_NET = 3072
 #INPUT_NET = 5120
@@ -41,7 +41,7 @@ NETS = 1
 
 CLASSES = 10
 DESCRIPTION = " Image size: " + str(SIZE) + " , Classes: " + str(CLASSES)
-EPOCHS = 200
+EPOCHS = 300
 
 EVAL_FREQ_DEFAULT = 100
 MIN_CLUSTERS_TO_SAVE = 100
@@ -166,47 +166,45 @@ def penalized_product(a, b, penalty):
 
 def make_transformations(image, aug_ids, iter):
 
-    eight = image.shape[0] // 8
+    fourth = image.shape[0] // 4
 
-    image_1_a = transformation(aug_ids[0], image[0:eight], SIZE, SIZE_Y)
-    image_1_b = transformation(aug_ids[1], image[0:eight], SIZE, SIZE_Y)
-    image_1_c = transformation(aug_ids[2], image[0:eight], SIZE, SIZE_Y)
-    image_1_d = transformation(aug_ids[16], image[0:eight], SIZE, SIZE_Y)
+    image_1_a = transformation(aug_ids[0], image[0:fourth], SIZE, SIZE_Y)
+    image_1_b = transformation(aug_ids[1], image[0:fourth], SIZE, SIZE_Y)
+    image_1_c = transformation(aug_ids[2], image[0:fourth], SIZE, SIZE_Y)
+    image_1_d = transformation(aug_ids[3], image[0:fourth], SIZE, SIZE_Y)
+    image_1_e = transformation(aug_ids[4], image[0:fourth], SIZE, SIZE_Y)
+    image_1_f = transformation(aug_ids[5], image[0:fourth], SIZE, SIZE_Y)
+    image_1_g = transformation(aug_ids[6], image[0:fourth], SIZE, SIZE_Y)
+    image_1_h = transformation(aug_ids[7], image[0:fourth], SIZE, SIZE_Y)
 
-    image_2_a = transformation(aug_ids[3], image[eight: 2 * eight], SIZE, SIZE_Y)
-    image_2_b = transformation(aug_ids[4], image[eight: 2 * eight], SIZE, SIZE_Y)
-    image_2_c = transformation(aug_ids[5], image[eight: 2 * eight], SIZE, SIZE_Y)
-    image_2_d = transformation(aug_ids[6], image[eight: 2 * eight], SIZE, SIZE_Y)
+    image_2_a = transformation(aug_ids[8], image[fourth: 2 * fourth], SIZE, SIZE_Y)
+    image_2_b = transformation(aug_ids[9], image[fourth: 2 * fourth], SIZE, SIZE_Y)
+    image_2_c = transformation(aug_ids[10], image[fourth: 2 * fourth], SIZE, SIZE_Y)
+    image_2_d = transformation(aug_ids[11], image[fourth: 2 * fourth], SIZE, SIZE_Y)
+    image_2_e = transformation(aug_ids[12], image[fourth: 2 * fourth], SIZE, SIZE_Y)
+    image_2_f = transformation(aug_ids[13], image[fourth: 2 * fourth], SIZE, SIZE_Y)
+    image_2_g = transformation(aug_ids[14], image[fourth: 2 * fourth], SIZE, SIZE_Y)
+    image_2_h = transformation(aug_ids[15], image[fourth: 2 * fourth], SIZE, SIZE_Y)
 
-    image_3_a = transformation(aug_ids[6], image[2 * eight: 3 * eight], SIZE, SIZE_Y)
-    image_3_b = transformation(aug_ids[7], image[2 * eight: 3 * eight], SIZE, SIZE_Y)
-    image_3_c = transformation(aug_ids[8], image[2 * eight: 3 * eight], SIZE, SIZE_Y)
-    image_3_d = transformation(aug_ids[10], image[2 * eight: 3 * eight], SIZE, SIZE_Y)
+    image_3_a = transformation(aug_ids[16], image[2 * fourth:3 * fourth], SIZE, SIZE_Y)
+    image_3_b = transformation(aug_ids[17], image[2 * fourth:3 * fourth], SIZE, SIZE_Y)
+    image_3_c = transformation(aug_ids[18], image[2 * fourth:3 * fourth], SIZE, SIZE_Y)
+    image_3_d = transformation(aug_ids[0], image[2 * fourth:3 * fourth], SIZE, SIZE_Y)
+    image_3_e = transformation(aug_ids[8], image[2 * fourth:3 * fourth], SIZE, SIZE_Y)
+    image_3_f = transformation(aug_ids[1], image[2 * fourth:3 * fourth], SIZE, SIZE_Y)
+    image_3_g = transformation(aug_ids[9], image[2 * fourth:3 * fourth], SIZE, SIZE_Y)
+    image_3_h = transformation(aug_ids[2], image[2 * fourth:3 * fourth], SIZE, SIZE_Y)
 
-    image_4_a = transformation(aug_ids[9], image[3 * eight: 4 * eight], SIZE, SIZE_Y)
-    image_4_b = transformation(aug_ids[10], image[3 * eight: 4 * eight], SIZE, SIZE_Y)
-    image_4_c = transformation(aug_ids[11], image[3 * eight: 4 * eight], SIZE, SIZE_Y)
-    image_4_d = transformation(aug_ids[16], image[3 * eight: 4 * eight], SIZE, SIZE_Y)
+    image_4_a = transformation(aug_ids[10], image[3 * fourth:], SIZE, SIZE_Y)
+    image_4_b = transformation(aug_ids[3], image[3 * fourth:], SIZE, SIZE_Y)
+    image_4_c = transformation(aug_ids[11], image[3 * fourth:], SIZE, SIZE_Y)
+    image_4_d = transformation(aug_ids[4], image[3 * fourth:], SIZE, SIZE_Y)
+    image_4_e = transformation(aug_ids[12], image[3 * fourth:], SIZE, SIZE_Y)
+    image_4_f = transformation(aug_ids[5], image[3 * fourth:], SIZE, SIZE_Y)
+    image_4_g = transformation(aug_ids[13], image[3 * fourth:], SIZE, SIZE_Y)
+    image_4_h = transformation(aug_ids[16], image[3 * fourth:], SIZE, SIZE_Y)
 
-    image_5_a = transformation(aug_ids[12], image[4 * eight: 5 * eight], SIZE, SIZE_Y)
-    image_5_b = transformation(aug_ids[13], image[4 * eight: 5 * eight], SIZE, SIZE_Y)
-    image_5_c = transformation(aug_ids[14], image[4 * eight: 5 * eight], SIZE, SIZE_Y)
-    image_5_d = transformation(aug_ids[2], image[4 * eight: 5 * eight], SIZE, SIZE_Y)
 
-    image_6_a = transformation(aug_ids[15], image[5 * eight: 6 * eight], SIZE, SIZE_Y)
-    image_6_b = transformation(aug_ids[0], image[5 * eight: 6 * eight], SIZE, SIZE_Y)
-    image_6_c = transformation(aug_ids[3], image[5 * eight: 6 * eight], SIZE, SIZE_Y)
-    image_6_d = transformation(aug_ids[7], image[5 * eight: 6 * eight], SIZE, SIZE_Y)
-
-    image_7_a = transformation(aug_ids[4], image[6 * eight: 7 * eight], SIZE, SIZE_Y)
-    image_7_b = transformation(aug_ids[8], image[6 * eight: 7 * eight], SIZE, SIZE_Y)
-    image_7_c = transformation(aug_ids[9], image[6 * eight: 7 * eight], SIZE, SIZE_Y)
-    image_7_d = transformation(aug_ids[1], image[6 * eight: 7 * eight], SIZE, SIZE_Y)
-
-    image_8_a = transformation(aug_ids[5], image[7 * eight:], SIZE, SIZE_Y)
-    image_8_b = transformation(aug_ids[11], image[7 * eight:], SIZE, SIZE_Y)
-    image_8_c = transformation(aug_ids[18], image[7 * eight:], SIZE, SIZE_Y)
-    image_8_d = transformation(aug_ids[17], image[7 * eight:], SIZE, SIZE_Y)
 
     # save_images(image_1_a, aug_ids[0], iter)
     # save_images(image_1_b, aug_ids[1], iter)
@@ -232,21 +230,25 @@ def make_transformations(image, aug_ids, iter):
     #
     # save_images(image_4_d, aug_ids[16], iter)
     # save_images(image_8_d, aug_ids[17], iter)
+    #save_images(image_8_c, 18, iter)
 
-    image_1 = torch.cat([image_1_a, image_2_a, image_3_a, image_4_a, image_5_a, image_6_a, image_7_a, image_8_a], dim=0)
-    image_2 = torch.cat([image_1_b, image_2_b, image_3_b, image_4_b, image_5_b, image_6_b, image_7_b, image_8_b], dim=0)
-    image_3 = torch.cat([image_1_c, image_2_c, image_3_c, image_4_c, image_5_c, image_6_c, image_7_c, image_8_c], dim=0)
-    image_4 = torch.cat([image_1_d, image_2_d, image_3_d, image_4_d, image_5_d, image_6_d, image_7_d, image_8_d], dim=0)
+    image_1 = torch.cat([image_1_a, image_2_a, image_3_a, image_4_a], dim=0)
+    image_2 = torch.cat([image_1_b, image_2_b, image_3_b, image_4_b], dim=0)
+    image_3 = torch.cat([image_1_c, image_2_c, image_3_c, image_4_c], dim=0)
+    image_4 = torch.cat([image_1_d, image_2_d, image_3_d, image_4_d], dim=0)
 
-    # save_images(image_1, 1, iter)
-    # save_images(image_2, 2, iter)
-    # save_images(image_3, 3, iter)
-    # save_images(image_4, 4, iter)
-    #
-    # save_images(image, 18, iter)
-    # input()
+    image_5 = torch.cat([image_1_e, image_2_e, image_3_e, image_4_e], dim=0)
+    image_6 = torch.cat([image_1_f, image_2_f, image_3_f, image_4_f], dim=0)
+    image_7 = torch.cat([image_1_g, image_2_g, image_3_g, image_4_g], dim=0)
+    image_8 = torch.cat([image_1_h, image_2_h, image_3_h, image_4_h], dim=0)
 
-    return image_1, image_2, image_3, image_4
+    if random.uniform(0, 1) > 0.9999:
+        save_images(image_1, 19, iter)
+        save_images(image_2, 20, iter)
+        save_images(image_3, 21, iter)
+        save_images(image_4, 22, iter)
+
+    return image_1, image_2, image_3, image_4, image_5, image_6, image_7, image_8
 
 
 def forward_block(X, ids, encoder, optimizer, train, total_mean, iter):
@@ -254,35 +256,58 @@ def forward_block(X, ids, encoder, optimizer, train, total_mean, iter):
     aug_ids = np.random.choice(number_transforms, size=number_transforms, replace=False)
 
     image = X[ids, :]
-    image_1, image_2, image_3, image_4 = make_transformations(image, aug_ids, iter)
+    image_1, image_2, image_3, image_4, image_5, image_6, image_7, image_8 = make_transformations(image, aug_ids, iter)
 
     _, logit_a, a = encoder(image_1.to('cuda'))
     _, logit_b, b = encoder(image_2.to('cuda'))
     _, logit_c, c = encoder(image_3.to('cuda'))
     _, logit_d, d = encoder(image_4.to('cuda'))
 
-    # penalty = (a.sum(dim=0) + b.sum(dim=0) + c.sum(dim=0) + d.sum(dim=0)) / 4
-    #
-    # loss1 = penalized_product(a, b, penalty)
-    # loss2 = penalized_product(a, c, penalty)
-    # loss3 = penalized_product(a, d, penalty)
-    # loss4 = penalized_product(b, c, penalty)
-    # loss5 = penalized_product(b, d, penalty)
-    # loss6 = penalized_product(c, d, penalty)
+    _, logit_e, e = encoder(image_5.to('cuda'))
+    _, logit_f, f = encoder(image_6.to('cuda'))
+    _, logit_g, g = encoder(image_7.to('cuda'))
+    _, logit_h, h = encoder(image_8.to('cuda'))
 
-    # loss1 = penalized_product_mean(a, b, penalty, total_mean)
-    # loss2 = penalized_product_mean(a, c, penalty, total_mean)
-    # loss3 = penalized_product_mean(a, d, penalty, total_mean)
-    # loss4 = penalized_product_mean(b, c, penalty, total_mean)
-    # loss5 = penalized_product_mean(b, d, penalty, total_mean)
-    # loss6 = penalized_product_mean(c, d, penalty, total_mean)
+    penalty = (a.sum(dim=0) + b.sum(dim=0) + c.sum(dim=0) + d.sum(dim=0) + e.sum(dim=0) + f.sum(dim=0) + g.sum(dim=0) + h.sum(dim=0)) / 8
 
-    #total_loss = loss1 + loss2 + loss3 + loss4 + loss5 + loss6
+    loss1 = penalized_product(a, b, penalty)
+    loss2 = penalized_product(a, c, penalty)
+    loss3 = penalized_product(a, d, penalty)
+    loss4 = penalized_product(a, e, penalty)
+    loss5 = penalized_product(a, f, penalty)
+    loss6 = penalized_product(a, g, penalty)
+    loss7 = penalized_product(a, h, penalty)
 
-    total_loss = product_agreement_loss(a, b, c, d)
+    loss8 = penalized_product(b, c, penalty)
+    loss9 = penalized_product(b, d, penalty)
+    loss10 = penalized_product(b, e, penalty)
+    loss11 = penalized_product(b, f, penalty)
+    loss12 = penalized_product(b, g, penalty)
+    loss13 = penalized_product(b, h, penalty)
+
+    loss14 = penalized_product(c, d, penalty)
+    loss15 = penalized_product(c, e, penalty)
+    loss16 = penalized_product(c, f, penalty)
+    loss17 = penalized_product(c, g, penalty)
+    loss18 = penalized_product(c, h, penalty)
+
+    loss19 = penalized_product(d, e, penalty)
+    loss20 = penalized_product(d, f, penalty)
+    loss21 = penalized_product(d, g, penalty)
+    loss22 = penalized_product(d, h, penalty)
+
+    loss23 = penalized_product(e, f, penalty)
+    loss24 = penalized_product(e, g, penalty)
+    loss25 = penalized_product(e, h, penalty)
+
+    loss26 = penalized_product(f, g, penalty)
+    loss27 = penalized_product(f, h, penalty)
+
+    loss28 = penalized_product(g, h, penalty)
+
+    total_loss = loss1 + loss2 + loss3 + loss4 + loss5 + loss6 + loss7 + loss8 + loss9 + loss10+ loss11+ loss12+ loss13+ loss14 + loss15+loss16 +  loss17+loss18 +loss19+loss20+loss21+loss22+loss23+loss24+loss25+loss26+loss27+loss28
 
     if train:
-        #total_mean = 0.8 * total_mean + penalty * 0.2
 
         optimizer.zero_grad()
         total_loss.backward()
@@ -333,12 +358,9 @@ def measure_acc_augments(X_test, encoder, targets):
     avg_loss = 0
 
     print_dict = {}
-    for i in range(10):
-        print_dict[i] = []
-
     virtual_clusters = {}
     for i in range(CLASSES):
-
+        print_dict[i] = []
         virtual_clusters[i] = []
 
     for j in range(runs):
@@ -455,11 +477,11 @@ def train():
 
     script_directory = os.path.split(os.path.abspath(__file__))[0]
 
-    filepath = f'PPAS_4_{BATCH_SIZE_DEFAULT}_lr{LEARNING_RATE_DEFAULT}'
+    filepath = f'PPA_8_{BATCH_SIZE_DEFAULT}_lr{LEARNING_RATE_DEFAULT}'
     virtual_best_path = os.path.join(script_directory, filepath)
 
-    # epoch 105.
-    #encoder = torch.load("PPA_2_64_lr0.0004_0.model")
+    # epoch 158.
+    #encoder = torch.load("PPA_4_128_lr2_1.model")
 
     encoder = OneHotNet(3, CLASSES).to('cuda')
     optimizer = torch.optim.Adam(encoder.parameters(), lr=LEARNING_RATE_DEFAULT)

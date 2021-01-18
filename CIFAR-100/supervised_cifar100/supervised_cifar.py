@@ -24,7 +24,7 @@ torch.set_printoptions(threshold=sys.maxsize)
 EPS = sys.float_info.epsilon
 
 #EPS=sys.float_info.epsilon
-LEARNING_RATE_DEFAULT = 1e-4
+LEARNING_RATE_DEFAULT = 1.5e-4
 
 MAX_STEPS_DEFAULT = 500000
 
@@ -34,9 +34,9 @@ SIZE = 32
 SIZE_Y = 32
 NETS = 1
 
-EPOCHS = 400
+EPOCHS = 600
 
-CLASSES = 100
+CLASSES = 200
 DESCRIPTION = " Image size: " + str(SIZE) + " , Classes: " + str(CLASSES)
 
 EVAL_FREQ_DEFAULT = 250
@@ -86,6 +86,15 @@ def save_images(images, transformation):
     numpy_cluster = images.cpu().detach()
     save_cluster(numpy_cluster, transformations_dict[transformation], 0)
 
+
+def accuracy(predictions, targets):
+   predictions = predictions.cpu().detach().numpy()
+   preds = np.argmax(predictions, 1)
+   result = preds == targets
+   sum = np.sum(result)
+   #accur = sum / float(targets.shape[0])
+
+   return sum
 
 # def new_agreement(product, denominator, rev_prod):
 #     transposed = rev_prod.transpose(0, 1)
@@ -141,28 +150,28 @@ def forward_block(X, y_train, ids, encoder, optimizer, train, rev_product):
     eight = image.shape[0] // 8
 
     #image_1 = transformation(aug_ids[0], image[0:eight], SIZE, SIZE_Y)
-    #image_2 = transformation(aug_ids[1], image[0:eight], SIZE, SIZE_Y)
+    image_2 = transformation(aug_ids[1], image[0:eight], SIZE, SIZE_Y)
 
     #image_3 = transformation(aug_ids[2], image[eight: 2 * eight], SIZE, SIZE_Y)
-    #image_4 = transformation(aug_ids[3], image[eight: 2 * eight], SIZE, SIZE_Y)
+    image_4 = transformation(aug_ids[3], image[eight: 2 * eight], SIZE, SIZE_Y)
 
     #image_5 = transformation(aug_ids[4], image[2 * eight: 3 * eight], SIZE, SIZE_Y)
-    #image_6 = transformation(aug_ids[5], image[2 * eight: 3 * eight], SIZE, SIZE_Y)
+    image_6 = transformation(aug_ids[5], image[2 * eight: 3 * eight], SIZE, SIZE_Y)
 
     #image_7 = transformation(aug_ids[6], image[3 * eight: 4 * eight], SIZE, SIZE_Y)
-    #image_8 = transformation(aug_ids[7], image[3 * eight: 4 * eight], SIZE, SIZE_Y)
+    image_8 = transformation(aug_ids[7], image[3 * eight: 4 * eight], SIZE, SIZE_Y)
 
     #image_9 = transformation(aug_ids[8], image[4 * eight: 5 * eight], SIZE, SIZE_Y)
-    #image_10 = transformation(aug_ids[9], image[4 * eight: 5 * eight], SIZE, SIZE_Y)
+    image_10 = transformation(aug_ids[9], image[4 * eight: 5 * eight], SIZE, SIZE_Y)
 
     #image_11 = transformation(aug_ids[10], image[5 * eight: 6 * eight], SIZE, SIZE_Y)
-    #image_12 = transformation(aug_ids[11], image[5 * eight: 6 * eight], SIZE, SIZE_Y)
+    image_12 = transformation(aug_ids[11], image[5 * eight: 6 * eight], SIZE, SIZE_Y)
 
     #image_13 = transformation(aug_ids[12], image[6 * eight: 7 * eight], SIZE, SIZE_Y)
-    #image_14 = transformation(aug_ids[13], image[6 * eight: 7 * eight], SIZE, SIZE_Y)
+    image_14 = transformation(aug_ids[13], image[6 * eight: 7 * eight], SIZE, SIZE_Y)
 
     #image_15 = transformation(aug_ids[14], image[7 * eight:], SIZE, SIZE_Y)
-    #image_16 = transformation(aug_ids[15], image[7 * eight:], SIZE, SIZE_Y)
+    image_16 = transformation(aug_ids[15], image[7 * eight:], SIZE, SIZE_Y)
 
     # save_images(image_1, aug_ids[0])
     # save_images(image_2, aug_ids[1])
@@ -182,20 +191,20 @@ def forward_block(X, y_train, ids, encoder, optimizer, train, rev_product):
     # save_images(image_16, aug_ids[15])
 
     #image_1 = torch.cat([image_1, image_3, image_5, image_7, image_9, image_11, image_13, image_15], dim=0)
-    #image_2 = torch.cat([image_2, image_4, image_6, image_8, image_10, image_12, image_14, image_16], dim=0)
+    image_2 = torch.cat([image_2, image_4, image_6, image_8, image_10, image_12, image_14, image_16], dim=0)
 
     # save_images(image_1, 20)
     # save_images(image_2, 21)
 
     _, _, a = encoder(image.to('cuda'))
-    #_, _, b = encoder(image_2.to('cuda'))
+    _, _, b = encoder(image_2.to('cuda'))
 
-    #all_predictions = torch.cat([a, b], dim=0)
-    all_predictions = a
+    all_predictions = torch.cat([a, b], dim=0)
+    #all_predictions = a
 
     y_train = Variable(torch.LongTensor(y_train[ids])).cuda()
-    #targets = torch.cat([y_train, y_train], dim=0)
-    targets = y_train
+    targets = torch.cat([y_train, y_train], dim=0)
+    #targets = y_train
 
     cross_entropy_loss = loss(all_predictions, targets)
 
@@ -223,6 +232,7 @@ def measure_acc_augments(x_test, encoder, rev_product, targets):
     size = BATCH_SIZE_DEFAULT
     runs = len(x_test) // size
     sum_loss = 0
+    sum_correct = 0
 
     print(rev_product.shape)
 
@@ -232,12 +242,15 @@ def measure_acc_augments(x_test, encoder, rev_product, targets):
         with torch.no_grad():
             test_preds_1, test_preds_2, test_total_loss, rev_product = forward_block(x_test, targets, test_ids, encoder, [], False, rev_product)
 
+        sum_correct += accuracy(test_preds_1, targets[test_ids])
         sum_loss += test_total_loss.item()
 
     avg_loss = sum_loss / runs
+    accuracy_test_set = sum_correct / (runs * BATCH_SIZE_DEFAULT)
 
     print()
     print("Avg test loss: ", avg_loss)
+    print("Avg accuracy: ", accuracy_test_set)
     print()
 
     return avg_loss
@@ -323,7 +336,7 @@ def train():
 
     script_directory = os.path.split(os.path.abspath(__file__))[0]
 
-    filepath = '..\\cifar100_models\\supervised_cross_entropy_originalonly'
+    filepath = f'..\\cifar100_models\\supervised_cross_entropy_originalonly_lr{LEARNING_RATE_DEFAULT}_bs{BATCH_SIZE_DEFAULT}'
     clusters_net_path = os.path.join(script_directory, filepath)
 
     encoder = SupervisedNetCifar(3, 100).to('cuda')

@@ -24,15 +24,15 @@ torch.set_printoptions(threshold=sys.maxsize)
 EPS = sys.float_info.epsilon
 
 #EPS=sys.float_info.epsilon
-LEARNING_RATE_DEFAULT = 1e-4
+LEARNING_RATE_DEFAULT = 2.2e-4
 
 MAX_STEPS_DEFAULT = 500000
 
 BATCH_SIZE_DEFAULT = 128
 TR = 1
-QUEUE = 300
+QUEUE = 380
 
-EMBEDINGS = 100
+EMBEDINGS = 64
 SIZE = 32
 SIZE_Y = 32
 NETS = 1

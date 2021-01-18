@@ -4,7 +4,7 @@ from __future__ import print_function
 
 
 import sys
-import cifar10_utils
+import scipy.io as sio
 import argparse
 import os
 
@@ -39,7 +39,7 @@ SIZE = 32
 SIZE_Y = 32
 NETS = 1
 
-CLASSES = 10
+CLASSES = 100
 DESCRIPTION = " Image size: " + str(SIZE) + " , Classes: " + str(CLASSES)
 EPOCHS = 200
 
@@ -108,8 +108,8 @@ def save_images(images, transformation, iter):
 #     return scalar, sum_mean
 #
 
-def product_agreement_loss(a, b, c, d):
-    product = a * b * c * d
+def product_agreement_loss(a, b):
+    product = a * b
     mean = product.mean(dim=0)
 
     log = - torch.log(mean)
@@ -170,43 +170,27 @@ def make_transformations(image, aug_ids, iter):
 
     image_1_a = transformation(aug_ids[0], image[0:eight], SIZE, SIZE_Y)
     image_1_b = transformation(aug_ids[1], image[0:eight], SIZE, SIZE_Y)
-    image_1_c = transformation(aug_ids[2], image[0:eight], SIZE, SIZE_Y)
-    image_1_d = transformation(aug_ids[16], image[0:eight], SIZE, SIZE_Y)
 
-    image_2_a = transformation(aug_ids[3], image[eight: 2 * eight], SIZE, SIZE_Y)
-    image_2_b = transformation(aug_ids[4], image[eight: 2 * eight], SIZE, SIZE_Y)
-    image_2_c = transformation(aug_ids[5], image[eight: 2 * eight], SIZE, SIZE_Y)
-    image_2_d = transformation(aug_ids[6], image[eight: 2 * eight], SIZE, SIZE_Y)
+    image_2_a = transformation(aug_ids[2], image[eight: 2 * eight], SIZE, SIZE_Y)
+    image_2_b = transformation(aug_ids[3], image[eight: 2 * eight], SIZE, SIZE_Y)
 
-    image_3_a = transformation(aug_ids[6], image[2 * eight: 3 * eight], SIZE, SIZE_Y)
-    image_3_b = transformation(aug_ids[7], image[2 * eight: 3 * eight], SIZE, SIZE_Y)
-    image_3_c = transformation(aug_ids[8], image[2 * eight: 3 * eight], SIZE, SIZE_Y)
-    image_3_d = transformation(aug_ids[10], image[2 * eight: 3 * eight], SIZE, SIZE_Y)
+    image_3_a = transformation(aug_ids[4], image[2 * eight: 3 * eight], SIZE, SIZE_Y)
+    image_3_b = transformation(aug_ids[5], image[2 * eight: 3 * eight], SIZE, SIZE_Y)
 
-    image_4_a = transformation(aug_ids[9], image[3 * eight: 4 * eight], SIZE, SIZE_Y)
-    image_4_b = transformation(aug_ids[10], image[3 * eight: 4 * eight], SIZE, SIZE_Y)
-    image_4_c = transformation(aug_ids[11], image[3 * eight: 4 * eight], SIZE, SIZE_Y)
-    image_4_d = transformation(aug_ids[16], image[3 * eight: 4 * eight], SIZE, SIZE_Y)
+    image_4_a = transformation(aug_ids[6], image[3 * eight: 4 * eight], SIZE, SIZE_Y)
+    image_4_b = transformation(aug_ids[7], image[3 * eight: 4 * eight], SIZE, SIZE_Y)
 
-    image_5_a = transformation(aug_ids[12], image[4 * eight: 5 * eight], SIZE, SIZE_Y)
-    image_5_b = transformation(aug_ids[13], image[4 * eight: 5 * eight], SIZE, SIZE_Y)
-    image_5_c = transformation(aug_ids[14], image[4 * eight: 5 * eight], SIZE, SIZE_Y)
-    image_5_d = transformation(aug_ids[2], image[4 * eight: 5 * eight], SIZE, SIZE_Y)
+    image_5_a = transformation(aug_ids[8], image[4 * eight: 5 * eight], SIZE, SIZE_Y)
+    image_5_b = transformation(aug_ids[9], image[4 * eight: 5 * eight], SIZE, SIZE_Y)
 
-    image_6_a = transformation(aug_ids[15], image[5 * eight: 6 * eight], SIZE, SIZE_Y)
-    image_6_b = transformation(aug_ids[0], image[5 * eight: 6 * eight], SIZE, SIZE_Y)
-    image_6_c = transformation(aug_ids[3], image[5 * eight: 6 * eight], SIZE, SIZE_Y)
-    image_6_d = transformation(aug_ids[7], image[5 * eight: 6 * eight], SIZE, SIZE_Y)
+    image_6_a = transformation(aug_ids[10], image[5 * eight: 6 * eight], SIZE, SIZE_Y)
+    image_6_b = transformation(aug_ids[11], image[5 * eight: 6 * eight], SIZE, SIZE_Y)
 
-    image_7_a = transformation(aug_ids[4], image[6 * eight: 7 * eight], SIZE, SIZE_Y)
-    image_7_b = transformation(aug_ids[8], image[6 * eight: 7 * eight], SIZE, SIZE_Y)
-    image_7_c = transformation(aug_ids[9], image[6 * eight: 7 * eight], SIZE, SIZE_Y)
-    image_7_d = transformation(aug_ids[1], image[6 * eight: 7 * eight], SIZE, SIZE_Y)
+    image_7_a = transformation(aug_ids[12], image[6 * eight: 7 * eight], SIZE, SIZE_Y)
+    image_7_b = transformation(aug_ids[13], image[6 * eight: 7 * eight], SIZE, SIZE_Y)
 
-    image_8_a = transformation(aug_ids[5], image[7 * eight:], SIZE, SIZE_Y)
-    image_8_b = transformation(aug_ids[11], image[7 * eight:], SIZE, SIZE_Y)
-    image_8_c = transformation(aug_ids[18], image[7 * eight:], SIZE, SIZE_Y)
-    image_8_d = transformation(aug_ids[17], image[7 * eight:], SIZE, SIZE_Y)
+    image_8_a = transformation(aug_ids[14], image[7 * eight:], SIZE, SIZE_Y)
+    image_8_b = transformation(aug_ids[15], image[7 * eight:], SIZE, SIZE_Y)
 
     # save_images(image_1_a, aug_ids[0], iter)
     # save_images(image_1_b, aug_ids[1], iter)
@@ -232,21 +216,12 @@ def make_transformations(image, aug_ids, iter):
     #
     # save_images(image_4_d, aug_ids[16], iter)
     # save_images(image_8_d, aug_ids[17], iter)
+    #save_images(image_8_c, 18, iter)
 
     image_1 = torch.cat([image_1_a, image_2_a, image_3_a, image_4_a, image_5_a, image_6_a, image_7_a, image_8_a], dim=0)
     image_2 = torch.cat([image_1_b, image_2_b, image_3_b, image_4_b, image_5_b, image_6_b, image_7_b, image_8_b], dim=0)
-    image_3 = torch.cat([image_1_c, image_2_c, image_3_c, image_4_c, image_5_c, image_6_c, image_7_c, image_8_c], dim=0)
-    image_4 = torch.cat([image_1_d, image_2_d, image_3_d, image_4_d, image_5_d, image_6_d, image_7_d, image_8_d], dim=0)
 
-    # save_images(image_1, 1, iter)
-    # save_images(image_2, 2, iter)
-    # save_images(image_3, 3, iter)
-    # save_images(image_4, 4, iter)
-    #
-    # save_images(image, 18, iter)
-    # input()
-
-    return image_1, image_2, image_3, image_4
+    return image_1, image_2
 
 
 def forward_block(X, ids, encoder, optimizer, train, total_mean, iter):
@@ -254,12 +229,10 @@ def forward_block(X, ids, encoder, optimizer, train, total_mean, iter):
     aug_ids = np.random.choice(number_transforms, size=number_transforms, replace=False)
 
     image = X[ids, :]
-    image_1, image_2, image_3, image_4 = make_transformations(image, aug_ids, iter)
+    image_1, image_2= make_transformations(image, aug_ids, iter)
 
     _, logit_a, a = encoder(image_1.to('cuda'))
     _, logit_b, b = encoder(image_2.to('cuda'))
-    _, logit_c, c = encoder(image_3.to('cuda'))
-    _, logit_d, d = encoder(image_4.to('cuda'))
 
     # penalty = (a.sum(dim=0) + b.sum(dim=0) + c.sum(dim=0) + d.sum(dim=0)) / 4
     #
@@ -270,16 +243,9 @@ def forward_block(X, ids, encoder, optimizer, train, total_mean, iter):
     # loss5 = penalized_product(b, d, penalty)
     # loss6 = penalized_product(c, d, penalty)
 
-    # loss1 = penalized_product_mean(a, b, penalty, total_mean)
-    # loss2 = penalized_product_mean(a, c, penalty, total_mean)
-    # loss3 = penalized_product_mean(a, d, penalty, total_mean)
-    # loss4 = penalized_product_mean(b, c, penalty, total_mean)
-    # loss5 = penalized_product_mean(b, d, penalty, total_mean)
-    # loss6 = penalized_product_mean(c, d, penalty, total_mean)
-
     #total_loss = loss1 + loss2 + loss3 + loss4 + loss5 + loss6
 
-    total_loss = product_agreement_loss(a, b, c, d)
+    total_loss = product_agreement_loss(a, b)
 
     if train:
         #total_mean = 0.8 * total_mean + penalty * 0.2
@@ -333,12 +299,9 @@ def measure_acc_augments(X_test, encoder, targets):
     avg_loss = 0
 
     print_dict = {}
-    for i in range(10):
-        print_dict[i] = []
-
     virtual_clusters = {}
     for i in range(CLASSES):
-
+        print_dict[i] = []
         virtual_clusters[i] = []
 
     for j in range(runs):
@@ -441,25 +404,62 @@ def unpickle(file):
 
 
 def train():
-    X_train_raw, y_train_raw, X_test_raw, y_test_raw = cifar10_utils.load_cifar10(cifar10_utils.CIFAR10_FOLDER)
-    X_train, y_train, X_test, targets = cifar10_utils.preprocess_cifar10_data(X_train_raw, y_train_raw, X_test_raw,
-                                                                              y_test_raw)
+    with open('data\\train', 'rb') as fo:
+        res = pickle.load(fo, encoding='bytes')
 
-    X_train = torch.from_numpy(X_train)
-    X_test = torch.from_numpy(X_test)
+    meta = unpickle('data\\meta')
 
-    X_train /= 255
-    X_test /= 255
+    fine_label_names = [t.decode('utf8') for t in meta[b'fine_label_names']]
+
+    train = unpickle('data\\train')
+
+    filenames = [t.decode('utf8') for t in train[b'filenames']]
+    train_fine_labels = train[b'fine_labels']
+    train_data = train[b'data']
+
+    test = unpickle('data\\test')
+
+    filenames = [t.decode('utf8') for t in test[b'filenames']]
+    targets = test[b'fine_labels']
+    #targets = test[b'coarse_labels']
+    test_data = test[b'data']
+
+    X_train = list()
+    for d in train_data:
+        image = np.zeros((32, 32, 3), dtype=np.uint8)
+        image[..., 0] = np.reshape(d[:1024], (32, 32))  # Red channel
+        image[..., 1] = np.reshape(d[1024:2048], (32, 32))  # Green channel
+        image[..., 2] = np.reshape(d[2048:], (32, 32))  # Blue channel
+        X_train.append(image)
+
+    X_train = np.array(X_train)
+    X_train = preproccess_cifar(X_train)
+
+    print("train shape", X_train.shape)
+
+    X_test = list()
+    for d in test_data:
+        image = np.zeros((32, 32, 3), dtype=np.uint8)
+        image[..., 0] = np.reshape(d[:1024], (32, 32))  # Red channel
+        image[..., 1] = np.reshape(d[1024:2048], (32, 32))  # Green channel
+        image[..., 2] = np.reshape(d[2048:], (32, 32))  # Blue channel
+        X_test.append(image)
+
+    X_test = np.array(X_test)
+    X_test = preproccess_cifar(X_test)
+    print("test shape", X_test.shape)
+    targets = np.array(targets)
+    print("targets shape", targets.shape)
 
     ###############################################
 
     script_directory = os.path.split(os.path.abspath(__file__))[0]
 
-    filepath = f'PPAS_4_{BATCH_SIZE_DEFAULT}_lr{LEARNING_RATE_DEFAULT}'
+    filepath = f'PA_2_{BATCH_SIZE_DEFAULT}_lr{LEARNING_RATE_DEFAULT}_fine'
     virtual_best_path = os.path.join(script_directory, filepath)
 
-    # epoch 105.
-    #encoder = torch.load("PPA_2_64_lr0.0004_0.model")
+    # epoch 20.
+    # encoder = torch.load(filepath)
 
     encoder = OneHotNet(3, CLASSES).to('cuda')
     optimizer = torch.optim.Adam(encoder.parameters(), lr=LEARNING_RATE_DEFAULT)

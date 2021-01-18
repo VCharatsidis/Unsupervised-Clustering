@@ -4,28 +4,90 @@ import cifar10_utils
 import matplotlib
 from torchvision.utils import make_grid
 import sys
+import pickle
+import argparse
+import os
+
+from binary_net import DeepBinBrainCifar
+
+from stl_utils import *
 
 np.set_printoptions(formatter={'float': lambda x: "{0:0.4f}".format(x)})
 np.set_printoptions(threshold=sys.maxsize)
-
 torch.set_printoptions(threshold=sys.maxsize)
 torch.set_printoptions(sci_mode=False)
 
+SAVE_IMAGES = False
+COARSE_LABELS = True
 EMBEDDINGS = 64
-#name = "..\\CIFAR-100\\cifar100_models\\binary_contrast_4_plus0_64_2.model"
-#name = "binary_contrast_4_"+str(EMBEDDINGS)+"_b2_1.model"
-name = "bp_32_plus_32_1.model"
+#name = f"cifar100_models\\self_contrast_{EMBEDDINGS}_b2_0.model"
+name = "cifar100_models\\supervised_queue_bonus5_half_3.model"
 encoder = torch.load(name)
 print("encoder: ", name)
 encoder.eval()
 
-X_train_raw, y_train_raw, X_test_raw, y_test_raw = cifar10_utils.load_cifar10(cifar10_utils.CIFAR10_FOLDER)
-_, _, X_test, targets = cifar10_utils.preprocess_cifar10_data(X_train_raw, y_train_raw, X_test_raw, y_test_raw)
+def unpickle(file):
+    import pickle
+    with open(file, 'rb') as fo:
+        dict = pickle.load(fo, encoding='bytes')
+    return dict
 
-X_test = torch.from_numpy(X_test)
-X_test /= 255
+with open('data\\train', 'rb') as fo:
+    res = pickle.load(fo, encoding='bytes')
 
-PA = 1000
+meta = unpickle('data\\meta')
+
+fine_label_names = [t.decode('utf8') for t in meta[b'fine_label_names']]
+
+train = unpickle('data\\train')
+
+filenames = [t.decode('utf8') for t in train[b'filenames']]
+
+
+train_data = train[b'data']
+
+test = unpickle('data\\test')
+
+filenames = [t.decode('utf8') for t in test[b'filenames']]
+
+if COARSE_LABELS:
+    targets = test[b'coarse_labels']
+else:
+    targets = test[b'fine_labels']
+
+test_data = test[b'data']
+
+X_train = list()
+for d in train_data:
+    image = np.zeros((32, 32, 3), dtype=np.uint8)
+    image[..., 0] = np.reshape(d[:1024], (32, 32))  # Red channel
+    image[..., 1] = np.reshape(d[1024:2048], (32, 32))  # Green channel
+    image[..., 2] = np.reshape(d[2048:], (32, 32))  # Blue channel
+    X_train.append(image)
+
+X_train = np.array(X_train)
+X_train = preproccess_cifar(X_train)
+
+print("train shape", X_train.shape)
+
+X_test = list()
+for d in test_data:
+    image = np.zeros((32, 32, 3), dtype=np.uint8)
+    image[..., 0] = np.reshape(d[:1024], (32, 32))  # Red channel
+    image[..., 1] = np.reshape(d[1024:2048], (32, 32))  # Green channel
+    image[..., 2] = np.reshape(d[2048:], (32, 32))  # Blue channel
+    X_test.append(image)
+
+X_test = np.array(X_test)
+X_test = preproccess_cifar(X_test)
+print("test shape", X_test.shape)
+targets = np.array(targets)
+print("targets shape", targets.shape)
+
+if COARSE_LABELS:
+    PA = 500
+else:
+    PA = 100
 
 
 def get_binaries(X_test):
@@ -58,7 +120,7 @@ ids = np.array(range(X_test.shape[0]))
 def get_hamming(idx, binaries):
     '''
     Gets the index of 1 image and XOR it's binary with all other binaries of the test-set
-    :param idx: The index of the query image
+    :param idx: The index of the compared image
     :param binaries: the binaries.
     :return: array with hammings and indexes sorted for the given image vs the hole test-set.
     '''
@@ -68,12 +130,11 @@ def get_hamming(idx, binaries):
 
     sorted, indices = torch.sort(hammings)
 
-    if False:
-        save_image(X_test[idx].unsqueeze(dim=0), str(idx) + "q")
-        save_image(X_test[indices[1:17]], idx)
+    if SAVE_IMAGES:
+        save_image(X_test[indices[:16]], idx)
 
     s = [(indices[i].item(), sorted[i].item()) for i in range(PA)]  # make it a list and keep only the first top PA
-    s = s[1:]  # Delete the first element which is the query image itself.
+    s = s[1:]  # Delete the first element which is going to be the compared image itself.
 
     return s
 
@@ -119,8 +180,20 @@ def get_mAP_and_Top1(binaries):
         sum_recall += recall
 
         index_top1 = sorted_hammings[0][0]
-        index_500 = sorted_hammings[500][0]
-        index_1000 = sorted_hammings[998][0]
+
+        if COARSE_LABELS:
+            n = 250
+        else:
+            n = 50
+
+        index_500 = sorted_hammings[n][0]
+
+        if COARSE_LABELS:
+            n = 498
+        else:
+            n = 98
+
+        index_1000 = sorted_hammings[n][0]
 
         if class_a == targets[index_top1]:
             sum_top1 += 1
@@ -136,10 +209,10 @@ def get_mAP_and_Top1(binaries):
     print("mean top 1: ", mean_top_1)
 
     mean_top_500 = sum_top500 / targets.shape[0]
-    print("precision 500: ", mean_top_500)
+    print("precision 50: ", mean_top_500)
 
     mean_1000 = sum_bottom1000 / targets.shape[0]
-    print("precision 1000: ", mean_1000)
+    print("precision 100: ", mean_1000)
 
     print("recall : ", sum_recall / targets.shape[0])
 
@@ -147,12 +220,10 @@ def get_mAP_and_Top1(binaries):
     print("mAP: ", map)
 
 
-
-
 def save_image(original_image, idx):
     sample = original_image.view(-1, original_image.shape[1], original_image.shape[2], original_image.shape[3])
     sample = make_grid(sample, nrow=8).detach().numpy().astype(np.float).transpose(1, 2, 0)
-    matplotlib.image.imsave(f"images/{EMBEDDINGS}bits/top16_{idx}.png", sample)
+    matplotlib.image.imsave(f"images/top32_{idx}.png", sample)
 
 
 binaries = get_binaries(X_test)
